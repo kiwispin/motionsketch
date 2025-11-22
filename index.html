@@ -38,14 +38,12 @@
             background-image: radial-gradient(circle at center, #2a2a2a 0%, #111 100%);
         }
 
-        /* --- Workspace (The Stage) --- */
-        /* Updated constraints to prevent overlap with panels */
         .workspace {
             position: absolute;
             top: 100px;       /* Clear Header */
             bottom: 190px;    /* Clear Timeline */
-            left: 100px;      /* Clear Left Toolbar (20px padding + 64px width + margin) */
-            right: 280px;     /* Clear Right Properties (20px padding + 240px width + margin) */
+            left: 100px;      /* Clear Left Toolbar */
+            right: 280px;     /* Clear Right Properties */
             width: auto; 
             height: auto;
             display: flex; justify-content: center; align-items: center;
@@ -64,9 +62,9 @@
             background-image: linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
             background-size: 20px 20px;
             transition: width 0.3s, height 0.3s; 
-            /* Important: Contain within the safe workspace area */
             max-width: 100%;
-            max-height: 100%; 
+            max-height: 100%;
+            aspect-ratio: 1/1; /* Default, updated by JS */
         }
 
         canvas { 
@@ -76,7 +74,6 @@
         }
         #rendering-canvas { z-index: 1; }
 
-        /* --- Panels --- */
         .glass-panel {
             background: var(--bg-panel);
             backdrop-filter: blur(20px);
@@ -119,15 +116,14 @@
         .btn-ghost:hover { background: rgba(255,255,255,0.1); }
         .btn-ghost i { font-size: 1rem; opacity: 0.8; }
         
-        /* Active state for ghost buttons (like Onion Skin) */
         .btn-ghost.active {
-            background: rgba(10, 132, 255, 0.2); /* Subtle Blue bg */
+            background: rgba(10, 132, 255, 0.2); 
             color: var(--accent-blue);
         }
         .btn-ghost.active i, .btn-ghost.active svg { 
             opacity: 1; 
-            fill: var(--accent-blue); /* For SVGs */
-            color: var(--accent-blue); /* For FontAwesome */
+            fill: var(--accent-blue); 
+            color: var(--accent-blue); 
         }
 
         .btn-primary {
@@ -145,7 +141,6 @@
         .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
         .btn-primary:active { transform: translateY(1px); }
 
-        /* Storage Meter */
         .storage-container {
             display: flex; flex-direction: column; justify-content: center;
             width: 60px; margin: 0 10px;
@@ -159,8 +154,6 @@
             height: 100%; width: 0%; background: #2ecc71;
             transition: width 0.5s ease, background 0.3s;
         }
-
-        /* Removed legacy .icon-btn and .settings-btn classes as they are no longer needed */
 
         .tools-panel {
             position: absolute;
@@ -429,17 +422,18 @@
             filter: url(#wiggleFilter);
         }
 
-        /* Responsive adjustments to Layout */
         @media (max-width: 900px) {
             .props-panel { display: none; } 
-            .workspace { right: 20px; } /* Reclaim right space */
+            .workspace { right: 20px; } 
         }
-        
+        @media (max-height: 700px) {
+            .canvas-wrapper { /* Let aspect-ratio do work */ }
+            .tools-panel { top: 80px; bottom: 180px; }
+        }
         @media (max-width: 600px) {
             .app-header { padding: 0 10px; top: 10px; height: 50px; }
             .logo span { display: none; } 
             
-            /* On mobile, reclaim space but keep toolbar clear */
             .workspace {
                 top: 70px; 
                 left: 70px; 
@@ -450,7 +444,7 @@
             .tools-panel { top: 70px; bottom: 160px; left: 10px; width: 50px; padding: 10px 0; }
             .tool-btn { width: 36px; height: 36px; font-size: 1rem; }
             .timeline-panel { left: 10px; right: 10px; bottom: 10px; height: 120px; }
-            .frame-card { min-width: 60px; height: 45px; }
+            .frame-card { min-width: 70px; height: 55px; }
             .add-frame-btn { min-width: 40px; height: 40px; }
             .flyout-menu { left: 45px; }
         }
@@ -486,6 +480,20 @@
         <div class="modal-btns">
             <button class="btn-ghost" onclick="app.closeModal('custom-modal')">Cancel</button>
             <button class="btn-primary" style="background:#ff3b30" onclick="app.confirmNewAnimation()">Create New</button>
+        </div>
+    </div>
+</div>
+
+<!-- Text Input Modal -->
+<div id="text-modal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-title">Enter Text</div>
+        <div class="modal-input-group">
+            <input type="text" id="text-input-value" class="modal-input" style="width: 100%; text-align: left;" placeholder="Your Text Here">
+        </div>
+        <div class="modal-btns">
+            <button class="btn-ghost" onclick="app.closeModal('text-modal')">Cancel</button>
+            <button class="btn-primary" onclick="app.confirmAddText()">Add</button>
         </div>
     </div>
 </div>
@@ -537,7 +545,6 @@
         <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
         <button class="btn-primary" onclick="app.exportGIF()">Export GIF</button>
         
-        <!-- Updated Settings Button to match S-Tier styling -->
         <button class="btn-ghost" onclick="app.openSettings()" title="Canvas Settings"><i class="fas fa-sliders-h"></i></button>
     </div>
 </header>
@@ -559,6 +566,10 @@
         </div>
     </div>
     
+    <div class="tool-btn" id="tool-text" onclick="app.setTool('text')" title="Text (T)">
+        <i class="fas fa-font"></i>
+    </div>
+
     <div class="tool-btn" id="tool-eraser" onclick="app.setTool('eraser')" title="Eraser (E)">
         <i class="fas fa-eraser"></i>
     </div>
@@ -592,7 +603,7 @@
         <div class="prop-label">Brush Settings</div>
         <div class="slider-row">
             <i class="fas fa-circle" style="font-size:0.6rem; color:#aaa;"></i>
-            <input type="range" id="brush-size" min="1" max="50" value="10" oninput="app.setSize(this.value)">
+            <input type="range" id="brush-size" min="1" max="100" value="10" oninput="app.setSize(this.value)">
             <div class="slider-val" id="size-disp">10</div>
         </div>
         <div class="slider-row">
@@ -635,7 +646,6 @@
         </div>
         <div style="width:10px"></div>
         
-        <!-- Reverted back to Layer icon for Onion Skin as requested -->
         <button class="btn-ghost" id="onion-btn" onclick="app.toggleOnion()" title="Onion Skin">
             <i class="fas fa-layer-group"></i>
         </button>
@@ -690,6 +700,8 @@ class MotionSketchVector {
         
         this.canvasWidth = 600;
         this.canvasHeight = 600;
+        
+        this.textInputPos = {x:0, y:0};
 
         this.history = [];
         this.redoStack = [];
@@ -706,6 +718,8 @@ class MotionSketchVector {
         const picker = document.getElementById('html-color-picker');
         if(picker) picker.value = this.brushColor;
     }
+    
+    handleResize() {}
 
     setupEvents() {
         const c = this.canvas;
@@ -753,6 +767,7 @@ class MotionSketchVector {
             if(e.key === 'e') this.setTool('eraser');
             if(e.key === 'v') this.setTool('select');
             if(e.key === 'f') this.setTool('bucket');
+            if(e.key === 't') this.setTool('text');
         });
     }
 
@@ -773,9 +788,9 @@ class MotionSketchVector {
         this.canvas.width = w;
         this.canvas.height = h;
         
-        this.canvasWrapper.style.width = w + 'px';
-        this.canvasWrapper.style.height = h + 'px';
         this.canvasWrapper.style.aspectRatio = `${w}/${h}`;
+        this.canvasWrapper.style.width = '100%'; 
+        this.canvasWrapper.style.height = 'auto'; 
 
         this.renderCanvas();
     }
@@ -793,12 +808,50 @@ class MotionSketchVector {
         this.closeModal('settings-modal');
         this.saveStorage();
     }
+    
+    /* --- Text Modal --- */
+    openTextModal(pos) {
+        this.textInputPos = pos;
+        document.getElementById('text-input-value').value = "";
+        document.getElementById('text-modal').style.display = 'flex';
+        document.getElementById('text-input-value').focus();
+    }
+    
+    confirmAddText() {
+        const val = document.getElementById('text-input-value').value;
+        if (val) {
+            this.saveState();
+            this.ctx.font = `${this.brushSize * 2 + 20}px sans-serif`;
+            const m = this.ctx.measureText(val);
+            const h = this.brushSize * 2 + 20;
+            
+            const textObj = {
+                type: 'text',
+                text: val,
+                x: this.textInputPos.x,
+                y: this.textInputPos.y,
+                width: m.width,
+                height: h,
+                sx: 1, sy: 1,
+                color: this.brushColor,
+                size: h,
+                opacity: this.opacity,
+                points: [] 
+            };
+            const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+            list.push(textObj);
+            
+            this.renderCanvas();
+            this.saveStorage();
+        }
+        this.closeModal('text-modal');
+        this.setTool('select'); 
+    }
 
     /* --- History --- */
     saveState() {
         if (this.history.length > 20) this.history.shift();
         this.redoStack = [];
-        
         const state = {
             frames: JSON.parse(JSON.stringify(this.frames)),
             paperStrokes: JSON.parse(JSON.stringify(this.paperStrokes)),
@@ -812,7 +865,6 @@ class MotionSketchVector {
 
     undo() {
         if (this.history.length === 0) return;
-        
         const currentState = {
             frames: JSON.parse(JSON.stringify(this.frames)),
             paperStrokes: JSON.parse(JSON.stringify(this.paperStrokes)),
@@ -822,17 +874,12 @@ class MotionSketchVector {
             height: this.canvasHeight
         };
         this.redoStack.push(JSON.stringify(currentState));
-        
         const prevState = JSON.parse(this.history.pop());
         this.frames = prevState.frames;
         this.paperStrokes = prevState.paperStrokes;
         this.frameIndex = prevState.frameIndex;
         this.selectedBgColor = prevState.bgColor;
-        
-        if(prevState.width && prevState.height) {
-            this.resizeCanvas(prevState.width, prevState.height);
-        }
-        
+        if(prevState.width && prevState.height) this.resizeCanvas(prevState.width, prevState.height);
         this.selectedObject = null;
         this.updateThumbnails();
         this.renderCanvas();
@@ -841,7 +888,6 @@ class MotionSketchVector {
 
     redo() {
         if (this.redoStack.length === 0) return;
-        
         const currentState = {
             frames: JSON.parse(JSON.stringify(this.frames)),
             paperStrokes: JSON.parse(JSON.stringify(this.paperStrokes)),
@@ -851,17 +897,12 @@ class MotionSketchVector {
             height: this.canvasHeight
         };
         this.history.push(JSON.stringify(currentState));
-        
         const nextState = JSON.parse(this.redoStack.pop());
         this.frames = nextState.frames;
         this.paperStrokes = nextState.paperStrokes;
         this.frameIndex = nextState.frameIndex;
         this.selectedBgColor = nextState.bgColor;
-        
-        if(nextState.width && nextState.height) {
-            this.resizeCanvas(nextState.width, nextState.height);
-        }
-
+        if(nextState.width && nextState.height) this.resizeCanvas(nextState.width, nextState.height);
         this.selectedObject = null;
         this.updateThumbnails();
         this.renderCanvas();
@@ -878,6 +919,7 @@ class MotionSketchVector {
             const found = this.hitTest(pos);
             if (found) {
                 found.stroke.fillColor = this.brushColor;
+                if (found.stroke.type === 'text') found.stroke.color = this.brushColor; 
                 this.renderCanvas();
             } else {
                 this.selectedBgColor = this.brushColor;
@@ -888,6 +930,11 @@ class MotionSketchVector {
             this.saveStorage();
             return;
         }
+        
+        if (this.tool === 'text') {
+            this.openTextModal(pos);
+            return;
+        }
 
         if (this.tool === 'select') {
             if (this.selectedObject) {
@@ -896,7 +943,19 @@ class MotionSketchVector {
                     this.saveState();
                     this.dragMode = handle;
                     this.dragStart = pos;
-                    this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({...p}));
+                    
+                    if (this.selectedObject.stroke.type === 'text') {
+                        this.dragOriginalProps = {
+                            x: this.selectedObject.stroke.x,
+                            y: this.selectedObject.stroke.y,
+                            w: this.selectedObject.stroke.width,
+                            h: this.selectedObject.stroke.height,
+                            sx: this.selectedObject.stroke.sx,
+                            sy: this.selectedObject.stroke.sy
+                        };
+                    } else {
+                        this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({...p}));
+                    }
                     this.dragOriginalBounds = {...this.selectedObject.bounds};
                     this.dragCenter = {
                         x: this.selectedObject.bounds.x + this.selectedObject.bounds.w/2,
@@ -909,7 +968,14 @@ class MotionSketchVector {
                     this.saveState();
                     this.dragMode = 'move';
                     this.dragStart = pos;
-                    this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({...p}));
+                    if (this.selectedObject.stroke.type === 'text') {
+                        this.dragOriginalProps = {
+                            x: this.selectedObject.stroke.x,
+                            y: this.selectedObject.stroke.y,
+                        };
+                    } else {
+                        this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({...p}));
+                    }
                     return;
                 }
             }
@@ -921,7 +987,11 @@ class MotionSketchVector {
                 this.calcBounds(found.stroke);
                 this.dragMode = 'move';
                 this.dragStart = pos;
-                this.dragOriginalPoints = found.stroke.points.map(p => ({...p}));
+                if (found.stroke.type === 'text') {
+                    this.dragOriginalProps = { x: found.stroke.x, y: found.stroke.y };
+                } else {
+                    this.dragOriginalPoints = found.stroke.points.map(p => ({...p}));
+                }
             } else {
                 this.selectedObject = null;
             }
@@ -952,42 +1022,48 @@ class MotionSketchVector {
         if (this.isPlaying) return;
 
         if (this.tool === 'select' && this.dragMode && this.selectedObject) {
-            const pts = this.selectedObject.stroke.points;
-            const origPts = this.dragOriginalPoints;
+            const stroke = this.selectedObject.stroke;
             const bounds = this.dragOriginalBounds;
 
             if (this.dragMode === 'move') {
                 const dx = pos.x - this.dragStart.x;
                 const dy = pos.y - this.dragStart.y;
-                for(let i=0; i<pts.length; i++) {
-                    pts[i].x = origPts[i].x + dx;
-                    pts[i].y = origPts[i].y + dy;
+                
+                if (stroke.type === 'text') {
+                    stroke.x = this.dragOriginalProps.x + dx;
+                    stroke.y = this.dragOriginalProps.y + dy;
+                } else {
+                    const pts = stroke.points;
+                    const origPts = this.dragOriginalPoints;
+                    for(let i=0; i<pts.length; i++) {
+                        pts[i].x = origPts[i].x + dx;
+                        pts[i].y = origPts[i].y + dy;
+                    }
                 }
             } 
             else if (this.dragMode === 'rotate') {
-                const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
-                const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
-                const angleDiff = currAngle - startAngle;
-                
-                const cos = Math.cos(angleDiff);
-                const sin = Math.sin(angleDiff);
-                
-                for(let i=0; i<pts.length; i++) {
-                    const nx = origPts[i].x - this.dragCenter.x;
-                    const ny = origPts[i].y - this.dragCenter.y;
-                    pts[i].x = (nx * cos - ny * sin) + this.dragCenter.x;
-                    pts[i].y = (nx * sin + ny * cos) + this.dragCenter.y;
+                if (stroke.type !== 'text') {
+                    const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
+                    const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
+                    const angleDiff = currAngle - startAngle;
+                    const cos = Math.cos(angleDiff), sin = Math.sin(angleDiff);
+                    
+                    const pts = stroke.points;
+                    const origPts = this.dragOriginalPoints;
+                    
+                    for(let i=0; i<pts.length; i++) {
+                        const nx = origPts[i].x - this.dragCenter.x;
+                        const ny = origPts[i].y - this.dragCenter.y;
+                        pts[i].x = (nx * cos - ny * sin) + this.dragCenter.x;
+                        pts[i].y = (nx * sin + ny * cos) + this.dragCenter.y;
+                    }
                 }
             }
             else {
-                let newW = bounds.w;
-                let newH = bounds.h;
-                let newX = bounds.x;
-                let newY = bounds.y;
-
+                // Resize
                 const dx = pos.x - this.dragStart.x;
                 const dy = pos.y - this.dragStart.y;
-
+                let newW = bounds.w, newH = bounds.h, newX = bounds.x, newY = bounds.y;
                 const dir = this.dragMode.split('-')[1] || '';
 
                 if (dir.includes('r')) newW += dx; 
@@ -995,14 +1071,22 @@ class MotionSketchVector {
                 if (dir.includes('b')) newH += dy; 
                 if (dir.includes('t')) { newY += dy; newH -= dy; } 
 
-                if(newW < 5) newW = 5;
-                if(newH < 5) newH = 5;
+                if(newW < 5) newW = 5; if(newH < 5) newH = 5;
 
-                for(let i=0; i<pts.length; i++) {
-                    const normX = (origPts[i].x - bounds.x) / bounds.w;
-                    const normY = (origPts[i].y - bounds.y) / bounds.h;
-                    pts[i].x = newX + (normX * newW);
-                    pts[i].y = newY + (normY * newH);
+                if (stroke.type === 'text') {
+                    stroke.sx = newW / this.dragOriginalProps.w;
+                    stroke.sy = newH / this.dragOriginalProps.h;
+                    stroke.x = this.dragOriginalProps.x + (newX - bounds.x);
+                    stroke.y = this.dragOriginalProps.y + (newY - bounds.y);
+                } else {
+                    const pts = stroke.points;
+                    const origPts = this.dragOriginalPoints;
+                    for(let i=0; i<pts.length; i++) {
+                        const normX = (origPts[i].x - bounds.x) / bounds.w;
+                        const normY = (origPts[i].y - bounds.y) / bounds.h;
+                        pts[i].x = newX + (normX * newW);
+                        pts[i].y = newY + (normY * newH);
+                    }
                 }
             }
 
@@ -1054,7 +1138,6 @@ class MotionSketchVector {
             if ((this.tool === 'brush' || this.tool === 'eraser') && this.currentStroke.points.length > 5) {
                 this.currentStroke.points = this.simplifyPoints(this.currentStroke.points, 1.5);
             }
-            
             this.isDrawing = false;
             this.currentStroke = null;
             this.updateThumbnails();
@@ -1071,63 +1154,13 @@ class MotionSketchVector {
         if (points.length <= 2) return points;
         const newPoints = [points[0]];
         let lastPoint = points[0];
-        
         for (let i = 1; i < points.length - 1; i++) {
             const p = points[i];
             const dist = Math.hypot(p.x - lastPoint.x, p.y - lastPoint.y);
-            if (dist > tolerance) {
-                newPoints.push(p);
-                lastPoint = p;
-            }
+            if (dist > tolerance) { newPoints.push(p); lastPoint = p; }
         }
         newPoints.push(points[points.length - 1]);
         return newPoints;
-    }
-
-    /* --- Vector Math & Hit Testing --- */
-    hitTest(pos) {
-        const checkList = (list, layerName) => {
-            for (let i = list.length - 1; i >= 0; i--) {
-                if (this.strokeHit(list[i], pos)) return { stroke: list[i], layer: layerName, index: i };
-            }
-            return null;
-        };
-        if (this.activeLayer === 'ink') return checkList(this.frames[this.frameIndex].strokes, 'ink');
-        else return checkList(this.paperStrokes, 'paper');
-    }
-
-    strokeHit(stroke, pos) {
-        if (!stroke.points || stroke.points.length < 2) return false;
-        
-        let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
-        stroke.points.forEach(p=>{ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; });
-        
-        const hitThresh = Math.max(10, stroke.size);
-        
-        if(pos.x < minX-hitThresh || pos.x > maxX+hitThresh || pos.y < minY-hitThresh || pos.y > maxY+hitThresh) return false;
-
-        for (let i = 0; i < stroke.points.length - 1; i++) {
-            if (this.distToSegment(pos, stroke.points[i], stroke.points[i+1]) < hitThresh) return true;
-        }
-
-        if (this.tool === 'bucket' || stroke.fillColor) {
-            if (this.containsPoint(stroke.points, pos)) return true;
-        }
-
-        return false;
-    }
-
-    containsPoint(points, pos) {
-        let inside = false;
-        for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-            const xi = points[i].x, yi = points[i].y;
-            const xj = points[j].x, yj = points[j].y;
-            
-            const intersect = ((yi > pos.y) !== (yj > pos.y))
-                && (pos.x < (xj - xi) * (pos.y - yi) / (yj - yi) + xi);
-            if (intersect) inside = !inside;
-        }
-        return inside;
     }
 
     hitTestHandles(pos) {
@@ -1149,6 +1182,58 @@ class MotionSketchVector {
         
         return null;
     }
+    
+    hitTest(pos) {
+        const checkList = (list, layerName) => {
+            for (let i = list.length - 1; i >= 0; i--) {
+                const obj = list[i];
+                if (obj.type === 'text') {
+                    const w = obj.width * obj.sx;
+                    const h = obj.height * obj.sy;
+                    const bx = obj.x;
+                    const by = obj.y - h; 
+                    if(pos.x >= bx && pos.x <= bx + w && pos.y >= by && pos.y <= by + h + 10) {
+                        return { stroke: obj, layer: layerName, index: i };
+                    }
+                } else {
+                    if (this.strokeHit(obj, pos)) return { stroke: obj, layer: layerName, index: i };
+                }
+            }
+            return null;
+        };
+        if (this.activeLayer === 'ink') return checkList(this.frames[this.frameIndex].strokes, 'ink');
+        else return checkList(this.paperStrokes, 'paper');
+    }
+
+    strokeHit(stroke, pos) {
+        if (!stroke.points || stroke.points.length < 2) return false;
+        
+        let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+        stroke.points.forEach(p=>{ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; });
+        
+        const hitThresh = Math.max(10, stroke.size);
+        if(pos.x < minX-hitThresh || pos.x > maxX+hitThresh || pos.y < minY-hitThresh || pos.y > maxY+hitThresh) return false;
+
+        for (let i = 0; i < stroke.points.length - 1; i++) {
+            if (this.distToSegment(pos, stroke.points[i], stroke.points[i+1]) < hitThresh) return true;
+        }
+
+        if (this.tool === 'bucket' || stroke.fillColor) {
+            if (this.containsPoint(stroke.points, pos)) return true;
+        }
+        return false;
+    }
+
+    containsPoint(points, pos) {
+        let inside = false;
+        for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+            const xi = points[i].x, yi = points[i].y;
+            const xj = points[j].x, yj = points[j].y;
+            const intersect = ((yi > pos.y) !== (yj > pos.y)) && (pos.x < (xj - xi) * (pos.y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
 
     distToSegment(p, v, w) {
         const l2 = (v.x - w.x)**2 + (v.y - w.y)**2;
@@ -1159,19 +1244,73 @@ class MotionSketchVector {
     }
 
     calcBounds(stroke) {
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        stroke.points.forEach(p => {
-            if(p.x < minX) minX = p.x;
-            if(p.x > maxX) maxX = p.x;
-            if(p.y < minY) minY = p.y;
-            if(p.y > maxY) maxY = p.y;
-        });
-        const pad = stroke.size / 2;
-        this.selectedObject.bounds = { x: minX - pad, y: minY - pad, w: (maxX - minX) + pad*2, h: (maxY - minY) + pad*2 };
+        if (stroke.type === 'text') {
+            const w = stroke.width * stroke.sx;
+            const h = stroke.height * stroke.sy;
+            this.selectedObject.bounds = {
+                x: stroke.x - 5,
+                y: stroke.y - h - 5,
+                w: w + 10,
+                h: h + 15
+            };
+        } else {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            stroke.points.forEach(p => {
+                if(p.x < minX) minX = p.x;
+                if(p.x > maxX) maxX = p.x;
+                if(p.y < minY) minY = p.y;
+                if(p.y > maxY) maxY = p.y;
+            });
+            const pad = stroke.size / 2;
+            this.selectedObject.bounds = { x: minX - pad, y: minY - pad, w: (maxX - minX) + pad*2, h: (maxY - minY) + pad*2 };
+        }
     }
 
     isInBounds(pos, rect) {
         return pos.x >= rect.x && pos.x <= rect.x + rect.w && pos.y >= rect.y && pos.y <= rect.y + rect.h;
+    }
+
+    /* --- Animation --- */
+    addFrame() {
+        this.saveState();
+        this.selectedObject = null; // Fix: Deselect to prevent ghost UI
+        this.frames.splice(this.frameIndex + 1, 0, { strokes: [] });
+        this.frameIndex++;
+        this.renderUI();
+        this.renderCanvas();
+        this.saveStorage();
+    }
+
+    duplicateFrame(index) {
+        this.saveState();
+        this.selectedObject = null; // Fix: Deselect to prevent ghost UI
+        const target = index !== undefined ? index : this.frameIndex;
+        const newStrokes = JSON.parse(JSON.stringify(this.frames[target].strokes));
+        this.frames.splice(target + 1, 0, { strokes: newStrokes });
+        this.frameIndex = target + 1;
+        this.renderUI();
+        this.renderCanvas();
+        this.saveStorage();
+    }
+
+    deleteFrame(index) {
+        this.saveState();
+        this.selectedObject = null; // Fix: Deselect
+        const targetIndex = (index !== undefined) ? index : this.frameIndex;
+        if(this.frames.length <= 1) { 
+            this.frames[0].strokes = []; 
+            this.renderCanvas();
+        } else {
+            this.frames.splice(targetIndex, 1);
+            if(this.frameIndex >= this.frames.length) {
+                this.frameIndex = this.frames.length - 1;
+            } else if (this.frameIndex > targetIndex) {
+                this.frameIndex--;
+            }
+        }
+        this.renderUI();
+        this.renderCanvas();
+        this.saveStorage();
     }
 
     /* --- Rendering --- */
@@ -1182,15 +1321,15 @@ class MotionSketchVector {
         ctx.fillStyle = this.selectedBgColor; 
         ctx.fillRect(0,0,this.canvasWidth, this.canvasHeight);
         
-        this.paperStrokes.forEach(s => this.drawStroke(ctx, s));
+        this.paperStrokes.forEach(s => this.drawObject(ctx, s));
         
         if (this.isOnion && this.frameIndex > 0 && !this.isPlaying) {
             ctx.globalAlpha = 0.3;
-            this.frames[this.frameIndex - 1].strokes.forEach(s => this.drawStroke(ctx, s));
+            this.frames[this.frameIndex - 1].strokes.forEach(s => this.drawObject(ctx, s));
             ctx.globalAlpha = 1.0;
         }
 
-        this.frames[this.frameIndex].strokes.forEach(s => this.drawStroke(ctx, s));
+        this.frames[this.frameIndex].strokes.forEach(s => this.drawObject(ctx, s));
 
         if (this.isWiggle && this.isPlaying) this.canvas.classList.add('wiggling');
         else this.canvas.classList.remove('wiggling');
@@ -1198,9 +1337,35 @@ class MotionSketchVector {
         if (this.selectedObject && !this.isPlaying) this.drawSelectionUI(ctx);
     }
 
+    drawObject(ctx, obj) {
+        if (obj.type === 'text') {
+            ctx.save();
+            // Pivot to text origin
+            ctx.translate(obj.x, obj.y);
+            
+            // Safety check for scale to prevent invisible text bug
+            const sx = (isFinite(obj.sx) && obj.sx !== 0) ? obj.sx : 1;
+            const sy = (isFinite(obj.sy) && obj.sy !== 0) ? obj.sy : 1;
+            
+            ctx.scale(sx, sy);
+            ctx.font = `${obj.size}px sans-serif`;
+            ctx.fillStyle = obj.color;
+            
+            // Fix: Multiply existing globalAlpha (onion skin) by object opacity
+            const currentAlpha = ctx.globalAlpha;
+            const objAlpha = obj.opacity !== undefined ? obj.opacity : 1;
+            ctx.globalAlpha = currentAlpha * objAlpha;
+
+            // Draw at 0,0 because we translated
+            ctx.fillText(obj.text, 0, 0);
+            ctx.restore();
+        } else {
+            this.drawStroke(ctx, obj);
+        }
+    }
+
     drawSelectionUI(ctx) {
         const b = this.selectedObject.bounds;
-        
         ctx.save();
         ctx.strokeStyle = '#0A84FF';
         ctx.lineWidth = 1;
@@ -1271,7 +1436,7 @@ class MotionSketchVector {
             ctx.stroke();
         }
     }
-
+    
     hexToRgba(hex, alpha) {
         let r=0,g=0,b=0;
         if (hex && hex.length === 7) {
@@ -1282,7 +1447,6 @@ class MotionSketchVector {
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
 
-    /* --- UI Logic --- */
     setTool(t) {
         this.tool = t;
         document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
@@ -1304,7 +1468,7 @@ class MotionSketchVector {
         this.selectedObject = null;
         this.renderCanvas();
     }
-
+    
     setLayer(l) {
         this.activeLayer = l;
         document.getElementById('layer-ink').classList.toggle('active', l==='ink');
@@ -1360,49 +1524,6 @@ class MotionSketchVector {
         if(this.isPlaying) this.renderCanvas(); 
     }
 
-    /* --- Animation --- */
-    addFrame() {
-        this.saveState();
-        this.frames.splice(this.frameIndex + 1, 0, { strokes: [] });
-        this.frameIndex++;
-        this.renderUI();
-        this.renderCanvas();
-        this.saveStorage();
-    }
-
-    duplicateFrame(index) {
-        this.saveState();
-        const target = index !== undefined ? index : this.frameIndex;
-        const newStrokes = JSON.parse(JSON.stringify(this.frames[target].strokes));
-        this.frames.splice(target + 1, 0, { strokes: newStrokes });
-        this.frameIndex = target + 1;
-        this.renderUI();
-        this.renderCanvas();
-        this.saveStorage();
-    }
-
-    deleteFrame(index) {
-        this.saveState();
-        
-        const targetIndex = (index !== undefined) ? index : this.frameIndex;
-
-        if(this.frames.length <= 1) { 
-            this.frames[0].strokes = []; 
-            this.renderCanvas();
-        } else {
-            this.frames.splice(targetIndex, 1);
-            
-            if(this.frameIndex >= this.frames.length) {
-                this.frameIndex = this.frames.length - 1;
-            } else if (this.frameIndex > targetIndex) {
-                this.frameIndex--;
-            }
-        }
-        this.renderUI();
-        this.renderCanvas();
-        this.saveStorage();
-    }
-
     togglePlay() {
         if (this.isPlaying) {
             this.isPlaying = false;
@@ -1429,35 +1550,27 @@ class MotionSketchVector {
         this.saveStorage();
     }
 
-    /* --- UI Render --- */
     renderUI(minimal = false) {
         if (!minimal) {
             this.framesList.innerHTML = '';
-            
             this.frames.forEach((f, i) => {
                 const el = document.createElement('div');
                 el.className = `frame-card ${i === this.frameIndex ? 'active' : ''}`;
                 el.onclick = () => { this.frameIndex = i; this.renderCanvas(); this.renderUI(true); };
                 
                 let html = `<div class="frame-num">${i+1}</div><img src="${f.thumb || ''}">`;
-                
                 if(this.frames.length > 1) {
                     html += `<div class="frame-delete-btn" onclick="event.stopPropagation(); app.deleteFrame(${i})" title="Delete Frame"><i class="fas fa-times"></i></div>`;
                 }
-                
-                // Always add Duplicate button
                 html += `<div class="frame-copy-btn" onclick="event.stopPropagation(); app.duplicateFrame(${i})" title="Duplicate Frame"><i class="fas fa-copy"></i></div>`;
-                
                 el.innerHTML = html;
                 this.framesList.appendChild(el);
             });
-            
             const addBtn = document.createElement('div');
             addBtn.className = 'add-frame-btn';
             addBtn.innerHTML = '+';
             addBtn.onclick = () => this.addFrame();
             this.framesList.appendChild(addBtn);
-            
             this.updateThumbnails(); 
         } else {
             const cards = this.framesList.querySelectorAll('.frame-card');
@@ -1481,17 +1594,15 @@ class MotionSketchVector {
         const tCanvas = document.createElement('canvas');
         tCanvas.width = 120; tCanvas.height = 120;
         const tCtx = tCanvas.getContext('2d');
-        const scale = 120 / this.canvasWidth; // Scale based on actual width
+        const scale = 120 / this.canvasWidth; 
         tCtx.scale(scale, scale);
 
         this.frames.forEach((f, i) => {
             tCtx.clearRect(0,0,this.canvasWidth,this.canvasHeight);
             tCtx.fillStyle = this.selectedBgColor; 
             tCtx.fillRect(0,0,this.canvasWidth,this.canvasHeight);
-            
-            this.paperStrokes.forEach(s => this.drawStroke(tCtx, s));
-            f.strokes.forEach(s => this.drawStroke(tCtx, s));
-            
+            this.paperStrokes.forEach(s => this.drawObject(tCtx, s));
+            f.strokes.forEach(s => this.drawObject(tCtx, s));
             f.thumb = tCanvas.toDataURL();
         });
         
@@ -1501,7 +1612,6 @@ class MotionSketchVector {
         });
     }
 
-    /* --- Storage & Export --- */
     saveStorage() {
         if (this.saveTimer) clearTimeout(this.saveTimer);
         this.saveTimer = setTimeout(() => {
@@ -1510,17 +1620,15 @@ class MotionSketchVector {
                 frames: this.frames,
                 paperStrokes: this.paperStrokes,
                 fps: this.fps,
-                width: this.canvasWidth, // Save dims
+                width: this.canvasWidth,
                 height: this.canvasHeight
             };
             try {
                 const cleanFrames = this.frames.map(f => ({strokes: f.strokes}));
                 const jsonStr = JSON.stringify({...data, frames: cleanFrames});
-                
                 const size = jsonStr.length; 
                 const limit = 5 * 1024 * 1024; 
                 const pct = Math.min(100, (size / limit) * 100);
-                
                 const bar = document.getElementById('storage-bar');
                 if(bar) {
                     bar.style.width = pct + '%';
@@ -1528,9 +1636,7 @@ class MotionSketchVector {
                     else if (pct > 70) bar.style.background = '#f1c40f'; 
                     else bar.style.background = '#2ecc71'; 
                 }
-
                 localStorage.setItem('motionSketchVector', jsonStr);
-                
                 const ind = document.getElementById('save-indicator');
                 ind.style.opacity = 1;
                 setTimeout(()=>ind.style.opacity=0, 1500);
@@ -1556,9 +1662,7 @@ class MotionSketchVector {
                     this.paperStrokes = data.paperStrokes || [];
                     this.fps = data.fps || 12;
                     this.frameIndex = 0;
-                    if(data.width && data.height) {
-                        this.resizeCanvas(data.width, data.height);
-                    }
+                    if(data.width && data.height) this.resizeCanvas(data.width, data.height);
                     this.renderUI();
                     this.renderCanvas();
                 }
@@ -1578,8 +1682,8 @@ class MotionSketchVector {
                 tCtx.clearRect(0,0,this.canvasWidth,this.canvasHeight);
                 tCtx.fillStyle = this.selectedBgColor; 
                 tCtx.fillRect(0,0,this.canvasWidth,this.canvasHeight);
-                this.paperStrokes.forEach(s => this.drawStroke(tCtx, s));
-                f.strokes.forEach(s => this.drawStroke(tCtx, s));
+                this.paperStrokes.forEach(s => this.drawObject(tCtx, s));
+                f.strokes.forEach(s => this.drawObject(tCtx, s));
                 framesData.push(tempC.toDataURL());
             });
 
@@ -1601,7 +1705,6 @@ class MotionSketchVector {
         }, 100);
     }
     
-    /* --- File IO --- */
     saveProject() {
         const data = {
             version: 3,
@@ -1642,11 +1745,10 @@ class MotionSketchVector {
         reader.readAsText(file);
     }
     
-    /* --- Modals --- */
     requestNewAnimation() { document.getElementById('custom-modal').style.display = 'flex'; }
     closeModal(id) { 
         if (id) document.getElementById(id).style.display = 'none';
-        else document.getElementById('custom-modal').style.display = 'none'; // default
+        else document.getElementById('custom-modal').style.display = 'none'; 
     }
     confirmNewAnimation() {
         this.closeModal();
@@ -1674,7 +1776,11 @@ class MotionSketchVector {
         if (this.clipboard) {
             this.saveState();
             const newStroke = JSON.parse(JSON.stringify(this.clipboard));
-            newStroke.points.forEach(p => { p.x += 20; p.y += 20; });
+            if(newStroke.type !== 'text') {
+                newStroke.points.forEach(p => { p.x += 20; p.y += 20; });
+            } else {
+                newStroke.x += 20; newStroke.y += 20;
+            }
             const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
             list.push(newStroke);
             this.selectedObject = { stroke: newStroke, layer: this.activeLayer };
