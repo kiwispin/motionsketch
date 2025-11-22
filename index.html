@@ -145,6 +145,7 @@
         .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
         .btn-primary:active { transform: translateY(1px); }
 
+        /* Storage Meter */
         .storage-container {
             display: flex; flex-direction: column; justify-content: center;
             width: 60px; margin: 0 10px;
@@ -158,6 +159,8 @@
             height: 100%; width: 0%; background: #2ecc71;
             transition: width 0.5s ease, background 0.3s;
         }
+
+        /* Removed legacy .icon-btn and .settings-btn classes as they are no longer needed */
 
         .tools-panel {
             position: absolute;
@@ -529,12 +532,13 @@
         </div>
 
         <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
-        <button class="btn-ghost" onclick="app.undo()"><i class="fas fa-undo"></i></button>
-        <button class="btn-ghost" onclick="app.redo()"><i class="fas fa-redo"></i></button>
+        <button class="btn-ghost" onclick="app.undo()" title="Undo"><i class="fas fa-undo"></i></button>
+        <button class="btn-ghost" onclick="app.redo()" title="Redo"><i class="fas fa-redo"></i></button>
         <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
         <button class="btn-primary" onclick="app.exportGIF()">Export GIF</button>
         
-        <button class="icon-btn settings-btn" onclick="app.openSettings()"><i class="fas fa-cog"></i></button>
+        <!-- Updated Settings Button to match S-Tier styling -->
+        <button class="btn-ghost" onclick="app.openSettings()" title="Canvas Settings"><i class="fas fa-sliders-h"></i></button>
     </div>
 </header>
 
