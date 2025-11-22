@@ -35,15 +35,13 @@
             color: var(--text-main);
             display: flex;
             flex-direction: column;
-            /* Moved background here so it covers full screen */
             background-image: radial-gradient(circle at center, #2a2a2a 0%, #111 100%);
         }
 
         .workspace {
             position: absolute;
-            /* Fix: Added breathing room (gaps) so canvas doesn't touch UI */
-            top: 100px;      /* Header ends at 80px -> 20px gap */
-            bottom: 190px;   /* Timeline top is at 160px -> 30px gap */
+            top: 100px;      
+            bottom: 190px;   
             left: 0; 
             right: 0;
             width: auto; 
@@ -58,17 +56,15 @@
         .canvas-wrapper {
             pointer-events: auto; 
             position: relative;
-            width: 600px; height: 600px;
+            /* Removed hardcoded width/height/aspect-ratio here, set via JS */
             background-color: #fff;
             box-shadow: 0 20px 60px rgba(0,0,0,0.5);
             border-radius: 4px;
             background-image: linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
             background-size: 20px 20px;
-            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transition: width 0.3s, height 0.3s; /* Smooth resize */
             max-width: 90%;
-            /* Ensure it respects the new tighter vertical constraints */
             max-height: 100%; 
-            aspect-ratio: 1/1;
         }
 
         canvas { 
@@ -135,7 +131,6 @@
         .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
         .btn-primary:active { transform: translateY(1px); }
 
-        /* Storage Meter */
         .storage-container {
             display: flex; flex-direction: column; justify-content: center;
             width: 60px; margin: 0 10px;
@@ -309,7 +304,7 @@
         .frames-track::-webkit-scrollbar { display: none; }
 
         .frame-card {
-            min-width: 80px; height: 60px;
+            min-width: 90px; height: 68px;
             background: white; border-radius: 6px;
             position: relative; cursor: pointer;
             border: 2px solid transparent;
@@ -329,17 +324,16 @@
             background: rgba(255,255,255,0.8); padding: 1px 4px; border-radius: 3px;
         }
         
-        /* Frame Delete Button */
         .frame-delete-btn {
             position: absolute; top: 2px; right: 2px;
             width: 18px; height: 18px;
-            background: rgba(255, 59, 48, 0.9); /* System Red */
+            background: rgba(255, 59, 48, 0.9); 
             color: white; border-radius: 50%;
             display: flex; justify-content: center; align-items: center;
-            font-size: 10px; opacity: 0; transition: opacity 0.2s;
+            font-size: 10px; cursor: pointer;
+            transition: transform 0.2s;
             z-index: 10;
         }
-        .frame-card:hover .frame-delete-btn { opacity: 1; }
         .frame-delete-btn:hover { transform: scale(1.1); background: #ff3b30; }
 
         .add-frame-btn {
@@ -394,6 +388,13 @@
         .modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
         .modal-desc { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.4; }
         .modal-btns { display: flex; gap: 10px; justify-content: center; }
+        
+        .modal-input-group { margin-bottom: 20px; display: flex; gap: 10px; justify-content: center; }
+        .modal-input {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+            color: white; padding: 8px; border-radius: 6px; width: 80px; text-align: center;
+        }
+        .modal-label { font-size: 0.8rem; color: #aaa; display: block; margin-bottom: 4px; }
 
         .wiggling {
             filter: url(#wiggleFilter);
@@ -424,7 +425,7 @@
                 left: 10px; right: 10px; bottom: 10px;
                 height: 120px;
             }
-            .frame-card { min-width: 60px; height: 45px; }
+            .frame-card { min-width: 70px; height: 55px; }
             .add-frame-btn { min-width: 40px; height: 40px; }
             
             .flyout-menu {
@@ -455,13 +456,39 @@
 
 <input type="file" id="file-input" accept=".json" style="display:none" onchange="app.handleFileUpload(this)">
 
+<!-- New Modal -->
 <div id="custom-modal" class="modal-overlay">
     <div class="modal-box">
         <div class="modal-title">New Project?</div>
         <div class="modal-desc">Starting a new animation will erase your current unsaved progress.</div>
         <div class="modal-btns">
-            <button class="btn-ghost" onclick="app.closeModal()">Cancel</button>
+            <button class="btn-ghost" onclick="app.closeModal('custom-modal')">Cancel</button>
             <button class="btn-primary" style="background:#ff3b30" onclick="app.confirmNewAnimation()">Create New</button>
+        </div>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-title">Project Settings</div>
+        <div class="modal-desc">Adjust Canvas Size</div>
+        
+        <div class="modal-input-group">
+            <div>
+                <span class="modal-label">Width</span>
+                <input type="number" id="canvas-width" class="modal-input" value="600">
+            </div>
+            <div style="display:flex; align-items:center; padding-top:15px;">x</div>
+            <div>
+                <span class="modal-label">Height</span>
+                <input type="number" id="canvas-height" class="modal-input" value="600">
+            </div>
+        </div>
+
+        <div class="modal-btns">
+            <button class="btn-ghost" onclick="app.closeModal('settings-modal')">Cancel</button>
+            <button class="btn-primary" onclick="app.applySettings()">Apply</button>
         </div>
     </div>
 </div>
@@ -487,6 +514,8 @@
         <button class="btn-ghost" onclick="app.redo()"><i class="fas fa-redo"></i></button>
         <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
         <button class="btn-primary" onclick="app.exportGIF()">Export GIF</button>
+        
+        <button class="icon-btn settings-btn" onclick="app.openSettings()"><i class="fas fa-cog"></i></button>
     </div>
 </header>
 
@@ -584,7 +613,10 @@
         <div style="width:10px"></div>
         
         <button class="btn-ghost" id="onion-btn" onclick="app.toggleOnion()" title="Onion Skin">
-            <i class="fas fa-layer-group"></i>
+            <svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12.002 2.003c-5.03 0-8.013 3.564-7.99 7.903 0 4.206 3.58 6.912 4.642 8.962.364.703.853 1.132 1.26 1.132h4.17c.408 0 .898-.43 1.262-1.132 1.062-2.05 4.644-4.756 4.644-8.962 0-4.34-2.96-7.903-7.99-7.903zm0 15.997c-.828 0-1.5-.672-1.5-1.5 0-.828.672-1.5 1.5-1.5s1.5.672 1.5 1.5c0 .828-.672 1.5-1.5 1.5zm0-5c-2.206 0-4-1.794-4-4s1.794-4 4-4 4 1.794 4 4-1.794 4-4 4z"/>
+                <path d="M12 22c-1.5 0-2.5-.5-3-1h6c-.5.5-1.5 1-3 1z" opacity="0.6"/>
+            </svg>
         </button>
         
         <button class="btn-ghost" onclick="app.duplicateFrame(app.frameIndex)" title="Duplicate Current Frame">
@@ -635,6 +667,9 @@ class MotionSketchVector {
         this.isOnion = false;
         this.isWiggle = false;
         
+        this.canvasWidth = 600;
+        this.canvasHeight = 600;
+
         this.history = [];
         this.redoStack = [];
         
@@ -643,18 +678,12 @@ class MotionSketchVector {
 
     init() {
         this.setupEvents();
-        this.handleResize(); 
-        window.addEventListener('resize', () => this.handleResize()); 
         this.renderUI();
-        this.renderCanvas();
+        this.resizeCanvas(this.canvasWidth, this.canvasHeight);
         this.loadStorage();
         
         const picker = document.getElementById('html-color-picker');
         if(picker) picker.value = this.brushColor;
-    }
-    
-    handleResize() {
-        // Logic for scaling if needed
     }
 
     setupEvents() {
@@ -708,12 +737,43 @@ class MotionSketchVector {
 
     getPos(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
+        // Use saved internal dimensions
+        const scaleX = this.canvasWidth / rect.width;
+        const scaleY = this.canvasHeight / rect.height;
         return {
             x: (e.clientX - rect.left) * scaleX,
             y: (e.clientY - rect.top) * scaleY
         };
+    }
+
+    resizeCanvas(w, h) {
+        this.canvasWidth = w;
+        this.canvasHeight = h;
+        
+        // Update DOM elements
+        this.canvas.width = w;
+        this.canvas.height = h;
+        
+        // Update Wrapper Styles to maintain aspect ratio within view
+        this.canvasWrapper.style.width = w + 'px';
+        this.canvasWrapper.style.height = h + 'px';
+        this.canvasWrapper.style.aspectRatio = `${w}/${h}`;
+
+        this.renderCanvas();
+    }
+    
+    openSettings() {
+        document.getElementById('canvas-width').value = this.canvasWidth;
+        document.getElementById('canvas-height').value = this.canvasHeight;
+        document.getElementById('settings-modal').style.display = 'flex';
+    }
+
+    applySettings() {
+        const w = parseInt(document.getElementById('canvas-width').value) || 600;
+        const h = parseInt(document.getElementById('canvas-height').value) || 600;
+        this.resizeCanvas(w, h);
+        this.closeModal('settings-modal');
+        this.saveStorage();
     }
 
     /* --- History --- */
@@ -725,7 +785,9 @@ class MotionSketchVector {
             frames: JSON.parse(JSON.stringify(this.frames)),
             paperStrokes: JSON.parse(JSON.stringify(this.paperStrokes)),
             frameIndex: this.frameIndex,
-            bgColor: this.selectedBgColor
+            bgColor: this.selectedBgColor,
+            width: this.canvasWidth,
+            height: this.canvasHeight
         };
         this.history.push(JSON.stringify(state));
     }
@@ -737,7 +799,9 @@ class MotionSketchVector {
             frames: JSON.parse(JSON.stringify(this.frames)),
             paperStrokes: JSON.parse(JSON.stringify(this.paperStrokes)),
             frameIndex: this.frameIndex,
-            bgColor: this.selectedBgColor
+            bgColor: this.selectedBgColor,
+            width: this.canvasWidth,
+            height: this.canvasHeight
         };
         this.redoStack.push(JSON.stringify(currentState));
         
@@ -746,6 +810,11 @@ class MotionSketchVector {
         this.paperStrokes = prevState.paperStrokes;
         this.frameIndex = prevState.frameIndex;
         this.selectedBgColor = prevState.bgColor;
+        
+        // Also check if size changed
+        if(prevState.width && prevState.height) {
+            this.resizeCanvas(prevState.width, prevState.height);
+        }
         
         this.selectedObject = null;
         this.updateThumbnails();
@@ -760,7 +829,9 @@ class MotionSketchVector {
             frames: JSON.parse(JSON.stringify(this.frames)),
             paperStrokes: JSON.parse(JSON.stringify(this.paperStrokes)),
             frameIndex: this.frameIndex,
-            bgColor: this.selectedBgColor
+            bgColor: this.selectedBgColor,
+            width: this.canvasWidth,
+            height: this.canvasHeight
         };
         this.history.push(JSON.stringify(currentState));
         
@@ -770,6 +841,10 @@ class MotionSketchVector {
         this.frameIndex = nextState.frameIndex;
         this.selectedBgColor = nextState.bgColor;
         
+        if(nextState.width && nextState.height) {
+            this.resizeCanvas(nextState.width, nextState.height);
+        }
+
         this.selectedObject = null;
         this.updateThumbnails();
         this.renderCanvas();
@@ -1085,10 +1160,10 @@ class MotionSketchVector {
     /* --- Rendering --- */
     renderCanvas() {
         const ctx = this.ctx;
-        ctx.clearRect(0, 0, 600, 600);
+        ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
         
         ctx.fillStyle = this.selectedBgColor; 
-        ctx.fillRect(0,0,600,600);
+        ctx.fillRect(0,0,this.canvasWidth, this.canvasHeight);
         
         this.paperStrokes.forEach(s => this.drawStroke(ctx, s));
         
@@ -1353,6 +1428,9 @@ class MotionSketchVector {
                     html += `<div class="frame-delete-btn" onclick="event.stopPropagation(); app.deleteFrame(${i})" title="Delete Frame"><i class="fas fa-times"></i></div>`;
                 }
                 
+                // Always add Duplicate button
+                html += `<div class="frame-btn frame-copy-btn" onclick="event.stopPropagation(); app.duplicateFrame(${i})" title="Duplicate Frame"><i class="fas fa-copy"></i></div>`;
+                
                 el.innerHTML = html;
                 this.framesList.appendChild(el);
             });
@@ -1386,13 +1464,13 @@ class MotionSketchVector {
         const tCanvas = document.createElement('canvas');
         tCanvas.width = 120; tCanvas.height = 120;
         const tCtx = tCanvas.getContext('2d');
-        const scale = 120 / 600;
+        const scale = 120 / this.canvasWidth; // Scale based on actual width
         tCtx.scale(scale, scale);
 
         this.frames.forEach((f, i) => {
-            tCtx.clearRect(0,0,600,600);
+            tCtx.clearRect(0,0,this.canvasWidth,this.canvasHeight);
             tCtx.fillStyle = this.selectedBgColor; 
-            tCtx.fillRect(0,0,600,600);
+            tCtx.fillRect(0,0,this.canvasWidth,this.canvasHeight);
             
             this.paperStrokes.forEach(s => this.drawStroke(tCtx, s));
             f.strokes.forEach(s => this.drawStroke(tCtx, s));
@@ -1414,7 +1492,9 @@ class MotionSketchVector {
                 version: 3,
                 frames: this.frames,
                 paperStrokes: this.paperStrokes,
-                fps: this.fps
+                fps: this.fps,
+                width: this.canvasWidth, // Save dims
+                height: this.canvasHeight
             };
             try {
                 const cleanFrames = this.frames.map(f => ({strokes: f.strokes}));
@@ -1459,6 +1539,9 @@ class MotionSketchVector {
                     this.paperStrokes = data.paperStrokes || [];
                     this.fps = data.fps || 12;
                     this.frameIndex = 0;
+                    if(data.width && data.height) {
+                        this.resizeCanvas(data.width, data.height);
+                    }
                     this.renderUI();
                     this.renderCanvas();
                 }
@@ -1470,14 +1553,14 @@ class MotionSketchVector {
         document.getElementById('loading-overlay').style.display = 'flex';
         const framesData = [];
         const tempC = document.createElement('canvas');
-        tempC.width = 600; tempC.height = 600;
+        tempC.width = this.canvasWidth; tempC.height = this.canvasHeight;
         const tCtx = tempC.getContext('2d');
 
         setTimeout(() => {
             this.frames.forEach(f => {
-                tCtx.clearRect(0,0,600,600);
+                tCtx.clearRect(0,0,this.canvasWidth,this.canvasHeight);
                 tCtx.fillStyle = this.selectedBgColor; 
-                tCtx.fillRect(0,0,600,600);
+                tCtx.fillRect(0,0,this.canvasWidth,this.canvasHeight);
                 this.paperStrokes.forEach(s => this.drawStroke(tCtx, s));
                 f.strokes.forEach(s => this.drawStroke(tCtx, s));
                 framesData.push(tempC.toDataURL());
@@ -1486,7 +1569,7 @@ class MotionSketchVector {
             gifshot.createGIF({
                 images: framesData,
                 interval: 1/this.fps,
-                gifWidth: 600, gifHeight: 600
+                gifWidth: this.canvasWidth, gifHeight: this.canvasHeight
             }, (obj) => {
                 document.getElementById('loading-overlay').style.display = 'none';
                 if(!obj.error) {
@@ -1507,7 +1590,9 @@ class MotionSketchVector {
             version: 3,
             frames: this.frames.map(f => ({strokes: f.strokes})),
             paperStrokes: this.paperStrokes,
-            fps: this.fps
+            fps: this.fps,
+            width: this.canvasWidth,
+            height: this.canvasHeight
         };
         const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
         const url = URL.createObjectURL(blob);
@@ -1530,6 +1615,7 @@ class MotionSketchVector {
                     this.paperStrokes = data.paperStrokes || [];
                     this.fps = data.fps;
                     this.frameIndex = 0;
+                    if(data.width && data.height) this.resizeCanvas(data.width, data.height);
                     this.renderUI();
                     this.renderCanvas();
                 }
@@ -1541,7 +1627,10 @@ class MotionSketchVector {
     
     /* --- Modals --- */
     requestNewAnimation() { document.getElementById('custom-modal').style.display = 'flex'; }
-    closeModal() { document.getElementById('custom-modal').style.display = 'none'; }
+    closeModal(id) { 
+        if (id) document.getElementById(id).style.display = 'none';
+        else document.getElementById('custom-modal').style.display = 'none'; // default
+    }
     confirmNewAnimation() {
         this.closeModal();
         this.frames = [{strokes:[]}];
