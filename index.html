@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>MotionSketch</title>
     
-    <!-- Embedded Paint Palette Favicon -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%233498db' d='M204.3 5C104.9 24.4 24.8 104.3 5.2 203.4c-37 187 131.7 326.4 258.8 306.7 41.2-6.4 61.4-54.6 42.5-91.7-23.1-45.4 9.9-98.4 60.9-98.4h79.7c35.8 0 64.8-29.6 64.9-65.3C511.5 97.1 368.1-26.9 204.3 5zM96 320c-17.7 0-32-14.3-32-32s14.3-32 32-32 32 14.3 32 32-14.3 32-32 32zm32-128c-17.7 0-32-14.3-32-32s14.3-32 32-32 32 14.3 32 32-14.3 32-32 32zm128-64c-17.7 0-32-14.3-32-32s14.3-32 32-32 32 14.3 32 32-14.3 32-32 32zm128 64c-17.7 0-32-14.3-32-32s14.3-32 32-32 32 14.3 32 32-14.3 32-32 32z'/%3E%3C/svg%3E">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gifshot/0.3.2/gifshot.min.js"></script>
@@ -13,7 +12,7 @@
     <style>
         :root {
             --bg-app: #1e1e1e;
-            --bg-panel: rgba(40, 40, 40, 0.75);
+            --bg-panel: rgba(40, 40, 40, 0.85);
             --border-panel: rgba(255, 255, 255, 0.1);
             --accent-blue: #0A84FF;
             --accent-hover: #007AFF;
@@ -38,18 +37,14 @@
             flex-direction: column;
         }
 
-        /* --- Layout: Z-Index Layering --- */
-        /* 0: Background/Workspace */
-        /* 10: Floating UI Panels */
-        /* 20: Modals/Overlays */
-
-        /* --- Workspace (The Stage) --- */
         .workspace {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
             display: flex; justify-content: center; align-items: center;
             z-index: 0;
             background-image: radial-gradient(circle at center, #2a2a2a 0%, #111 100%);
+            overscroll-behavior: none;
+            touch-action: none; 
         }
 
         .canvas-wrapper {
@@ -58,16 +53,21 @@
             background-color: #fff;
             box-shadow: 0 20px 60px rgba(0,0,0,0.5);
             border-radius: 4px;
-            /* Subtle checkerboard behind transparent paper */
             background-image: linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
             background-size: 20px 20px;
             transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            max-width: 95vw;
+            max-height: 60vh;
+            aspect-ratio: 1/1;
         }
 
-        canvas { position: absolute; top: 0; left: 0; border-radius: 4px; }
+        canvas { 
+            width: 100%; height: 100%; 
+            position: absolute; top: 0; left: 0; border-radius: 4px; 
+            touch-action: none;
+        }
         #rendering-canvas { z-index: 1; }
 
-        /* --- Floating Glass Panels --- */
         .glass-panel {
             background: var(--bg-panel);
             backdrop-filter: blur(20px);
@@ -79,7 +79,6 @@
             transition: transform 0.2s ease;
         }
 
-        /* Top Header Bar */
         .app-header {
             position: absolute;
             top: 20px; left: 20px; right: 20px;
@@ -96,7 +95,6 @@
 
         .top-actions { display: flex; gap: 8px; }
 
-        /* Icon Buttons (Ghost Style) */
         .btn-ghost {
             background: transparent;
             color: var(--text-main);
@@ -112,7 +110,6 @@
         .btn-ghost:hover { background: rgba(255,255,255,0.1); }
         .btn-ghost i { font-size: 1rem; opacity: 0.8; }
 
-        /* Primary Actions (Save/Export) */
         .btn-primary {
             background: var(--accent-blue);
             color: white;
@@ -143,15 +140,14 @@
             transition: width 0.5s ease, background 0.3s;
         }
 
-        /* Left Toolbar (Tools) */
         .tools-panel {
             position: absolute;
-            left: 20px; top: 100px; bottom: 240px; /* Above timeline */
+            left: 20px; top: 100px; bottom: 240px;
             width: 64px;
             display: flex; flex-direction: column; align-items: center;
             padding: 15px 0;
             gap: 15px;
-            overflow: visible; /* Allow flyouts */
+            overflow: visible;
         }
 
         .tool-btn {
@@ -174,7 +170,6 @@
         
         .divider { width: 30px; height: 1px; background: var(--border-panel); margin: 5px 0; }
 
-        /* Flyout Menu Styles */
         .tool-flyout-wrapper {
             position: relative;
             display: flex;
@@ -184,7 +179,7 @@
 
         .flyout-menu {
             position: absolute;
-            left: 55px; /* Push out to right of parent */
+            left: 55px; 
             top: 0;
             background: var(--bg-panel);
             backdrop-filter: blur(20px);
@@ -202,13 +197,13 @@
             z-index: 100;
         }
 
+        .tool-flyout-wrapper.expanded .flyout-menu,
         .tool-flyout-wrapper:hover .flyout-menu {
             opacity: 1;
             pointer-events: auto;
             transform: translateX(0) scale(1);
         }
 
-        /* Ensure flyout buttons look correct */
         .flyout-menu .tool-btn {
             width: 40px; height: 40px;
             background: transparent;
@@ -216,8 +211,6 @@
         .flyout-menu .tool-btn:hover { background: rgba(255,255,255,0.1); }
         .flyout-menu .tool-btn.active { background: var(--accent-blue); color: white; }
 
-
-        /* Right Panel (Properties) */
         .props-panel {
             position: absolute;
             right: 20px; top: 100px;
@@ -232,7 +225,6 @@
             color: var(--text-muted); font-weight: 700; 
         }
 
-        /* Layer Toggle */
         .layer-switch {
             display: flex; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 2px;
         }
@@ -244,7 +236,6 @@
         }
         .layer-option.active { background: var(--accent-blue); color: white; shadow: 0 2px 8px rgba(0,0,0,0.2); }
 
-        /* Sliders */
         .slider-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         .slider-val { font-size: 0.8rem; color: var(--text-main); font-variant-numeric: tabular-nums; width: 30px; text-align: right; }
         input[type="range"] {
@@ -264,7 +255,6 @@
             box-shadow: 0 2px 6px rgba(0,0,0,0.3);
         }
 
-        /* Color Grid */
         .color-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
         .swatch {
             width: 100%; aspect-ratio: 1;
@@ -275,7 +265,6 @@
         .swatch:hover { transform: scale(1.1); }
         .swatch.active { border-color: white; }
         
-        /* Custom Color Input wrapper */
         .color-input-wrap {
             width: 100%; height: 36px; border-radius: 8px; 
             border: 1px solid var(--border-panel); 
@@ -286,13 +275,12 @@
             cursor: pointer; border: none; padding: 0; margin: 0;
         }
 
-        /* Bottom Timeline */
         .timeline-panel {
             position: absolute;
             bottom: 20px; left: 20px; right: 20px;
             height: 140px;
             display: flex; flex-direction: column;
-            padding: 0; overflow: hidden; /* Clip content to radius */
+            padding: 0; overflow: hidden; 
         }
 
         .timeline-controls {
@@ -306,7 +294,6 @@
             flex: 1;
             display: flex; align-items: center;
             overflow-x: auto; padding: 10px 20px; gap: 12px;
-            /* Custom Scrollbar hidden for clean look */
             scrollbar-width: none; 
         }
         .frames-track::-webkit-scrollbar { display: none; }
@@ -344,7 +331,6 @@
         }
         .add-frame-btn:hover { background: var(--accent-blue); }
 
-        /* Play Button Big */
         .play-fab {
             width: 32px; height: 32px;
             background: var(--accent-blue); border-radius: 50%;
@@ -354,7 +340,6 @@
         }
         .play-fab:hover { transform: scale(1.1); }
 
-        /* Indicators */
         #save-indicator {
             position: fixed; top: 90px; right: 30px;
             background: rgba(46, 204, 113, 0.9);
@@ -372,7 +357,6 @@
             justify-content: center; align-items: center; z-index: 9999;
         }
 
-        /* Modals */
         .modal-overlay {
             position: fixed; top:0; left:0; width:100%; height:100%;
             background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);
@@ -388,25 +372,46 @@
         .modal-desc { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.4; }
         .modal-btns { display: flex; gap: 10px; justify-content: center; }
 
-        /* SVG Filter hidden class */
         .wiggling {
             filter: url(#wiggleFilter);
         }
 
-        /* Responsive adjustments */
         @media (max-width: 900px) {
-            .props-panel { display: none; } /* Hide detailed props on small screens, or move to bottom sheet */
+            .props-panel { display: none; } 
             .canvas-wrapper { transform: scale(0.7); }
         }
         @media (max-height: 700px) {
             .canvas-wrapper { transform: scale(0.6); }
             .tools-panel { top: 80px; bottom: 180px; }
         }
+        @media (max-width: 600px) {
+            .app-header {
+                padding: 0 10px;
+                top: 10px; height: 50px;
+            }
+            .logo span { display: none; } 
+            
+            .tools-panel {
+                top: 70px; bottom: 160px; left: 10px;
+                width: 50px; padding: 10px 0;
+            }
+            .tool-btn { width: 36px; height: 36px; font-size: 1rem; }
+            
+            .timeline-panel {
+                left: 10px; right: 10px; bottom: 10px;
+                height: 120px;
+            }
+            .frame-card { min-width: 60px; height: 45px; }
+            .add-frame-btn { min-width: 40px; height: 40px; }
+            
+            .flyout-menu {
+                left: 45px; 
+            }
+        }
     </style>
 </head>
 <body>
 
-<!-- SVG Filters for Wiggle Effect -->
 <svg style="display: none;">
     <defs>
         <filter id="wiggleFilter">
@@ -418,19 +423,15 @@
     </defs>
 </svg>
 
-<!-- Loading -->
 <div id="loading-overlay">
     <i class="fas fa-spinner fa-spin fa-2x"></i>
     <div style="margin-top: 15px; font-weight:500;">Processing...</div>
 </div>
 
-<!-- Saved Toast -->
 <div id="save-indicator"><i class="fas fa-check"></i> Saved</div>
 
-<!-- Hidden Input -->
 <input type="file" id="file-input" accept=".json" style="display:none" onchange="app.handleFileUpload(this)">
 
-<!-- Modals -->
 <div id="custom-modal" class="modal-overlay">
     <div class="modal-box">
         <div class="modal-title">New Project?</div>
@@ -442,7 +443,6 @@
     </div>
 </div>
 
-<!-- App Header -->
 <header class="glass-panel app-header">
     <div class="logo">
         <i class="fas fa-pen-nib"></i> MotionSketch
@@ -452,7 +452,6 @@
         <button class="btn-ghost" onclick="app.saveProject()"><i class="fas fa-download"></i> Save</button>
         <button class="btn-ghost" onclick="app.openProject()"><i class="fas fa-folder-open"></i> Open</button>
         
-        <!-- Storage Meter UI -->
         <div class="storage-container" title="Browser Storage Used">
             <div class="storage-label">Storage</div>
             <div class="storage-track">
@@ -468,22 +467,20 @@
     </div>
 </header>
 
-<!-- Left Tools -->
 <div class="glass-panel tools-panel">
     <div class="tool-btn active" id="tool-brush" onclick="app.setTool('brush')" title="Brush (B)">
         <i class="fas fa-paint-brush"></i>
     </div>
     
-    <!-- Shape Flyout Group -->
-    <div class="tool-flyout-wrapper">
+    <div class="tool-flyout-wrapper" id="shape-wrapper" onclick="this.classList.toggle('expanded')">
         <div class="tool-btn" id="tool-shape-anchor" title="Shapes">
             <i class="far fa-square main-icon"></i>
             <i class="fas fa-caret-right" style="font-size: 0.6rem; position: absolute; bottom: 4px; right: 4px; color: var(--text-muted);"></i>
         </div>
         <div class="flyout-menu">
-            <div class="tool-btn" id="tool-rect" onclick="app.setTool('rect')" title="Rectangle (R)"><i class="far fa-square"></i></div>
-            <div class="tool-btn" id="tool-circle" onclick="app.setTool('circle')" title="Circle (C)"><i class="far fa-circle"></i></div>
-            <div class="tool-btn" id="tool-line" onclick="app.setTool('line')" title="Line (L)"><i class="fas fa-slash" style="transform: rotate(-45deg);"></i></div>
+            <div class="tool-btn" id="tool-rect" onclick="event.stopPropagation(); app.setTool('rect')" title="Rectangle (R)"><i class="far fa-square"></i></div>
+            <div class="tool-btn" id="tool-circle" onclick="event.stopPropagation(); app.setTool('circle')" title="Circle (C)"><i class="far fa-circle"></i></div>
+            <div class="tool-btn" id="tool-line" onclick="event.stopPropagation(); app.setTool('line')" title="Line (L)"><i class="fas fa-slash" style="transform: rotate(-45deg);"></i></div>
         </div>
     </div>
     
@@ -507,7 +504,6 @@
     </div>
 </div>
 
-<!-- Right Properties -->
 <div class="glass-panel props-panel">
     <div class="prop-group">
         <div class="prop-label">Layer</div>
@@ -551,14 +547,12 @@
     </div>
 </div>
 
-<!-- Main Workspace -->
 <div class="workspace">
     <div class="canvas-wrapper" id="canvas-wrapper">
         <canvas id="rendering-canvas" width="600" height="600"></canvas>
     </div>
 </div>
 
-<!-- Timeline -->
 <div class="glass-panel timeline-panel">
     <div class="timeline-controls">
         <div class="play-fab" id="play-btn" onclick="app.togglePlay()">
@@ -581,16 +575,14 @@
         <span id="fps-disp" style="font-size:0.8rem; font-variant-numeric: tabular-nums; color:var(--text-muted)">12 FPS</span>
     </div>
     
-    <div class="frames-track" id="frames-list">
-        <!-- Frames injected via JS -->
-    </div>
+    <div class="frames-track" id="frames-list"></div>
 </div>
 
 <script>
 class MotionSketchVector {
     constructor() {
-        // ... existing constructor ...
         this.canvas = document.getElementById('rendering-canvas');
+        this.canvasWrapper = document.getElementById('canvas-wrapper');
         this.ctx = this.canvas.getContext('2d');
         this.framesList = document.getElementById('frames-list');
         this.frames = [{ strokes: [] }]; 
@@ -622,15 +614,20 @@ class MotionSketchVector {
         this.init();
     }
 
-    // ... existing init, setupEvents, getPos methods ...
     init() {
         this.setupEvents();
+        this.handleResize(); 
+        window.addEventListener('resize', () => this.handleResize()); 
         this.renderUI();
         this.renderCanvas();
         this.loadStorage();
         
-        // Initialize color picker UI
-        document.getElementById('html-color-picker').value = this.brushColor;
+        const picker = document.getElementById('html-color-picker');
+        if(picker) picker.value = this.brushColor;
+    }
+    
+    handleResize() {
+        // Logic for scaling if needed
     }
 
     setupEvents() {
@@ -644,20 +641,37 @@ class MotionSketchVector {
         window.addEventListener('mousemove', move);
         window.addEventListener('mouseup', end);
         
-        c.addEventListener('touchstart', (e) => { e.preventDefault(); start(e.touches[0]); }, {passive:false});
-        window.addEventListener('touchmove', (e) => { if(this.isDrawing || this.selectedObject) e.preventDefault(); move(e.touches[0]); }, {passive:false});
+        c.addEventListener('touchstart', (e) => { 
+            if(e.touches.length === 1) {
+                e.preventDefault(); 
+                start(e.touches[0]); 
+            }
+        }, {passive:false});
+        
+        window.addEventListener('touchmove', (e) => { 
+            if((this.isDrawing || this.selectedObject) && e.touches.length === 1) {
+                e.preventDefault(); 
+                move(e.touches[0]); 
+            }
+        }, {passive:false});
+        
         window.addEventListener('touchend', end);
 
-        // Shortcuts
+        document.addEventListener('click', (e) => {
+            const shapeWrapper = document.getElementById('shape-wrapper');
+            if (shapeWrapper && !shapeWrapper.contains(e.target)) {
+                shapeWrapper.classList.remove('expanded');
+            }
+        });
+
         document.addEventListener('keydown', (e) => {
-            if(e.target.tagName === 'INPUT') return; // Don't trigger if typing
+            if(e.target.tagName === 'INPUT') return; 
             if(e.key === 'Delete' || e.key === 'Backspace') this.deleteSelected();
             if((e.ctrlKey || e.metaKey) && e.key === 'c') this.copySelection();
             if((e.ctrlKey || e.metaKey) && e.key === 'v') this.pasteSelection();
             if((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); this.undo(); }
             if((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); this.redo(); }
             
-            // Tools shortcuts
             if(e.key === 'b') this.setTool('brush');
             if(e.key === 'e') this.setTool('eraser');
             if(e.key === 'v') this.setTool('select');
@@ -677,7 +691,7 @@ class MotionSketchVector {
 
     /* --- History --- */
     saveState() {
-        if (this.history.length > 15) this.history.shift(); // Reduce depth to save memory
+        if (this.history.length > 20) this.history.shift();
         this.redoStack = [];
         
         const state = {
@@ -736,6 +750,7 @@ class MotionSketchVector {
     }
 
     /* --- Core Logic --- */
+
     onDown(pos) {
         if(this.isPlaying) return;
 
@@ -795,7 +810,6 @@ class MotionSketchVector {
             return;
         }
 
-        // Drawing
         this.saveState();
         this.isDrawing = true;
         this.selectedObject = null;
@@ -847,10 +861,14 @@ class MotionSketchVector {
                 }
             }
             else {
-                let newW = bounds.w, newH = bounds.h, newX = bounds.x, newY = bounds.y;
+                let newW = bounds.w;
+                let newH = bounds.h;
+                let newX = bounds.x;
+                let newY = bounds.y;
+
                 const dx = pos.x - this.dragStart.x;
                 const dy = pos.y - this.dragStart.y;
-                
+
                 const dir = this.dragMode.split('-')[1] || '';
 
                 if (dir.includes('r')) newW += dx; 
@@ -868,6 +886,7 @@ class MotionSketchVector {
                     pts[i].y = newY + (normY * newH);
                 }
             }
+
             this.calcBounds(this.selectedObject.stroke);
             this.renderCanvas();
             return;
@@ -913,7 +932,6 @@ class MotionSketchVector {
 
     onUp() {
         if (this.isDrawing) {
-            // OPTIMIZATION: Simplify the stroke to save space
             if ((this.tool === 'brush' || this.tool === 'eraser') && this.currentStroke.points.length > 5) {
                 this.currentStroke.points = this.simplifyPoints(this.currentStroke.points, 1.5);
             }
@@ -930,7 +948,6 @@ class MotionSketchVector {
         }
     }
     
-    /* --- Optimization --- */
     simplifyPoints(points, tolerance) {
         if (points.length <= 2) return points;
         const newPoints = [points[0]];
@@ -951,7 +968,6 @@ class MotionSketchVector {
     /* --- Vector Math & Hit Testing --- */
     hitTest(pos) {
         const checkList = (list, layerName) => {
-            // Iterate backwards (top to bottom visually)
             for (let i = list.length - 1; i >= 0; i--) {
                 if (this.strokeHit(list[i], pos)) return { stroke: list[i], layer: layerName, index: i };
             }
@@ -964,24 +980,17 @@ class MotionSketchVector {
     strokeHit(stroke, pos) {
         if (!stroke.points || stroke.points.length < 2) return false;
         
-        // 1. Fast Bounds check
         let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
         stroke.points.forEach(p=>{ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; });
         
         const hitThresh = Math.max(10, stroke.size);
         
-        // Expand bounds slightly for hit testing
         if(pos.x < minX-hitThresh || pos.x > maxX+hitThresh || pos.y < minY-hitThresh || pos.y > maxY+hitThresh) return false;
 
-        // 2. Line Segment Check (Clicking the outline)
         for (let i = 0; i < stroke.points.length - 1; i++) {
             if (this.distToSegment(pos, stroke.points[i], stroke.points[i+1]) < hitThresh) return true;
         }
 
-        // 3. Interior Check (Clicking inside)
-        // Only check inside if:
-        // a) We are using the Bucket tool (we want to fill empty shapes)
-        // b) The shape is ALREADY filled (we want to select it by clicking the fill)
         if (this.tool === 'bucket' || stroke.fillColor) {
             if (this.containsPoint(stroke.points, pos)) return true;
         }
@@ -989,7 +998,6 @@ class MotionSketchVector {
         return false;
     }
 
-    // Ray-Casting Algorithm to check if a point is inside a polygon
     containsPoint(points, pos) {
         let inside = false;
         for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
@@ -1354,21 +1362,20 @@ class MotionSketchVector {
                 fps: this.fps
             };
             try {
-                // Optimize: Don't save thumbnails to storage
                 const cleanFrames = this.frames.map(f => ({strokes: f.strokes}));
                 const jsonStr = JSON.stringify({...data, frames: cleanFrames});
                 
-                // Update Storage Meter
-                const size = jsonStr.length; // Approximate size in characters (bytes)
-                const limit = 5 * 1024 * 1024; // ~5MB standard limit
+                const size = jsonStr.length; 
+                const limit = 5 * 1024 * 1024; 
                 const pct = Math.min(100, (size / limit) * 100);
                 
                 const bar = document.getElementById('storage-bar');
-                bar.style.width = pct + '%';
-                
-                if (pct > 90) bar.style.background = '#ff3b30'; // Red
-                else if (pct > 70) bar.style.background = '#f1c40f'; // Yellow
-                else bar.style.background = '#2ecc71'; // Green
+                if(bar) {
+                    bar.style.width = pct + '%';
+                    if (pct > 90) bar.style.background = '#ff3b30'; 
+                    else if (pct > 70) bar.style.background = '#f1c40f'; 
+                    else bar.style.background = '#2ecc71'; 
+                }
 
                 localStorage.setItem('motionSketchVector', jsonStr);
                 
@@ -1378,8 +1385,10 @@ class MotionSketchVector {
             } catch(e) { 
                 console.log("Storage Limit Reached"); 
                 const bar = document.getElementById('storage-bar');
-                bar.style.width = '100%';
-                bar.style.background = '#ff3b30';
+                if(bar) {
+                    bar.style.width = '100%';
+                    bar.style.background = '#ff3b30';
+                }
                 alert("Storage Full! Please export your project to save properly.");
             }
         }, 1000);
@@ -1516,7 +1525,10 @@ class MotionSketchVector {
     }
 }
 
-const app = new MotionSketchVector();
+document.addEventListener("DOMContentLoaded", () => {
+    const app = new MotionSketchVector();
+    window.app = app; // Expose to window for HTML inline clicks
+});
 </script>
 </body>
 </html>
