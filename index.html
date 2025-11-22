@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>MotionSketch</title>
+    
+    <!-- Embedded Paint Palette Favicon -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%233498db' d='M204.3 5C104.9 24.4 24.8 104.3 5.2 203.4c-37 187 131.7 326.4 258.8 306.7 41.2-6.4 61.4-54.6 42.5-91.7-23.1-45.4 9.9-98.4 60.9-98.4h79.7c35.8 0 64.8-29.6 64.9-65.3C511.5 97.1 368.1-26.9 204.3 5zM96 320c-17.7 0-32-14.3-32-32s14.3-32 32-32 32 14.3 32 32-14.3 32-32 32zm32-128c-17.7 0-32-14.3-32-32s14.3-32 32-32 32 14.3 32 32-14.3 32-32 32zm128-64c-17.7 0-32-14.3-32-32s14.3-32 32-32 32 14.3 32 32-14.3 32-32 32zm128 64c-17.7 0-32-14.3-32-32s14.3-32 32-32 32 14.3 32 32-14.3 32-32 32z'/%3E%3C/svg%3E">
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gifshot/0.3.2/gifshot.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -124,6 +128,21 @@
         .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
         .btn-primary:active { transform: translateY(1px); }
 
+        /* Storage Meter */
+        .storage-container {
+            display: flex; flex-direction: column; justify-content: center;
+            width: 60px; margin: 0 10px;
+        }
+        .storage-label { font-size: 9px; color: var(--text-muted); margin-bottom: 2px; text-align: center;}
+        .storage-track {
+            width: 100%; height: 4px; background: rgba(255,255,255,0.1);
+            border-radius: 2px; overflow: hidden;
+        }
+        .storage-fill {
+            height: 100%; width: 0%; background: #2ecc71;
+            transition: width 0.5s ease, background 0.3s;
+        }
+
         /* Left Toolbar (Tools) */
         .tools-panel {
             position: absolute;
@@ -132,6 +151,7 @@
             display: flex; flex-direction: column; align-items: center;
             padding: 15px 0;
             gap: 15px;
+            overflow: visible; /* Allow flyouts */
         }
 
         .tool-btn {
@@ -153,6 +173,49 @@
         }
         
         .divider { width: 30px; height: 1px; background: var(--border-panel); margin: 5px 0; }
+
+        /* Flyout Menu Styles */
+        .tool-flyout-wrapper {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .flyout-menu {
+            position: absolute;
+            left: 55px; /* Push out to right of parent */
+            top: 0;
+            background: var(--bg-panel);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-panel);
+            border-radius: 12px;
+            padding: 5px;
+            display: flex;
+            gap: 5px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(-10px) scale(0.95);
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            box-shadow: var(--shadow-elevation);
+            z-index: 100;
+        }
+
+        .tool-flyout-wrapper:hover .flyout-menu {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateX(0) scale(1);
+        }
+
+        /* Ensure flyout buttons look correct */
+        .flyout-menu .tool-btn {
+            width: 40px; height: 40px;
+            background: transparent;
+        }
+        .flyout-menu .tool-btn:hover { background: rgba(255,255,255,0.1); }
+        .flyout-menu .tool-btn.active { background: var(--accent-blue); color: white; }
+
 
         /* Right Panel (Properties) */
         .props-panel {
@@ -325,6 +388,11 @@
         .modal-desc { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.4; }
         .modal-btns { display: flex; gap: 10px; justify-content: center; }
 
+        /* SVG Filter hidden class */
+        .wiggling {
+            filter: url(#wiggleFilter);
+        }
+
         /* Responsive adjustments */
         @media (max-width: 900px) {
             .props-panel { display: none; } /* Hide detailed props on small screens, or move to bottom sheet */
@@ -337,6 +405,18 @@
     </style>
 </head>
 <body>
+
+<!-- SVG Filters for Wiggle Effect -->
+<svg style="display: none;">
+    <defs>
+        <filter id="wiggleFilter">
+            <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="3" result="noise">
+                <animate attributeName="seed" values="1;100;1" dur="0.2s" repeatCount="indefinite" />
+            </feTurbulence>
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="4" />
+        </filter>
+    </defs>
+</svg>
 
 <!-- Loading -->
 <div id="loading-overlay">
@@ -371,6 +451,15 @@
         <button class="btn-ghost" onclick="app.requestNewAnimation()"><i class="fas fa-plus"></i> New</button>
         <button class="btn-ghost" onclick="app.saveProject()"><i class="fas fa-download"></i> Save</button>
         <button class="btn-ghost" onclick="app.openProject()"><i class="fas fa-folder-open"></i> Open</button>
+        
+        <!-- Storage Meter UI -->
+        <div class="storage-container" title="Browser Storage Used">
+            <div class="storage-label">Storage</div>
+            <div class="storage-track">
+                <div class="storage-fill" id="storage-bar"></div>
+            </div>
+        </div>
+
         <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
         <button class="btn-ghost" onclick="app.undo()"><i class="fas fa-undo"></i></button>
         <button class="btn-ghost" onclick="app.redo()"><i class="fas fa-redo"></i></button>
@@ -384,6 +473,20 @@
     <div class="tool-btn active" id="tool-brush" onclick="app.setTool('brush')" title="Brush (B)">
         <i class="fas fa-paint-brush"></i>
     </div>
+    
+    <!-- Shape Flyout Group -->
+    <div class="tool-flyout-wrapper">
+        <div class="tool-btn" id="tool-shape-anchor" title="Shapes">
+            <i class="far fa-square main-icon"></i>
+            <i class="fas fa-caret-right" style="font-size: 0.6rem; position: absolute; bottom: 4px; right: 4px; color: var(--text-muted);"></i>
+        </div>
+        <div class="flyout-menu">
+            <div class="tool-btn" id="tool-rect" onclick="app.setTool('rect')" title="Rectangle (R)"><i class="far fa-square"></i></div>
+            <div class="tool-btn" id="tool-circle" onclick="app.setTool('circle')" title="Circle (C)"><i class="far fa-circle"></i></div>
+            <div class="tool-btn" id="tool-line" onclick="app.setTool('line')" title="Line (L)"><i class="fas fa-slash" style="transform: rotate(-45deg);"></i></div>
+        </div>
+    </div>
+    
     <div class="tool-btn" id="tool-eraser" onclick="app.setTool('eraser')" title="Eraser (E)">
         <i class="fas fa-eraser"></i>
     </div>
@@ -486,6 +589,7 @@
 <script>
 class MotionSketchVector {
     constructor() {
+        // ... existing constructor ...
         this.canvas = document.getElementById('rendering-canvas');
         this.ctx = this.canvas.getContext('2d');
         this.framesList = document.getElementById('frames-list');
@@ -518,6 +622,7 @@ class MotionSketchVector {
         this.init();
     }
 
+    // ... existing init, setupEvents, getPos methods ...
     init() {
         this.setupEvents();
         this.renderUI();
@@ -571,9 +676,8 @@ class MotionSketchVector {
     }
 
     /* --- History --- */
-    
     saveState() {
-        if (this.history.length > 20) this.history.shift();
+        if (this.history.length > 15) this.history.shift(); // Reduce depth to save memory
         this.redoStack = [];
         
         const state = {
@@ -632,7 +736,6 @@ class MotionSketchVector {
     }
 
     /* --- Core Logic --- */
-
     onDown(pos) {
         if(this.isPlaying) return;
 
@@ -640,12 +743,9 @@ class MotionSketchVector {
             this.saveState();
             const found = this.hitTest(pos);
             if (found) {
-                found.stroke.fillColor = this.brushColor; // Use current color with opacity?
-                // Simple fill usually opaque, but let's respect color
+                found.stroke.fillColor = this.brushColor;
                 this.renderCanvas();
             } else {
-                // Only allow BG fill if on Paper layer, otherwise confusing?
-                // Let's allow it.
                 this.selectedBgColor = this.brushColor;
                 this.frames[this.frameIndex].frameBgColor = this.brushColor; 
                 this.updateThumbnails(); 
@@ -699,14 +799,17 @@ class MotionSketchVector {
         this.saveState();
         this.isDrawing = true;
         this.selectedObject = null;
+        this.dragStart = pos; 
+        
         this.currentStroke = {
-            type: this.tool,
+            type: this.tool, 
             color: this.tool === 'eraser' ? '#ffffff' : this.brushColor,
             size: this.brushSize,
             opacity: this.opacity,
-            points: [pos],
+            points: [pos], 
             fillColor: null 
         };
+        
         const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
         list.push(this.currentStroke);
         this.renderCanvas();
@@ -744,16 +847,11 @@ class MotionSketchVector {
                 }
             }
             else {
-                // Resize
-                let newW = bounds.w;
-                let newH = bounds.h;
-                let newX = bounds.x;
-                let newY = bounds.y;
-
+                let newW = bounds.w, newH = bounds.h, newX = bounds.x, newY = bounds.y;
                 const dx = pos.x - this.dragStart.x;
                 const dy = pos.y - this.dragStart.y;
-
-                const dir = this.dragMode.split('-')[1];
+                
+                const dir = this.dragMode.split('-')[1] || '';
 
                 if (dir.includes('r')) newW += dx; 
                 if (dir.includes('l')) { newX += dx; newW -= dx; } 
@@ -770,20 +868,56 @@ class MotionSketchVector {
                     pts[i].y = newY + (normY * newH);
                 }
             }
-
             this.calcBounds(this.selectedObject.stroke);
             this.renderCanvas();
             return;
         }
 
         if (this.isDrawing && this.currentStroke) {
-            this.currentStroke.points.push(pos);
+            if (this.tool === 'brush' || this.tool === 'eraser') {
+                this.currentStroke.points.push(pos);
+            } 
+            else {
+                const start = this.dragStart;
+                const end = pos;
+                if (this.tool === 'line') {
+                    this.currentStroke.points = [start, end];
+                } 
+                else if (this.tool === 'rect') {
+                    this.currentStroke.points = [
+                        {x: start.x, y: start.y}, {x: end.x, y: start.y},
+                        {x: end.x, y: end.y}, {x: start.x, y: end.y},
+                        {x: start.x, y: start.y}
+                    ];
+                }
+                else if (this.tool === 'circle') {
+                    const rx = (end.x - start.x) / 2;
+                    const ry = (end.y - start.y) / 2;
+                    const cx = start.x + rx;
+                    const cy = start.y + ry;
+                    const segments = 32;
+                    const pts = [];
+                    for(let i=0; i<=segments; i++) {
+                        const theta = (i / segments) * Math.PI * 2;
+                        pts.push({
+                            x: cx + rx * Math.cos(theta),
+                            y: cy + ry * Math.sin(theta)
+                        });
+                    }
+                    this.currentStroke.points = pts;
+                }
+            }
             this.renderCanvas();
         }
     }
 
     onUp() {
         if (this.isDrawing) {
+            // OPTIMIZATION: Simplify the stroke to save space
+            if ((this.tool === 'brush' || this.tool === 'eraser') && this.currentStroke.points.length > 5) {
+                this.currentStroke.points = this.simplifyPoints(this.currentStroke.points, 1.5);
+            }
+            
             this.isDrawing = false;
             this.currentStroke = null;
             this.updateThumbnails();
@@ -795,55 +929,86 @@ class MotionSketchVector {
             this.saveStorage();
         }
     }
+    
+    /* --- Optimization --- */
+    simplifyPoints(points, tolerance) {
+        if (points.length <= 2) return points;
+        const newPoints = [points[0]];
+        let lastPoint = points[0];
+        
+        for (let i = 1; i < points.length - 1; i++) {
+            const p = points[i];
+            const dist = Math.hypot(p.x - lastPoint.x, p.y - lastPoint.y);
+            if (dist > tolerance) {
+                newPoints.push(p);
+                lastPoint = p;
+            }
+        }
+        newPoints.push(points[points.length - 1]);
+        return newPoints;
+    }
 
-    /* --- Vector Math --- */
-
+    /* --- Vector Math & Hit Testing --- */
     hitTest(pos) {
-        // Hit test active layer first? Or top down visually?
-        // User asked for mixed selecting previously, but standard behavior is active layer only.
-        // Let's prioritize active layer.
         const checkList = (list, layerName) => {
+            // Iterate backwards (top to bottom visually)
             for (let i = list.length - 1; i >= 0; i--) {
                 if (this.strokeHit(list[i], pos)) return { stroke: list[i], layer: layerName, index: i };
             }
             return null;
         };
-
-        if (this.activeLayer === 'ink') {
-            return checkList(this.frames[this.frameIndex].strokes, 'ink');
-        } else {
-            return checkList(this.paperStrokes, 'paper');
-        }
+        if (this.activeLayer === 'ink') return checkList(this.frames[this.frameIndex].strokes, 'ink');
+        else return checkList(this.paperStrokes, 'paper');
     }
 
     strokeHit(stroke, pos) {
         if (!stroke.points || stroke.points.length < 2) return false;
         
-        // Bounding box check first
+        // 1. Fast Bounds check
         let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
         stroke.points.forEach(p=>{ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; });
         
         const hitThresh = Math.max(10, stroke.size);
         
+        // Expand bounds slightly for hit testing
         if(pos.x < minX-hitThresh || pos.x > maxX+hitThresh || pos.y < minY-hitThresh || pos.y > maxY+hitThresh) return false;
 
-        // Filled shape check logic? (Simplified: if filled, bounds check is decent, but let's do lines for now)
-        // If user clicks inside a filled 'O', they expect hit.
-        // Implementing point-in-polygon is expensive for freehand.
-        // For now, stick to stroke path detection.
-        
+        // 2. Line Segment Check (Clicking the outline)
         for (let i = 0; i < stroke.points.length - 1; i++) {
             if (this.distToSegment(pos, stroke.points[i], stroke.points[i+1]) < hitThresh) return true;
         }
+
+        // 3. Interior Check (Clicking inside)
+        // Only check inside if:
+        // a) We are using the Bucket tool (we want to fill empty shapes)
+        // b) The shape is ALREADY filled (we want to select it by clicking the fill)
+        if (this.tool === 'bucket' || stroke.fillColor) {
+            if (this.containsPoint(stroke.points, pos)) return true;
+        }
+
         return false;
+    }
+
+    // Ray-Casting Algorithm to check if a point is inside a polygon
+    containsPoint(points, pos) {
+        let inside = false;
+        for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+            const xi = points[i].x, yi = points[i].y;
+            const xj = points[j].x, yj = points[j].y;
+            
+            const intersect = ((yi > pos.y) !== (yj > pos.y))
+                && (pos.x < (xj - xi) * (pos.y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
     }
 
     hitTestHandles(pos) {
         const b = this.selectedObject.bounds;
-        const s = 8; // Handle hit radius
+        const s = 10; 
         const hit = (x, y) => Math.abs(pos.x - x) < s && Math.abs(pos.y - y) < s;
         
-        if (hit(b.x + b.w/2, b.y - 30)) return 'rotate';
+        if (hit(b.x + b.w/2, b.y - 25)) return 'rotate';
 
         if (hit(b.x, b.y)) return 'resize-tl';
         if (hit(b.x+b.w, b.y)) return 'resize-tr';
@@ -883,40 +1048,27 @@ class MotionSketchVector {
     }
 
     /* --- Rendering --- */
-
     renderCanvas() {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, 600, 600);
         
-        // 1. Background Color
         ctx.fillStyle = this.selectedBgColor; 
         ctx.fillRect(0,0,600,600);
         
-        // 2. Paper Layer
         this.paperStrokes.forEach(s => this.drawStroke(ctx, s));
         
-        // 3. Onion Skin
         if (this.isOnion && this.frameIndex > 0 && !this.isPlaying) {
             ctx.globalAlpha = 0.3;
             this.frames[this.frameIndex - 1].strokes.forEach(s => this.drawStroke(ctx, s));
             ctx.globalAlpha = 1.0;
         }
 
-        // 4. Ink Layer
         this.frames[this.frameIndex].strokes.forEach(s => this.drawStroke(ctx, s));
 
-        // 5. Wiggle Logic
-        if (this.isWiggle && this.isPlaying) {
-            // CSS handles the displacement, but we need to ensure canvas has class
-            this.canvas.classList.add('wiggling');
-        } else {
-            this.canvas.classList.remove('wiggling');
-        }
+        if (this.isWiggle && this.isPlaying) this.canvas.classList.add('wiggling');
+        else this.canvas.classList.remove('wiggling');
 
-        // 6. Selection UI
-        if (this.selectedObject && !this.isPlaying) {
-            this.drawSelectionUI(ctx);
-        }
+        if (this.selectedObject && !this.isPlaying) this.drawSelectionUI(ctx);
     }
 
     drawSelectionUI(ctx) {
@@ -926,43 +1078,37 @@ class MotionSketchVector {
         ctx.strokeStyle = '#0A84FF';
         ctx.lineWidth = 1;
         
-        // Rotate Line
         ctx.beginPath();
         ctx.moveTo(b.x + b.w/2, b.y);
-        ctx.lineTo(b.x + b.w/2, b.y - 30);
+        ctx.lineTo(b.x + b.w/2, b.y - 25);
         ctx.stroke();
         
-        // Box
+        ctx.beginPath();
+        ctx.arc(b.x + b.w/2, b.y - 25, 5, 0, Math.PI*2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.stroke();
+
         ctx.setLineDash([5, 5]);
         ctx.strokeRect(b.x, b.y, b.w, b.h);
         ctx.setLineDash([]);
         
-        // Handles
-        ctx.fillStyle = '#fff';
-        const boxSize = 8;
-        
-        const drawBox = (x, y) => {
-            ctx.fillRect(x - boxSize/2, y - boxSize/2, boxSize, boxSize);
-            ctx.strokeRect(x - boxSize/2, y - boxSize/2, boxSize, boxSize);
+        const drawHandle = (x, y) => {
+            ctx.fillStyle = '#fff';
+            ctx.strokeStyle = '#3498db';
+            ctx.fillRect(x-4, y-4, 8, 8);
+            ctx.strokeRect(x-4, y-4, 8, 8);
         };
         
-        // Corners
-        drawBox(b.x, b.y);
-        drawBox(b.x+b.w, b.y);
-        drawBox(b.x, b.y+b.h);
-        drawBox(b.x+b.w, b.y+b.h);
+        drawHandle(b.x, b.y);
+        drawHandle(b.x+b.w, b.y);
+        drawHandle(b.x, b.y+b.h);
+        drawHandle(b.x+b.w, b.y+b.h);
 
-        // Mids
-        drawBox(b.x + b.w/2, b.y);           
-        drawBox(b.x + b.w/2, b.y + b.h);     
-        drawBox(b.x, b.y + b.h/2);           
-        drawBox(b.x + b.w, b.y + b.h/2);     
-        
-        // Rotate Dot
-        ctx.beginPath();
-        ctx.arc(b.x + b.w/2, b.y - 30, 5, 0, Math.PI*2);
-        ctx.fill();
-        ctx.stroke();
+        drawHandle(b.x + b.w/2, b.y);           
+        drawHandle(b.x + b.w/2, b.y + b.h);     
+        drawHandle(b.x, b.y + b.h/2);           
+        drawHandle(b.x + b.w, b.y + b.h/2);     
         
         ctx.restore();
     }
@@ -974,18 +1120,11 @@ class MotionSketchVector {
         ctx.lineJoin = 'round';
         ctx.lineWidth = stroke.size;
         
-        // Hex to RGBA for transparency
         const hex = stroke.color;
         const alpha = stroke.opacity !== undefined ? stroke.opacity : 1.0;
-        
-        let r=0,g=0,b=0;
-        if(hex.length === 7) {
-            r = parseInt(hex.slice(1, 3), 16);
-            g = parseInt(hex.slice(3, 5), 16);
-            b = parseInt(hex.slice(5, 7), 16);
-        }
-        const rgba = `rgba(${r}, ${g}, ${b}, ${alpha})`;
-        
+        const fillAlpha = alpha; 
+
+        const rgba = this.hexToRgba(hex, alpha);
         ctx.strokeStyle = rgba;
         
         if (stroke.points.length === 1) {
@@ -999,22 +1138,42 @@ class MotionSketchVector {
             }
             
             if (stroke.fillColor) {
-                // Handle opacity for fill too? Assuming fill matches stroke logic or is solid
-                // Let's simply use the fill color string if it's hex, or convert if needed
-                ctx.fillStyle = stroke.fillColor; 
+                ctx.fillStyle = this.hexToRgba(stroke.fillColor, fillAlpha); 
                 ctx.fill();
             }
             ctx.stroke();
         }
     }
 
-    /* --- UI Logic --- */
+    hexToRgba(hex, alpha) {
+        let r=0,g=0,b=0;
+        if (hex && hex.length === 7) {
+            r = parseInt(hex.slice(1, 3), 16);
+            g = parseInt(hex.slice(3, 5), 16);
+            b = parseInt(hex.slice(5, 7), 16);
+        }
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
 
+    /* --- UI Logic --- */
     setTool(t) {
         this.tool = t;
         document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
         const btn = document.getElementById('tool-'+t);
         if(btn) btn.classList.add('active');
+        
+        const shapeAnchor = document.getElementById('tool-shape-anchor');
+        const shapeIcon = shapeAnchor.querySelector('.main-icon');
+        
+        if (['rect', 'circle', 'line'].includes(t)) {
+            shapeAnchor.classList.add('active');
+            if (t === 'rect') { shapeIcon.className = 'far fa-square main-icon'; shapeIcon.style.transform = ''; }
+            if (t === 'circle') { shapeIcon.className = 'far fa-circle main-icon'; shapeIcon.style.transform = ''; }
+            if (t === 'line') { shapeIcon.className = 'fas fa-slash main-icon'; shapeIcon.style.transform = 'rotate(-45deg)'; }
+        } else {
+            shapeAnchor.classList.remove('active');
+        }
+
         this.selectedObject = null;
         this.renderCanvas();
     }
@@ -1054,7 +1213,6 @@ class MotionSketchVector {
     setOpacity(v) {
         this.opacity = parseInt(v) / 100;
         document.getElementById('op-disp').innerText = v;
-        // Live update selected?
         if (this.selectedObject) {
             this.saveState();
             this.selectedObject.stroke.opacity = this.opacity;
@@ -1072,11 +1230,10 @@ class MotionSketchVector {
     toggleWiggle() {
         this.isWiggle = !this.isWiggle;
         document.getElementById('wiggle-btn').classList.toggle('active', this.isWiggle);
-        if(this.isPlaying) this.renderCanvas(); // Update view if playing
+        if(this.isPlaying) this.renderCanvas(); 
     }
 
     /* --- Animation --- */
-
     addFrame() {
         this.saveState();
         this.frames.splice(this.frameIndex + 1, 0, { strokes: [] });
@@ -1125,28 +1282,18 @@ class MotionSketchVector {
     }
 
     /* --- UI Render --- */
-
     renderUI(minimal = false) {
         if (!minimal) {
             this.framesList.innerHTML = '';
             
-            // Frames
             this.frames.forEach((f, i) => {
                 const el = document.createElement('div');
                 el.className = `frame-card ${i === this.frameIndex ? 'active' : ''}`;
                 el.onclick = () => { this.frameIndex = i; this.renderCanvas(); this.renderUI(true); };
-                
-                // Simple composite render for thumb
                 el.innerHTML = `<div class="frame-num">${i+1}</div><img src="${f.thumb || ''}">`;
-                
-                if(this.frames.length > 1) {
-                    // Could add small delete button here, but simplified for now
-                }
-                
                 this.framesList.appendChild(el);
             });
             
-            // Add Button at end
             const addBtn = document.createElement('div');
             addBtn.className = 'add-frame-btn';
             addBtn.innerHTML = '+';
@@ -1168,10 +1315,8 @@ class MotionSketchVector {
     }
     
     updateTimelineActive() {
-        // Fast update for playback
         const cards = this.framesList.querySelectorAll('.frame-card');
         cards.forEach((c, i) => c.classList.toggle('active', i === this.frameIndex));
-        // Optional: scroll follow
     }
 
     updateThumbnails() {
@@ -1199,7 +1344,6 @@ class MotionSketchVector {
     }
 
     /* --- Storage & Export --- */
-
     saveStorage() {
         if (this.saveTimer) clearTimeout(this.saveTimer);
         this.saveTimer = setTimeout(() => {
@@ -1210,13 +1354,34 @@ class MotionSketchVector {
                 fps: this.fps
             };
             try {
+                // Optimize: Don't save thumbnails to storage
                 const cleanFrames = this.frames.map(f => ({strokes: f.strokes}));
-                localStorage.setItem('motionSketchVector', JSON.stringify({...data, frames: cleanFrames}));
+                const jsonStr = JSON.stringify({...data, frames: cleanFrames});
+                
+                // Update Storage Meter
+                const size = jsonStr.length; // Approximate size in characters (bytes)
+                const limit = 5 * 1024 * 1024; // ~5MB standard limit
+                const pct = Math.min(100, (size / limit) * 100);
+                
+                const bar = document.getElementById('storage-bar');
+                bar.style.width = pct + '%';
+                
+                if (pct > 90) bar.style.background = '#ff3b30'; // Red
+                else if (pct > 70) bar.style.background = '#f1c40f'; // Yellow
+                else bar.style.background = '#2ecc71'; // Green
+
+                localStorage.setItem('motionSketchVector', jsonStr);
                 
                 const ind = document.getElementById('save-indicator');
                 ind.style.opacity = 1;
                 setTimeout(()=>ind.style.opacity=0, 1500);
-            } catch(e) { console.log("Storage full"); }
+            } catch(e) { 
+                console.log("Storage Limit Reached"); 
+                const bar = document.getElementById('storage-bar');
+                bar.style.width = '100%';
+                bar.style.background = '#ff3b30';
+                alert("Storage Full! Please export your project to save properly.");
+            }
         }, 1000);
     }
 
