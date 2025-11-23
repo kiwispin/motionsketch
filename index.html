@@ -327,9 +327,25 @@
             flex: 1;
             display: flex; align-items: center;
             overflow-x: auto; padding: 10px 20px; gap: 12px;
-            scrollbar-width: none; 
+            scrollbar-width: auto; 
+            scrollbar-color: var(--text-muted) transparent;
         }
-        .frames-track::-webkit-scrollbar { display: none; }
+        
+        .frames-track::-webkit-scrollbar { 
+            height: 8px; 
+            display: block; 
+        }
+        .frames-track::-webkit-scrollbar-track { 
+            background: transparent; 
+            margin: 0 20px; 
+        }
+        .frames-track::-webkit-scrollbar-thumb { 
+            background-color: rgba(128, 128, 128, 0.4); 
+            border-radius: 4px; 
+        }
+        .frames-track::-webkit-scrollbar-thumb:hover { 
+            background-color: rgba(128, 128, 128, 0.6); 
+        }
 
         .frame-card {
             min-width: 90px; height: 68px;
@@ -1104,7 +1120,9 @@ class MotionSketchVector {
         this.selectedObject = null;
         this.dragStart = pos; 
         
-        const p = (typeof pressure === 'number') ? pressure : 0.5;
+        // Mouse pressure Fix: Ensure p is never 0 if mouse
+        let p = (typeof pressure === 'number') ? pressure : 0.5;
+        if (p <= 0) p = 0.5;
 
         this.currentStroke = {
             type: this.tool, 
@@ -1430,14 +1448,16 @@ class MotionSketchVector {
         
         this.paperStrokes.forEach(s => this.drawObject(ctx, s));
         
+        // MOVED: Draw Current Ink Layer FIRST
+        this.frames[this.frameIndex].strokes.forEach(s => this.drawObject(ctx, s));
+
+        // MOVED: Draw Onion Skin LAST (On Top)
+        // This prevents the "White Brush" (Eraser) from covering up the reference lines
         if (this.isOnion && this.frameIndex > 0 && !this.isPlaying) {
             ctx.globalAlpha = 0.3;
-            // Fix: Pass 'true' for simpleMode to prevent alpha accumulation
             this.frames[this.frameIndex - 1].strokes.forEach(s => this.drawObject(ctx, s, true));
             ctx.globalAlpha = 1.0;
         }
-
-        this.frames[this.frameIndex].strokes.forEach(s => this.drawObject(ctx, s));
 
         if (this.isWiggle && this.isPlaying) this.canvas.classList.add('wiggling');
         else this.canvas.classList.remove('wiggling');
@@ -1456,10 +1476,8 @@ class MotionSketchVector {
     drawObject(ctx, obj, simpleMode = false) {
         if (obj.type === 'text') {
             ctx.save();
-            // Pivot to text origin
             ctx.translate(obj.x, obj.y);
             
-            // Safety check for scale to prevent invisible text bug
             const sx = (isFinite(obj.sx) && obj.sx !== 0) ? obj.sx : 1;
             const sy = (isFinite(obj.sy) && obj.sy !== 0) ? obj.sy : 1;
             
@@ -1472,7 +1490,6 @@ class MotionSketchVector {
             const objAlpha = obj.opacity !== undefined ? obj.opacity : 1;
             ctx.globalAlpha = currentAlpha * objAlpha;
 
-            // Draw at 0,0 because we translated
             ctx.fillText(obj.text, 0, 0);
             ctx.restore();
         } else {
@@ -1555,7 +1572,15 @@ class MotionSketchVector {
         // Standard Line Rendering (Onion Skin or Geometric Shapes)
         if (simpleMode || stroke.type === 'rect' || stroke.type === 'line' || stroke.type === 'circle') {
              ctx.beginPath();
-             ctx.lineWidth = stroke.size;
+             
+             // FIX: Apply 0.5 scale for Brush/Eraser onion skins so they match the pressure-sensitive look
+             // Geometric shapes (rect/circle) keep full width
+             let renderWidth = stroke.size;
+             if (stroke.type === 'brush' || stroke.type === 'eraser') {
+                 renderWidth = stroke.size * 0.5;
+             }
+             
+             ctx.lineWidth = renderWidth;
              ctx.lineCap = 'round';
              ctx.lineJoin = 'round';
              
@@ -1685,7 +1710,7 @@ class MotionSketchVector {
 
     addFrame() {
         this.saveState();
-        this.selectedObject = null; 
+        this.selectedObject = null; // Fix: Deselect to prevent ghost UI
         this.frames.splice(this.frameIndex + 1, 0, { strokes: [] });
         this.frameIndex++;
         this.renderUI();
@@ -1695,7 +1720,7 @@ class MotionSketchVector {
 
     duplicateFrame(index) {
         this.saveState();
-        this.selectedObject = null; 
+        this.selectedObject = null; // Fix: Deselect to prevent ghost UI
         const target = index !== undefined ? index : this.frameIndex;
         const newStrokes = JSON.parse(JSON.stringify(this.frames[target].strokes));
         this.frames.splice(target + 1, 0, { strokes: newStrokes });
@@ -1707,7 +1732,7 @@ class MotionSketchVector {
 
     deleteFrame(index) {
         this.saveState();
-        this.selectedObject = null; 
+        this.selectedObject = null; // Fix: Deselect
         const targetIndex = (index !== undefined) ? index : this.frameIndex;
         if(this.frames.length <= 1) { 
             this.frames[0].strokes = []; 
@@ -1957,6 +1982,13 @@ class MotionSketchVector {
         this.paperStrokes = [];
         this.frameIndex = 0;
         this.selectedBgColor = '#ffffff';
+        // RESET SELECTED OBJECT HERE TO PREVENT GHOST SELECTION
+        this.selectedObject = null;
+        this.dragMode = null;
+        // Reset History
+        this.history = [];
+        this.redoStack = [];
+        
         this.renderUI();
         this.renderCanvas();
         this.saveStorage();
