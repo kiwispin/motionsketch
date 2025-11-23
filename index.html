@@ -130,7 +130,7 @@
             font-weight: 500;
             transition: all 0.2s;
         }
-        .btn-ghost:hover { background: rgba(255,255,255,0.1); }
+        .btn-ghost:hover { background: var(--btn-hover); }
         .btn-ghost i { font-size: 1rem; opacity: 0.8; }
         
         .btn-ghost.active {
@@ -356,17 +356,28 @@
             flex-shrink: 0;
             overflow: hidden;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            cursor: grab;
         }
+        .frame-card:active { cursor: grabbing; }
         .frame-card img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
         .frame-card.active {
             border-color: var(--accent-blue);
             box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.3);
             transform: translateY(-2px);
         }
+        
+        /* Drag & Drop Styles */
+        .frame-card.drag-over {
+            border: 2px dashed var(--accent-blue);
+            transform: scale(0.95);
+            opacity: 0.7;
+        }
+
         .frame-num {
             position: absolute; top: 3px; left: 4px;
             font-size: 9px; color: #000; font-weight: 800;
             background: rgba(255,255,255,0.8); padding: 1px 4px; border-radius: 3px;
+            pointer-events: none;
         }
         
         .frame-delete-btn {
@@ -534,8 +545,7 @@
 
 <input type="file" id="file-input" accept=".json" style="display:none" onchange="app.handleFileUpload(this)">
 
-<!-- UPDATED: Hidden Color Input for Palette Editing -->
-<!-- Changed visibility:hidden to opacity:0 and removed fixed top/left so we can move it via JS -->
+<!-- Hidden Color Input for Palette Editing -->
 <input type="color" id="palette-editor-input" style="opacity:0; position:fixed; z-index:-1; width:1px; height:1px;" onchange="app.confirmPaletteEdit(this.value)">
 
 <!-- New Modal -->
@@ -811,6 +821,7 @@ class MotionSketchVector {
         this.selectedObject = null; 
         this.selectedBgColor = '#ffffff';
         this.dragMode = null; 
+        this.draggedFrameIndex = null; // For Frame Drag & Drop
         
         this.isPlaying = false;
         this.fps = 12;
@@ -952,6 +963,7 @@ class MotionSketchVector {
         document.addEventListener('keydown', (e) => {
             if(e.target.tagName === 'INPUT') return; 
             
+            // Delete Logic: Selected Object -> Frame
             if(e.key === 'Delete' || e.key === 'Backspace') {
                 if (this.selectedObject) {
                     this.deleteSelected();
@@ -960,21 +972,25 @@ class MotionSketchVector {
                 }
             }
             
+            // Frame Management Shortcuts
             if(e.key === 'd' || e.key === 'D') this.duplicateFrame();
             if(e.key === 'n' || e.key === 'N') this.addFrame();
-            if(e.code === 'Space') { e.preventDefault(); this.togglePlay(); } 
+            if(e.code === 'Space') { e.preventDefault(); this.togglePlay(); } // Spacebar to play
 
+            // Clipboard
             if((e.ctrlKey || e.metaKey) && e.key === 'c') this.copySelection();
             if((e.ctrlKey || e.metaKey) && e.key === 'v') this.pasteSelection();
             if((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); this.undo(); }
             if((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); this.redo(); }
             
+            // Tools
             if(e.key === 'b') this.setTool('brush');
             if(e.key === 'e') this.setTool('eraser');
             if(e.key === 'v') this.setTool('select');
             if(e.key === 'f') this.setTool('bucket');
             if(e.key === 't') this.setTool('text');
             
+            // Timeline Navigation (Arrow Keys)
             if(e.key === 'ArrowLeft') {
                 if(this.frameIndex > 0) {
                     this.frameIndex--;
@@ -1463,6 +1479,10 @@ class MotionSketchVector {
             this.updateThumbnails();
             this.saveStorage();
         }
+        if (this.draggedFrameIndex !== null) {
+            this.draggedFrameIndex = null;
+            document.querySelectorAll('.frame-card').forEach(el => el.classList.remove('drag-over'));
+        }
     }
     
     simplifyPoints(points, tolerance) {
@@ -1509,15 +1529,12 @@ class MotionSketchVector {
         // 0. Handle Dot (Single Point)
         if (stroke.points.length === 1) {
              const p = stroke.points[0];
-             // Hit test against squashed ellipse? 
-             // Simplified circular hit test using max dimension is usually fine for UI
              const dist = Math.hypot(pos.x - p.x, pos.y - p.y);
-             // Use scale factors if they exist (squashed dot), otherwise 1
              const sx = stroke.sx || 1;
              const sy = stroke.sy || 1;
              const maxDim = Math.max(sx, sy) * (stroke.size/2);
              
-             return dist < maxDim + 10; // +10 for easier grabbing
+             return dist < maxDim + 10; 
         }
         
         let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
@@ -1586,9 +1603,7 @@ class MotionSketchVector {
             };
         } 
         else if (stroke.points.length === 1) {
-            // FIX: Specific bounds for single Dots
             const s = stroke.size;
-            // Use stored scale or default to 1
             const sx = stroke.sx || 1;
             const sy = stroke.sy || 1;
             
@@ -1630,10 +1645,6 @@ class MotionSketchVector {
         
         this.paperStrokes.forEach(s => this.drawObject(ctx, s));
         
-        // Draw Current Ink Layer FIRST
-        this.frames[this.frameIndex].strokes.forEach(s => this.drawObject(ctx, s));
-
-        // Draw Onion Skin LAST (On Top)
         if (this.isOnion && this.frameIndex > 0 && !this.isPlaying) {
             ctx.globalAlpha = 0.3;
             // Fix: Pass 'true' for simpleMode to prevent alpha accumulation
@@ -1641,16 +1652,17 @@ class MotionSketchVector {
             ctx.globalAlpha = 1.0;
         }
 
+        this.frames[this.frameIndex].strokes.forEach(s => this.drawObject(ctx, s));
+
         if (this.isWiggle && this.isPlaying) this.canvas.classList.add('wiggling');
         else this.canvas.classList.remove('wiggling');
 
         if (this.selectedObject && !this.isPlaying) {
-            // Safety Check: Ensure object actually exists in current list before drawing UI
             const list = this.selectedObject.layer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
             if (list.includes(this.selectedObject.stroke)) {
                 this.drawSelectionUI(ctx);
             } else {
-                this.selectedObject = null; // Cleanup ghost selection
+                this.selectedObject = null;
             }
         }
     }
@@ -1667,7 +1679,6 @@ class MotionSketchVector {
             ctx.font = `${obj.size}px sans-serif`;
             ctx.fillStyle = obj.color;
             
-            // Fix: Multiply existing globalAlpha (onion skin) by object opacity
             const currentAlpha = ctx.globalAlpha;
             const objAlpha = obj.opacity !== undefined ? obj.opacity : 1;
             ctx.globalAlpha = currentAlpha * objAlpha;
@@ -1720,7 +1731,6 @@ class MotionSketchVector {
         ctx.restore();
     }
 
-    // Updated to accept simpleMode
     drawStroke(ctx, stroke, simpleMode = false) {
         if (!stroke.points || stroke.points.length === 0) return;
         
@@ -1731,32 +1741,25 @@ class MotionSketchVector {
         ctx.fillStyle = rgba;
         ctx.strokeStyle = rgba;
         
-        // FIX: Handle Dots (Length 1) FIRST so they work in Onion Skin mode
         if (stroke.points.length === 1) {
             const p = stroke.points[0];
-            // In simpleMode (Onion), ignore pressure variation, use default 0.5 or stored p
             const pressure = simpleMode ? 0.5 : (p.p !== undefined ? p.p : 0.5);
             const w = stroke.size * pressure; 
             
             ctx.save();
             ctx.translate(p.x, p.y);
-            // Apply squash transforms
             ctx.scale(stroke.sx || 1, stroke.sy || 1);
             
             ctx.beginPath();
-            ctx.arc(0, 0, w/2, 0, Math.PI*2); // Draw at center
+            ctx.arc(0, 0, w/2, 0, Math.PI*2);
             ctx.fill();
             
             ctx.restore();
             return;
         }
 
-        // Standard Line Rendering (Onion Skin or Geometric Shapes)
         if (simpleMode || stroke.type === 'rect' || stroke.type === 'line' || stroke.type === 'circle') {
              ctx.beginPath();
-             
-             // FIX: Apply 0.5 scale for Brush/Eraser onion skins so they match the pressure-sensitive look
-             // Geometric shapes (rect/circle) keep full width
              let renderWidth = stroke.size;
              if (stroke.type === 'brush' || stroke.type === 'eraser') {
                  renderWidth = stroke.size * 0.5;
@@ -1779,7 +1782,6 @@ class MotionSketchVector {
              return;
         }
         
-        // Pressure Sensitive Rendering (Active Brush)
         for (let i = 0; i < stroke.points.length - 1; i++) {
             const p1 = stroke.points[i];
             const p2 = stroke.points[i+1];
@@ -1908,9 +1910,8 @@ class MotionSketchVector {
 
     duplicateFrame(index) {
         this.saveState();
-        this.selectedObject = null; // Fix: Deselect to prevent ghost UI
+        this.selectedObject = null; 
         const target = index !== undefined ? index : this.frameIndex;
-        // Ensure deep copy of all properties including text specific ones
         const newStrokes = JSON.parse(JSON.stringify(this.frames[target].strokes));
         this.frames.splice(target + 1, 0, { strokes: newStrokes });
         this.frameIndex = target + 1;
@@ -1921,7 +1922,7 @@ class MotionSketchVector {
 
     deleteFrame(index) {
         this.saveState();
-        this.selectedObject = null; // Fix: Deselect
+        this.selectedObject = null; 
         const targetIndex = (index !== undefined) ? index : this.frameIndex;
         if(this.frames.length <= 1) { 
             this.frames[0].strokes = []; 
@@ -1973,6 +1974,14 @@ class MotionSketchVector {
                 el.className = `frame-card ${i === this.frameIndex ? 'active' : ''}`;
                 el.onclick = () => { this.frameIndex = i; this.renderCanvas(); this.renderUI(true); };
                 
+                // Drag & Drop Handlers
+                el.draggable = true;
+                el.ondragstart = (e) => this.handleDragStart(e, i);
+                el.ondragover = (e) => this.handleDragOver(e);
+                el.ondragenter = (e) => this.handleDragEnter(e);
+                el.ondragleave = (e) => this.handleDragLeave(e);
+                el.ondrop = (e) => this.handleDrop(e, i);
+
                 let html = `<div class="frame-num">${i+1}</div><img src="${f.thumb || ''}">`;
                 if(this.frames.length > 1) {
                     html += `<div class="frame-delete-btn" onclick="event.stopPropagation(); app.deleteFrame(${i})" title="Delete Frame"><i class="fas fa-times"></i></div>`;
@@ -2000,6 +2009,55 @@ class MotionSketchVector {
         }
     }
     
+    /* --- Drag & Drop Handlers for Frames --- */
+    handleDragStart(e, index) {
+        this.draggedFrameIndex = index;
+        e.dataTransfer.effectAllowed = 'move';
+        e.currentTarget.style.opacity = '0.5';
+    }
+
+    handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        return false;
+    }
+
+    handleDragEnter(e) {
+        e.currentTarget.classList.add('drag-over');
+    }
+
+    handleDragLeave(e) {
+        e.currentTarget.classList.remove('drag-over');
+    }
+
+    handleDrop(e, targetIndex) {
+        e.stopPropagation();
+        e.currentTarget.classList.remove('drag-over');
+        e.currentTarget.style.opacity = '1';
+        
+        if (this.draggedFrameIndex === null || this.draggedFrameIndex === targetIndex) return;
+
+        this.saveState(); 
+        const frameToMove = this.frames[this.draggedFrameIndex];
+        this.frames.splice(this.draggedFrameIndex, 1);
+        this.frames.splice(targetIndex, 0, frameToMove);
+
+        if (this.frameIndex === this.draggedFrameIndex) {
+            this.frameIndex = targetIndex;
+        } else {
+            if (this.draggedFrameIndex < this.frameIndex && targetIndex >= this.frameIndex) {
+                this.frameIndex--;
+            } else if (this.draggedFrameIndex > this.frameIndex && targetIndex <= this.frameIndex) {
+                this.frameIndex++;
+            }
+        }
+
+        this.renderUI();
+        this.renderCanvas();
+        this.saveStorage();
+        this.draggedFrameIndex = null;
+    }
+
     updateTimelineActive() {
         const cards = this.framesList.querySelectorAll('.frame-card');
         cards.forEach((c, i) => c.classList.toggle('active', i === this.frameIndex));
@@ -2037,15 +2095,14 @@ class MotionSketchVector {
                 fps: this.fps,
                 width: this.canvasWidth,
                 height: this.canvasHeight,
-                palette: this.palette // Save palette in history? Usually global, but why not.
+                palette: this.palette
             };
             try {
                 const cleanFrames = this.frames.map(f => ({strokes: f.strokes}));
                 const jsonStr = JSON.stringify({...data, frames: cleanFrames});
                 
-                // Update Storage Meter
-                const size = jsonStr.length; // Approximate size in characters (bytes)
-                const limit = 5 * 1024 * 1024; // ~5MB standard limit
+                const size = jsonStr.length; 
+                const limit = 5 * 1024 * 1024; 
                 const pct = Math.min(100, (size / limit) * 100);
                 
                 const bar = document.getElementById('storage-bar');
@@ -2056,17 +2113,15 @@ class MotionSketchVector {
                     else bar.style.background = '#2ecc71'; 
                 }
 
-                // Use IndexedDB for unlimited storage
+                // Use IndexedDB for storage
                 this.db.set('currentProject', jsonStr).then(() => {
-                    const ind = document.getElementById('save-indicator');
-                    if (ind) {
-                        ind.style.opacity = 1;
-                        setTimeout(() => ind.style.opacity = 0, 1500);
-                    }
-                }).catch(e => console.error("Save failed", e));
-
+                     const ind = document.getElementById('save-indicator');
+                     ind.style.opacity = 1;
+                     setTimeout(()=>ind.style.opacity=0, 1500);
+                }).catch(e => console.log("IDB Error", e));
+                
             } catch(e) { 
-                console.log("Storage Error", e); 
+                console.log("Serialization Error", e); 
             }
         }, 1000);
     }
