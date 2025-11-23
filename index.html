@@ -62,12 +62,21 @@
             bottom: 190px;    
             left: 100px; 
             right: 280px;
-            display: flex; justify-content: center; align-items: center;
+            /* Layout update for Zoom scrolling */
+            display: grid; 
+            place-items: center;
+            overflow: auto; /* Enable scrolling when zoomed in */
             z-index: 0;
             overscroll-behavior: none;
-            touch-action: none; 
-            pointer-events: none; 
+            touch-action: pan-x pan-y; /* Allow scrolling */
+            /* Custom scrollbar styling for workspace */
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-panel) transparent;
         }
+        
+        .workspace::-webkit-scrollbar { width: 8px; height: 8px; }
+        .workspace::-webkit-scrollbar-track { background: transparent; }
+        .workspace::-webkit-scrollbar-thumb { background-color: rgba(128,128,128,0.5); border-radius: 4px; }
 
         .canvas-wrapper {
             pointer-events: auto; 
@@ -77,10 +86,15 @@
             border-radius: 4px;
             background-image: linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
             background-size: 20px 20px;
-            transition: width 0.3s, height 0.3s; 
-            max-width: 100%;
-            max-height: 100%;
+            transition: transform 0.2s ease-out; /* Smooth zoom */
+            
+            /* Default size, updated by JS */
+            width: auto;
+            height: auto;
+            /* max-width removed to allow zooming larger than screen */
+            /* max-height removed to allow zooming larger than screen */
             aspect-ratio: 1/1; 
+            margin: 50px; /* Add margin so we can scroll past edges */
         }
 
         canvas { 
@@ -89,6 +103,30 @@
             touch-action: none;
         }
         #rendering-canvas { z-index: 1; }
+
+        /* Zoom Controls */
+        .zoom-controls {
+            position: fixed;
+            bottom: 200px; /* Above timeline */
+            right: 300px;  /* Left of props panel */
+            background: var(--bg-panel);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-panel);
+            border-radius: 20px;
+            padding: 4px 8px;
+            display: flex; align-items: center; gap: 8px;
+            box-shadow: var(--shadow-elevation);
+            z-index: 15;
+            transition: opacity 0.2s;
+        }
+        .zoom-btn {
+            background: transparent; border: none; color: var(--text-main);
+            width: 24px; height: 24px; border-radius: 50%;
+            cursor: pointer; display: flex; justify-content: center; align-items: center;
+            font-size: 0.9rem;
+        }
+        .zoom-btn:hover { background: var(--btn-hover); }
+        .zoom-val { font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; width: 45px; text-align: center; cursor: pointer; }
 
         /* Panels */
         .glass-panel {
@@ -130,7 +168,7 @@
             font-weight: 500;
             transition: all 0.2s;
         }
-        .btn-ghost:hover { background: var(--btn-hover); }
+        .btn-ghost:hover { background: rgba(255,255,255,0.1); }
         .btn-ghost i { font-size: 1rem; opacity: 0.8; }
         
         .btn-ghost.active {
@@ -458,9 +496,11 @@
             filter: url(#wiggleFilter);
         }
 
+        /* Responsive adjustments to Layout */
         @media (max-width: 900px) {
             .props-panel { display: none; } 
             .workspace { right: 20px; left: 100px; } 
+            .zoom-controls { right: 20px; }
         }
         @media (max-height: 700px) {
             .canvas-wrapper { }
@@ -483,6 +523,7 @@
             .frame-card { min-width: 70px; height: 55px; }
             .add-frame-btn { min-width: 40px; height: 40px; }
             .flyout-menu { left: 45px; }
+            .zoom-controls { right: 10px; bottom: 140px; }
         }
     </style>
 </head>
@@ -507,6 +548,9 @@
 <div id="save-indicator"><i class="fas fa-check"></i> Saved</div>
 
 <input type="file" id="file-input" accept=".json" style="display:none" onchange="app.handleFileUpload(this)">
+
+<!-- Hidden Color Input for Palette Editing -->
+<input type="color" id="palette-editor-input" style="visibility:hidden; position:absolute; top:0; left:0;" onchange="app.confirmPaletteEdit(this.value)">
 
 <!-- New Modal -->
 <div id="custom-modal" class="modal-overlay">
@@ -635,8 +679,8 @@
     <div class="prop-group">
         <div class="prop-label">Layer</div>
         <div class="layer-switch">
-            <div class="layer-option active" id="layer-ink" onclick="app.setLayer('ink')">Ink</div>
-            <div class="layer-option" id="layer-paper" onclick="app.setLayer('paper')">Paper</div>
+            <div class="layer-option active" id="layer-ink" onclick="app.setLayer('ink')">Foreground</div>
+            <div class="layer-option" id="layer-paper" onclick="app.setLayer('paper')">Background</div>
         </div>
     </div>
 
@@ -659,17 +703,12 @@
         <div class="color-input-wrap">
             <input type="color" id="html-color-picker" value="#000000" oninput="app.setColor(this.value)">
         </div>
-        <div class="color-grid">
-            <div class="swatch" style="background:#000" onclick="app.setColor('#000000')"></div>
-            <div class="swatch" style="background:#fff" onclick="app.setColor('#ffffff')"></div>
-            <div class="swatch" style="background:#FF3B30" onclick="app.setColor('#FF3B30')"></div>
-            <div class="swatch" style="background:#FF9500" onclick="app.setColor('#FF9500')"></div>
-            <div class="swatch" style="background:#FFCC00" onclick="app.setColor('#FFCC00')"></div>
-            <div class="swatch" style="background:#4CD964" onclick="app.setColor('#4CD964')"></div>
-            <div class="swatch" style="background:#5AC8FA" onclick="app.setColor('#5AC8FA')"></div>
-            <div class="swatch" style="background:#007AFF" onclick="app.setColor('#007AFF')"></div>
-            <div class="swatch" style="background:#5856D6" onclick="app.setColor('#5856D6')"></div>
-            <div class="swatch" style="background:#8E8E93" onclick="app.setColor('#8E8E93')"></div>
+        <div class="color-grid" id="palette-container">
+            <!-- Palette swatches generated via JS -->
+        </div>
+        <div class="color-picker-btn" id="bg-color-picker" onclick="app.setColorMode('bg')" title="Background Color" style="background:white; margin-top:10px; width:100%; height:36px; border-radius:8px; border:1px solid var(--border-panel); display:flex; align-items:center; justify-content:center; font-size:0.8rem; color:#333; font-weight:bold; position:relative; overflow:hidden; cursor:pointer;">
+            <input type="color" id="bg-color-input" value="#ffffff" oninput="app.updateBgColor(this.value)" style="position:absolute; width:200%; height:200%; top:-50%; left:-50%; cursor:pointer; padding:0; margin:0; border:none;">
+            <span style="pointer-events:none; z-index:1; text-shadow: 0 1px 2px rgba(255,255,255,0.8);">Set Background Color</span>
         </div>
     </div>
 </div>
@@ -677,6 +716,13 @@
 <div class="workspace">
     <div class="canvas-wrapper" id="canvas-wrapper">
         <canvas id="rendering-canvas" width="600" height="600"></canvas>
+    </div>
+    
+    <!-- Floating Zoom Controls -->
+    <div class="zoom-controls">
+        <button class="zoom-btn" onclick="app.adjustZoom(-0.1)"><i class="fas fa-minus"></i></button>
+        <div class="zoom-val" id="zoom-disp" onclick="app.resetZoom()">100%</div>
+        <button class="zoom-btn" onclick="app.adjustZoom(0.1)"><i class="fas fa-plus"></i></button>
     </div>
 </div>
 
@@ -730,13 +776,9 @@ class MotionSketchVector {
         this.isDrawing = false;
         this.currentStroke = null; 
         
-        // Multi-Selection State
-        this.selectedObjects = []; // Array of objects
-        this.selectionBox = null; // Bounds of group
-        this.isSelectingBox = false;
-        this.dragMode = null; 
-        
+        this.selectedObject = null; 
         this.selectedBgColor = '#ffffff';
+        this.dragMode = null; 
         
         this.isPlaying = false;
         this.fps = 12;
@@ -745,8 +787,13 @@ class MotionSketchVector {
         
         this.canvasWidth = 600;
         this.canvasHeight = 600;
+        this.zoom = 1.0; // Zoom level
         
         this.textInputPos = {x:0, y:0};
+        
+        // Palette State
+        this.palette = ['#000000', '#ffffff', '#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#8E8E93'];
+        this.paletteEditIndex = -1;
 
         this.history = [];
         this.redoStack = [];
@@ -759,9 +806,9 @@ class MotionSketchVector {
         this.setupEvents();
         this.handleResize(); 
         window.addEventListener('resize', () => this.handleResize()); 
-        this.renderUI();
         this.resizeCanvas(this.canvasWidth, this.canvasHeight);
         this.loadStorage();
+        this.renderUI(); 
         
         const picker = document.getElementById('html-color-picker');
         if(picker) picker.value = this.brushColor;
@@ -792,11 +839,44 @@ class MotionSketchVector {
         }
     }
     
+    /* --- Zoom Handling --- */
+    adjustZoom(delta) {
+        this.zoom = Math.max(0.1, Math.min(5.0, this.zoom + delta));
+        this.applyZoom();
+    }
+    
+    resetZoom() {
+        this.zoom = 1.0;
+        this.applyZoom();
+    }
+    
+    applyZoom() {
+        document.getElementById('zoom-disp').innerText = Math.round(this.zoom * 100) + '%';
+        this.canvasWrapper.style.transform = `scale(${this.zoom})`;
+        // Transform origin helps keep centering logical
+        // But with overflow: auto grid centering, standard scaling might drift.
+        // grid center + scale works if margin handles overflow.
+        // Actually, if we scale the element, the grid cell stays same size unless we change width/height.
+        // Better approach: Change width/height of wrapper instead of transform?
+        // No, transform is smoother. Let's set transform-origin.
+        // If we use zoom property? Non-standard.
+        // CSS Transform scale does NOT affect layout flow, so scrollbars won't appear automatically
+        // UNLESS we wrap it in a container that sizes to match.
+        // Let's try setting width/height instead of transform for flow-based scrolling?
+        // Or use Zoom property (works in Chrome/Safari/Edge).
+        // Let's stick to style.width/height for the wrapper to force layout update.
+        
+        // Re-run handleResize logic but apply zoom multiplier
+        this.handleResize(); 
+    }
+
     handleResize() {
         const workspace = document.querySelector('.workspace');
         if(!workspace) return;
-        const availW = workspace.clientWidth - 40;
-        const availH = workspace.clientHeight - 40;
+        
+        // Get base fit dimensions
+        const availW = workspace.clientWidth - 100; // Padding
+        const availH = workspace.clientHeight - 100;
         const aspect = this.canvasWidth / this.canvasHeight;
         let w, h;
         
@@ -806,8 +886,16 @@ class MotionSketchVector {
              w = availW; h = w / aspect;
         }
         
+        // Apply Zoom
+        w *= this.zoom;
+        h *= this.zoom;
+        
+        // Use pixel sizes to force scrolling
         this.canvasWrapper.style.width = `${w}px`;
         this.canvasWrapper.style.height = `${h}px`;
+        
+        // Reset transform because we are sizing explicitly
+        this.canvasWrapper.style.transform = 'none';
     }
 
     setupEvents() {
@@ -826,8 +914,7 @@ class MotionSketchVector {
             start(e);
         });
         window.addEventListener('pointermove', (e) => {
-             // Always track if drawing or doing selection operations
-             if (this.isDrawing || this.selectedObjects.length > 0 || this.isSelectingBox) move(e);
+             if (this.isDrawing || this.selectedObject) move(e);
         });
         window.addEventListener('pointerup', (e) => {
             c.releasePointerCapture(e.pointerId);
@@ -848,7 +935,7 @@ class MotionSketchVector {
             if(e.target.tagName === 'INPUT') return; 
             
             if(e.key === 'Delete' || e.key === 'Backspace') {
-                if (this.selectedObjects.length > 0) {
+                if (this.selectedObject) {
                     this.deleteSelected();
                 } else {
                     this.deleteFrame();
@@ -889,6 +976,9 @@ class MotionSketchVector {
 
     getPos(e) {
         const rect = this.canvas.getBoundingClientRect();
+        // We need to map visual coordinates (rect) to internal coordinates (canvasWidth/Height)
+        // rect changes with zoom. canvas.width stays 600.
+        // This logic handles zoom automatically because rect size reflects zoom.
         const scaleX = this.canvasWidth / rect.width;
         const scaleY = this.canvasHeight / rect.height;
         return {
@@ -903,8 +993,6 @@ class MotionSketchVector {
         this.canvas.width = w;
         this.canvas.height = h;
         this.canvasWrapper.style.aspectRatio = `${w}/${h}`;
-        this.canvasWrapper.style.width = '100%'; 
-        this.canvasWrapper.style.height = 'auto'; 
         this.handleResize();
         this.renderCanvas();
     }
@@ -923,6 +1011,7 @@ class MotionSketchVector {
         this.saveStorage();
     }
     
+    /* --- Text Modal --- */
     openTextModal(pos) {
         this.textInputPos = pos;
         document.getElementById('text-input-value').value = "";
@@ -961,6 +1050,56 @@ class MotionSketchVector {
         this.setTool('select'); 
     }
 
+    /* --- Palette Management --- */
+    renderPalette() {
+        const container = document.getElementById('palette-container');
+        container.innerHTML = '';
+        this.palette.forEach((color, index) => {
+            const div = document.createElement('div');
+            div.className = 'swatch';
+            div.style.backgroundColor = color;
+            if (this.brushColor === color) div.classList.add('active');
+            
+            // Single Tap: Select
+            div.onclick = () => this.setColor(color);
+            
+            // Double Click: Edit
+            div.ondblclick = (e) => {
+                e.stopPropagation(); 
+                this.openPaletteEditor(index);
+            }
+            
+            let lastTap = 0;
+            div.addEventListener('touchend', (e) => {
+                const currentTime = new Date().getTime();
+                const tapLength = currentTime - lastTap;
+                if (tapLength < 500 && tapLength > 0) {
+                    e.preventDefault(); 
+                    this.openPaletteEditor(index);
+                }
+                lastTap = currentTime;
+            });
+
+            container.appendChild(div);
+        });
+    }
+
+    openPaletteEditor(index) {
+        this.paletteEditIndex = index;
+        const input = document.getElementById('palette-editor-input');
+        input.value = this.palette[index];
+        input.click();
+    }
+
+    confirmPaletteEdit(newColor) {
+        if (this.paletteEditIndex > -1) {
+            this.palette[this.paletteEditIndex] = newColor;
+            this.renderPalette();
+            this.setColor(newColor); 
+            this.saveStorage();
+        }
+    }
+
     /* --- History --- */
     saveState() {
         if (this.history.length > 20) this.history.shift();
@@ -971,7 +1110,8 @@ class MotionSketchVector {
             frameIndex: this.frameIndex,
             bgColor: this.selectedBgColor,
             width: this.canvasWidth,
-            height: this.canvasHeight
+            height: this.canvasHeight,
+            palette: this.palette
         };
         this.history.push(JSON.stringify(state));
     }
@@ -984,7 +1124,8 @@ class MotionSketchVector {
             frameIndex: this.frameIndex,
             bgColor: this.selectedBgColor,
             width: this.canvasWidth,
-            height: this.canvasHeight
+            height: this.canvasHeight,
+            palette: this.palette
         };
         this.redoStack.push(JSON.stringify(currentState));
         const prevState = JSON.parse(this.history.pop());
@@ -992,8 +1133,12 @@ class MotionSketchVector {
         this.paperStrokes = prevState.paperStrokes;
         this.frameIndex = prevState.frameIndex;
         this.selectedBgColor = prevState.bgColor;
+        if(prevState.palette) {
+            this.palette = prevState.palette;
+            this.renderPalette();
+        }
         if(prevState.width && prevState.height) this.resizeCanvas(prevState.width, prevState.height);
-        this.selectedObjects = []; // clear selection on undo
+        this.selectedObject = null;
         this.updateThumbnails();
         this.renderCanvas();
         this.renderUI(true);
@@ -1007,7 +1152,8 @@ class MotionSketchVector {
             frameIndex: this.frameIndex,
             bgColor: this.selectedBgColor,
             width: this.canvasWidth,
-            height: this.canvasHeight
+            height: this.canvasHeight,
+            palette: this.palette
         };
         this.history.push(JSON.stringify(currentState));
         const nextState = JSON.parse(this.redoStack.pop());
@@ -1015,8 +1161,12 @@ class MotionSketchVector {
         this.paperStrokes = nextState.paperStrokes;
         this.frameIndex = nextState.frameIndex;
         this.selectedBgColor = nextState.bgColor;
+        if(nextState.palette) {
+            this.palette = nextState.palette;
+            this.renderPalette();
+        }
         if(nextState.width && nextState.height) this.resizeCanvas(nextState.width, nextState.height);
-        this.selectedObjects = [];
+        this.selectedObject = null;
         this.updateThumbnails();
         this.renderCanvas();
         this.renderUI(true);
@@ -1050,88 +1200,62 @@ class MotionSketchVector {
         }
 
         if (this.tool === 'select') {
-            // 1. Check for Handles on current selection box
-            if (this.selectedObjects.length > 0 && this.selectionBox) {
+            if (this.selectedObject) {
                 const handle = this.hitTestHandles(pos);
                 if (handle) {
                     this.saveState();
                     this.dragMode = handle;
                     this.dragStart = pos;
-                    
-                    // Cache original states for group transform
-                    this.dragOriginalItems = this.selectedObjects.map(obj => {
-                        if(obj.type === 'text') {
-                            return { 
-                                ...obj, 
-                                origX: obj.x, 
-                                origY: obj.y, 
-                                origSize: obj.size, 
-                                origSx: obj.sx, 
-                                origSy: obj.sy,
-                                origW: obj.width, // store native metrics
-                                origH: obj.height
-                            };
-                        } else {
-                            return {
-                                ...obj,
-                                points: obj.points.map(p => ({...p})),
-                                bounds: {...obj.bounds} // Cache individual bounds if needed
-                            };
-                        }
-                    });
-                    this.dragOriginalBounds = {...this.selectionBox};
+                    if (this.selectedObject.stroke.type === 'text') {
+                        this.dragOriginalProps = {
+                            x: this.selectedObject.stroke.x,
+                            y: this.selectedObject.stroke.y,
+                            w: this.selectedObject.stroke.width,
+                            h: this.selectedObject.stroke.height,
+                            sx: this.selectedObject.stroke.sx,
+                            sy: this.selectedObject.stroke.sy
+                        };
+                    } else {
+                        this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({...p}));
+                    }
+                    this.dragOriginalBounds = {...this.selectedObject.bounds};
                     this.dragCenter = {
-                        x: this.selectionBox.x + this.selectionBox.w/2,
-                        y: this.selectionBox.y + this.selectionBox.h/2
+                        x: this.selectedObject.bounds.x + this.selectedObject.bounds.w/2,
+                        y: this.selectedObject.bounds.y + this.selectedObject.bounds.h/2
                     };
                     return;
                 }
                 
-                // Check inside bounds for move
-                if (this.isInBounds(pos, this.selectionBox)) {
+                if (this.isInBounds(pos, this.selectedObject.bounds)) {
                     this.saveState();
                     this.dragMode = 'move';
                     this.dragStart = pos;
-                     this.dragOriginalItems = this.selectedObjects.map(obj => {
-                        if(obj.type === 'text') {
-                            return { ...obj, origX: obj.x, origY: obj.y };
-                        } else {
-                            return { ...obj, points: obj.points.map(p => ({...p})) };
-                        }
-                    });
+                    if (this.selectedObject.stroke.type === 'text') {
+                        this.dragOriginalProps = {
+                            x: this.selectedObject.stroke.x,
+                            y: this.selectedObject.stroke.y,
+                        };
+                    } else {
+                        this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({...p}));
+                    }
                     return;
                 }
             }
             
-            // 2. Hit Test new object (Single Select or Shift Select)
             const found = this.hitTest(pos);
             if (found) {
-                // If holding shift, toggle selection
-                // For simplicity in this iteration, we just start a new single selection or replace
-                // If shift key? checking 'e' would be nice but onDown receives pos.
-                // Let's just select single for now.
-                this.saveState(); // Save before possible move
-                this.selectedObjects = [found.stroke];
-                this.calcGroupBounds();
+                this.saveState();
+                this.selectedObject = found;
+                this.calcBounds(found.stroke);
                 this.dragMode = 'move';
                 this.dragStart = pos;
-                
-                // Prep for move
-                this.dragOriginalItems = this.selectedObjects.map(obj => {
-                    if(obj.type === 'text') {
-                        return { ...obj, origX: obj.x, origY: obj.y };
-                    } else {
-                        return { ...obj, points: obj.points.map(p => ({...p})) };
-                    }
-                });
-
+                if (found.stroke.type === 'text') {
+                    this.dragOriginalProps = { x: found.stroke.x, y: found.stroke.y };
+                } else {
+                    this.dragOriginalPoints = found.stroke.points.map(p => ({...p}));
+                }
             } else {
-                // Empty space -> Start Marquee
-                this.selectedObjects = [];
-                this.selectionBox = null;
-                this.isSelectingBox = true;
-                this.marqueeStart = pos;
-                this.marqueeRect = { x: pos.x, y: pos.y, w: 0, h: 0 };
+                this.selectedObject = null;
             }
             this.renderCanvas();
             return;
@@ -1139,11 +1263,11 @@ class MotionSketchVector {
 
         this.saveState();
         this.isDrawing = true;
-        this.selectedObjects = [];
-        this.selectionBox = null;
+        this.selectedObject = null;
         this.dragStart = pos; 
         
         const p = (typeof pressure === 'number') ? pressure : 0.5;
+        if (p <= 0) p = 0.5;
 
         this.currentStroke = {
             type: this.tool, 
@@ -1152,7 +1276,7 @@ class MotionSketchVector {
             opacity: this.opacity,
             points: [{x: pos.x, y: pos.y, p: p}], 
             fillColor: null,
-            sx: 1, sy: 1
+            sx: 1, sy: 1 // Initialize scale for dots
         };
         
         const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
@@ -1163,68 +1287,47 @@ class MotionSketchVector {
     onMove(pos, pressure = 0.5) {
         if (this.isPlaying) return;
 
-        // Marquee Selection
-        if (this.isSelectingBox) {
-            this.marqueeRect.w = pos.x - this.marqueeStart.x;
-            this.marqueeRect.h = pos.y - this.marqueeStart.y;
-            this.renderCanvas();
-            return;
-        }
-
-        // Transform Logic
-        if (this.tool === 'select' && this.dragMode && this.selectedObjects.length > 0) {
+        if (this.tool === 'select' && this.dragMode && this.selectedObject) {
+            const stroke = this.selectedObject.stroke;
             const bounds = this.dragOriginalBounds;
-            const origItems = this.dragOriginalItems;
 
             if (this.dragMode === 'move') {
                 const dx = pos.x - this.dragStart.x;
                 const dy = pos.y - this.dragStart.y;
                 
-                this.selectedObjects.forEach((obj, i) => {
-                    const orig = origItems[i];
-                    if (obj.type === 'text') {
-                        obj.x = orig.origX + dx;
-                        obj.y = orig.origY + dy;
-                    } else {
-                        const pts = obj.points;
-                        const origPts = orig.points;
-                        for(let k=0; k<pts.length; k++) {
-                            pts[k].x = origPts[k].x + dx;
-                            pts[k].y = origPts[k].y + dy;
-                        }
+                if (stroke.type === 'text') {
+                    stroke.x = this.dragOriginalProps.x + dx;
+                    stroke.y = this.dragOriginalProps.y + dy;
+                } else {
+                    const pts = stroke.points;
+                    const origPts = this.dragOriginalPoints;
+                    for(let i=0; i<pts.length; i++) {
+                        pts[i].x = origPts[i].x + dx;
+                        pts[i].y = origPts[i].y + dy;
                     }
-                });
+                }
             } 
             else if (this.dragMode === 'rotate') {
-                // Group Rotate
-                const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
-                const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
-                const angleDiff = currAngle - startAngle;
-                const cos = Math.cos(angleDiff), sin = Math.sin(angleDiff);
-                
-                this.selectedObjects.forEach((obj, i) => {
-                     const orig = origItems[i];
-                     if (obj.type === 'text') {
-                         // Rotate point
-                         const nx = orig.origX - this.dragCenter.x;
-                         const ny = orig.origY - this.dragCenter.y;
-                         obj.x = (nx * cos - ny * sin) + this.dragCenter.x;
-                         obj.y = (nx * sin + ny * cos) + this.dragCenter.y;
-                         // TODO: Add rotation property to text object for visual rotation
-                     } else {
-                         const pts = obj.points;
-                         const origPts = orig.points;
-                         for(let k=0; k<pts.length; k++) {
-                             const nx = origPts[k].x - this.dragCenter.x;
-                             const ny = origPts[k].y - this.dragCenter.y;
-                             pts[k].x = (nx * cos - ny * sin) + this.dragCenter.x;
-                             pts[k].y = (nx * sin + ny * cos) + this.dragCenter.y;
-                         }
-                     }
-                });
+                if (stroke.type !== 'text') {
+                    const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
+                    const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
+                    const angleDiff = currAngle - startAngle;
+                    
+                    const cos = Math.cos(angleDiff), sin = Math.sin(angleDiff);
+                    
+                    const pts = stroke.points;
+                    const origPts = this.dragOriginalPoints;
+                    
+                    for(let i=0; i<pts.length; i++) {
+                        const nx = origPts[i].x - this.dragCenter.x;
+                        const ny = origPts[i].y - this.dragCenter.y;
+                        pts[i].x = (nx * cos - ny * sin) + this.dragCenter.x;
+                        pts[i].y = (nx * sin + ny * cos) + this.dragCenter.y;
+                    }
+                }
             }
             else {
-                // Resize Group
+                // Resize
                 const dx = pos.x - this.dragStart.x;
                 const dy = pos.y - this.dragStart.y;
                 let newW = bounds.w, newH = bounds.h, newX = bounds.x, newY = bounds.y;
@@ -1236,36 +1339,33 @@ class MotionSketchVector {
                 if (dir.includes('t')) { newY += dy; newH -= dy; } 
 
                 if(newW < 5) newW = 5; if(newH < 5) newH = 5;
-                
-                // Scale factors
-                const scaleX = newW / bounds.w;
-                const scaleY = newH / bounds.h;
 
-                this.selectedObjects.forEach((obj, i) => {
-                    const orig = origItems[i];
-                    if (obj.type === 'text') {
-                        // Relative position scaling
-                        const relX = (orig.origX - bounds.x) / bounds.w;
-                        const relY = (orig.origY - bounds.y) / bounds.h;
-                        obj.x = newX + (relX * newW);
-                        obj.y = newY + (relY * newH);
-                        // Scale dimensions
-                        obj.sx = orig.origSx * scaleX;
-                        obj.sy = orig.origSy * scaleY;
-                    } else {
-                        const pts = obj.points;
-                        const origPts = orig.points;
-                        for(let k=0; k<pts.length; k++) {
-                            const normX = (origPts[k].x - bounds.x) / bounds.w;
-                            const normY = (origPts[k].y - bounds.y) / bounds.h;
-                            pts[k].x = newX + (normX * newW);
-                            pts[k].y = newY + (normY * newH);
-                        }
+                if (stroke.type === 'text') {
+                    stroke.sx = newW / this.dragOriginalProps.w;
+                    stroke.sy = newH / this.dragOriginalProps.h;
+                    stroke.x = this.dragOriginalProps.x + (newX - bounds.x);
+                    stroke.y = this.dragOriginalProps.y + (newY - bounds.y);
+                } 
+                else if (stroke.points.length === 1) {
+                    // Squash Dot Logic
+                    stroke.sx = newW / this.dragOriginalBounds.w;
+                    stroke.sy = newH / this.dragOriginalBounds.h;
+                    stroke.points[0].x = newX + newW/2;
+                    stroke.points[0].y = newY + newH/2;
+                }
+                else {
+                    const pts = stroke.points;
+                    const origPts = this.dragOriginalPoints;
+                    for(let i=0; i<pts.length; i++) {
+                        const normX = (origPts[i].x - bounds.x) / bounds.w;
+                        const normY = (origPts[i].y - bounds.y) / bounds.h;
+                        pts[i].x = newX + (normX * newW);
+                        pts[i].y = newY + (normY * newH);
                     }
-                });
+                }
             }
-            
-            this.calcGroupBounds();
+
+            this.calcBounds(this.selectedObject.stroke);
             this.renderCanvas();
             return;
         }
@@ -1311,11 +1411,6 @@ class MotionSketchVector {
     }
 
     onUp() {
-        if (this.isSelectingBox) {
-            this.isSelectingBox = false;
-            this.finishMarqueeSelection();
-        }
-        
         if (this.isDrawing) {
             if ((this.tool === 'brush' || this.tool === 'eraser') && this.currentStroke.points.length > 5) {
                 this.currentStroke.points = this.simplifyPoints(this.currentStroke.points, 1.5);
@@ -1329,94 +1424,6 @@ class MotionSketchVector {
             this.dragMode = null;
             this.updateThumbnails();
             this.saveStorage();
-        }
-    }
-    
-    finishMarqueeSelection() {
-        // Normalize rect
-        let x = this.marqueeRect.x;
-        let y = this.marqueeRect.y;
-        let w = this.marqueeRect.w;
-        let h = this.marqueeRect.h;
-        
-        if (w < 0) { x += w; w = Math.abs(w); }
-        if (h < 0) { y += h; h = Math.abs(h); }
-        
-        const selRect = {x, y, w, h};
-        
-        // Iterate active layer strokes
-        const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
-        
-        this.selectedObjects = list.filter(stroke => {
-            return this.strokeInRect(stroke, selRect);
-        });
-        
-        if (this.selectedObjects.length > 0) {
-            this.calcGroupBounds();
-        }
-        this.renderCanvas();
-    }
-    
-    strokeInRect(stroke, rect) {
-        // Simple check: if any point is inside OR bounding box intersects
-        // For robustness, let's check bounding box intersection
-        // Calculate stroke bounds
-        let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
-        
-        if (stroke.type === 'text') {
-            const w = stroke.width * stroke.sx;
-            const h = stroke.height * stroke.sy;
-            minX = stroke.x; 
-            maxX = stroke.x + w;
-            maxY = stroke.y; // Text baseline is bottom
-            minY = stroke.y - h;
-        } else {
-            stroke.points.forEach(p=>{ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; });
-        }
-        
-        return (minX < rect.x + rect.w && maxX > rect.x && minY < rect.y + rect.h && maxY > rect.y);
-    }
-    
-    calcGroupBounds() {
-        if (this.selectedObjects.length === 0) {
-            this.selectionBox = null;
-            return;
-        }
-        
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        
-        this.selectedObjects.forEach(stroke => {
-             if (stroke.type === 'text') {
-                const w = stroke.width * stroke.sx;
-                const h = stroke.height * stroke.sy;
-                // Text y is baseline
-                const bx = stroke.x;
-                const by = stroke.y - h;
-                if(bx < minX) minX = bx;
-                if(bx + w > maxX) maxX = bx + w;
-                if(by < minY) minY = by;
-                if(by + h > maxY) maxY = by + h;
-            } else {
-                stroke.points.forEach(p => {
-                    if(p.x < minX) minX = p.x;
-                    if(p.x > maxX) maxX = p.x;
-                    if(p.y < minY) minY = p.y;
-                    if(p.y > maxY) maxY = p.y;
-                });
-                // Account for stroke width
-                const s = stroke.size / 2;
-                minX -= s; maxX += s; minY -= s; maxY += s;
-            }
-        });
-        
-        this.selectionBox = { x: minX - 5, y: minY - 5, w: (maxX - minX) + 10, h: (maxY - minY) + 10 };
-        
-        // Backwards compat for single object logic
-        if (this.selectedObjects.length === 1) {
-            this.selectedObject = { stroke: this.selectedObjects[0], bounds: this.selectionBox, layer: this.activeLayer };
-        } else {
-            // Dummy wrapper for group
-             this.selectedObject = { bounds: this.selectionBox, layer: this.activeLayer };
         }
     }
     
@@ -1461,13 +1468,18 @@ class MotionSketchVector {
         
         const hitThresh = Math.max(10, stroke.size);
 
+        // 0. Handle Dot (Single Point)
         if (stroke.points.length === 1) {
              const p = stroke.points[0];
+             // Hit test against squashed ellipse? 
+             // Simplified circular hit test using max dimension is usually fine for UI
              const dist = Math.hypot(pos.x - p.x, pos.y - p.y);
+             // Use scale factors if they exist (squashed dot), otherwise 1
              const sx = stroke.sx || 1;
              const sy = stroke.sy || 1;
              const maxDim = Math.max(sx, sy) * (stroke.size/2);
-             return dist < maxDim + 10; 
+             
+             return dist < maxDim + 10; // +10 for easier grabbing
         }
         
         let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
@@ -1497,8 +1509,7 @@ class MotionSketchVector {
     }
 
     hitTestHandles(pos) {
-        if (!this.selectionBox) return null;
-        const b = this.selectionBox;
+        const b = this.selectedObject.bounds;
         const s = 10; 
         const hit = (x, y) => Math.abs(pos.x - x) < s && Math.abs(pos.y - y) < s;
         
@@ -1526,14 +1537,48 @@ class MotionSketchVector {
     }
 
     calcBounds(stroke) {
-        // Helper for single stroke (legacy), now mostly handled by calcGroupBounds
-        // Kept for compatibility if needed
-        this.selectedObjects = [stroke];
-        this.calcGroupBounds();
+        if (stroke.type === 'text') {
+            const w = stroke.width * stroke.sx;
+            const h = stroke.height * stroke.sy;
+            this.selectedObject.bounds = {
+                x: stroke.x - 5,
+                y: stroke.y - h - 5,
+                w: w + 10,
+                h: h + 15
+            };
+        } 
+        else if (stroke.points.length === 1) {
+            // FIX: Specific bounds for single Dots
+            const s = stroke.size;
+            // Use stored scale or default to 1
+            const sx = stroke.sx || 1;
+            const sy = stroke.sy || 1;
+            
+            const p = stroke.points[0];
+            const w = s * sx;
+            const h = s * sy;
+            
+            this.selectedObject.bounds = {
+                x: p.x - w/2, 
+                y: p.y - h/2, 
+                w: w, 
+                h: h
+            };
+        }
+        else {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            stroke.points.forEach(p => {
+                if(p.x < minX) minX = p.x;
+                if(p.x > maxX) maxX = p.x;
+                if(p.y < minY) minY = p.y;
+                if(p.y > maxY) maxY = p.y;
+            });
+            const pad = stroke.size / 2;
+            this.selectedObject.bounds = { x: minX - pad, y: minY - pad, w: (maxX - minX) + pad*2, h: (maxY - minY) + pad*2 };
+        }
     }
 
     isInBounds(pos, rect) {
-        if (!rect) return false;
         return pos.x >= rect.x && pos.x <= rect.x + rect.w && pos.y >= rect.y && pos.y <= rect.y + rect.h;
     }
 
@@ -1553,6 +1598,7 @@ class MotionSketchVector {
         // Draw Onion Skin LAST (On Top)
         if (this.isOnion && this.frameIndex > 0 && !this.isPlaying) {
             ctx.globalAlpha = 0.3;
+            // Fix: Pass 'true' for simpleMode to prevent alpha accumulation
             this.frames[this.frameIndex - 1].strokes.forEach(s => this.drawObject(ctx, s, true));
             ctx.globalAlpha = 1.0;
         }
@@ -1560,31 +1606,14 @@ class MotionSketchVector {
         if (this.isWiggle && this.isPlaying) this.canvas.classList.add('wiggling');
         else this.canvas.classList.remove('wiggling');
 
-        // Draw Selection UI
-        if (this.selectionBox && this.selectedObjects.length > 0 && !this.isPlaying) {
-            // Check validity
-            const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
-            // If any object in selection is missing from current layer, clear selection
-            const allExist = this.selectedObjects.every(obj => list.includes(obj));
-            
-            if (allExist) {
+        if (this.selectedObject && !this.isPlaying) {
+            // Safety Check: Ensure object actually exists in current list before drawing UI
+            const list = this.selectedObject.layer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+            if (list.includes(this.selectedObject.stroke)) {
                 this.drawSelectionUI(ctx);
             } else {
-                this.selectedObjects = [];
-                this.selectionBox = null;
+                this.selectedObject = null; // Cleanup ghost selection
             }
-        }
-        
-        // Draw Marquee Box
-        if (this.isSelectingBox) {
-            ctx.save();
-            ctx.strokeStyle = '#0A84FF';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([4, 4]);
-            ctx.strokeRect(this.marqueeRect.x, this.marqueeRect.y, this.marqueeRect.w, this.marqueeRect.h);
-            ctx.fillStyle = 'rgba(10, 132, 255, 0.1)';
-            ctx.fillRect(this.marqueeRect.x, this.marqueeRect.y, this.marqueeRect.w, this.marqueeRect.h);
-            ctx.restore();
         }
     }
 
@@ -1600,6 +1629,7 @@ class MotionSketchVector {
             ctx.font = `${obj.size}px sans-serif`;
             ctx.fillStyle = obj.color;
             
+            // Fix: Multiply existing globalAlpha (onion skin) by object opacity
             const currentAlpha = ctx.globalAlpha;
             const objAlpha = obj.opacity !== undefined ? obj.opacity : 1;
             ctx.globalAlpha = currentAlpha * objAlpha;
@@ -1612,7 +1642,7 @@ class MotionSketchVector {
     }
 
     drawSelectionUI(ctx) {
-        const b = this.selectionBox;
+        const b = this.selectedObject.bounds;
         ctx.save();
         ctx.strokeStyle = '#0A84FF';
         ctx.lineWidth = 1;
@@ -1763,8 +1793,7 @@ class MotionSketchVector {
             shapeAnchor.classList.remove('active');
         }
 
-        this.selectedObjects = [];
-        this.selectionBox = null;
+        this.selectedObject = null;
         this.renderCanvas();
     }
     
@@ -1772,20 +1801,17 @@ class MotionSketchVector {
         this.activeLayer = l;
         document.getElementById('layer-ink').classList.toggle('active', l==='ink');
         document.getElementById('layer-paper').classList.toggle('active', l==='paper');
-        this.selectedObjects = [];
-        this.selectionBox = null;
+        this.selectedObject = null;
         this.renderCanvas();
     }
 
     setColor(c) {
         this.brushColor = c;
         document.getElementById('html-color-picker').value = c;
-        if (this.selectedObjects.length > 0) {
+        if (this.selectedObject) {
             this.saveState();
-            this.selectedObjects.forEach(obj => {
-                obj.color = c;
-                if(obj.fillColor) obj.fillColor = c;
-            });
+            this.selectedObject.stroke.color = c;
+            if(this.selectedObject.stroke.fillColor) this.selectedObject.stroke.fillColor = c;
             this.renderCanvas();
             this.saveStorage();
         }
@@ -1794,12 +1820,10 @@ class MotionSketchVector {
     setSize(s) {
         this.brushSize = parseInt(s);
         document.getElementById('size-disp').innerText = s;
-        if (this.selectedObjects.length > 0) {
+        if (this.selectedObject) {
             this.saveState();
-            this.selectedObjects.forEach(obj => {
-                obj.size = this.brushSize;
-            });
-            this.calcGroupBounds();
+            this.selectedObject.stroke.size = this.brushSize;
+            this.calcBounds(this.selectedObject.stroke);
             this.renderCanvas();
             this.saveStorage();
         }
@@ -1808,11 +1832,9 @@ class MotionSketchVector {
     setOpacity(v) {
         this.opacity = parseInt(v) / 100;
         document.getElementById('op-disp').innerText = v;
-        if (this.selectedObjects.length > 0) {
+        if (this.selectedObject) {
             this.saveState();
-            this.selectedObjects.forEach(obj => {
-                obj.opacity = this.opacity;
-            });
+            this.selectedObject.stroke.opacity = this.opacity;
             this.renderCanvas();
             this.saveStorage();
         }
@@ -1832,20 +1854,25 @@ class MotionSketchVector {
 
     addFrame() {
         this.saveState();
-        this.selectedObjects = []; // Fix: Deselect to prevent ghost UI
-        this.selectionBox = null;
+        this.selectedObject = null; 
         this.frames.splice(this.frameIndex + 1, 0, { strokes: [] });
         this.frameIndex++;
         this.renderUI();
         this.renderCanvas();
         this.saveStorage();
+
+        // FIX: Auto-scroll to show the Add Button
+        setTimeout(() => {
+            const addBtn = this.framesList.querySelector('.add-frame-btn');
+            if(addBtn) addBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        }, 50);
     }
 
     duplicateFrame(index) {
         this.saveState();
-        this.selectedObjects = []; // Fix: Deselect to prevent ghost UI
-        this.selectionBox = null;
+        this.selectedObject = null; // Fix: Deselect to prevent ghost UI
         const target = index !== undefined ? index : this.frameIndex;
+        // Ensure deep copy of all properties including text specific ones
         const newStrokes = JSON.parse(JSON.stringify(this.frames[target].strokes));
         this.frames.splice(target + 1, 0, { strokes: newStrokes });
         this.frameIndex = target + 1;
@@ -1856,8 +1883,7 @@ class MotionSketchVector {
 
     deleteFrame(index) {
         this.saveState();
-        this.selectedObjects = []; // Fix: Deselect
-        this.selectionBox = null;
+        this.selectedObject = null; // Fix: Deselect
         const targetIndex = (index !== undefined) ? index : this.frameIndex;
         if(this.frames.length <= 1) { 
             this.frames[0].strokes = []; 
@@ -2014,6 +2040,10 @@ class MotionSketchVector {
                     this.fps = data.fps || 12;
                     this.frameIndex = 0;
                     if(data.width && data.height) this.resizeCanvas(data.width, data.height);
+                    if(data.palette) {
+                        this.palette = data.palette;
+                        this.renderPalette();
+                    }
                     this.renderUI();
                     this.renderCanvas();
                 }
@@ -2063,7 +2093,8 @@ class MotionSketchVector {
             paperStrokes: this.paperStrokes,
             fps: this.fps,
             width: this.canvasWidth,
-            height: this.canvasHeight
+            height: this.canvasHeight,
+            palette: this.palette
         };
         const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
         const url = URL.createObjectURL(blob);
@@ -2087,6 +2118,10 @@ class MotionSketchVector {
                     this.fps = data.fps;
                     this.frameIndex = 0;
                     if(data.width && data.height) this.resizeCanvas(data.width, data.height);
+                    if(data.palette) {
+                        this.palette = data.palette;
+                        this.renderPalette();
+                    }
                     this.renderUI();
                     this.renderCanvas();
                 }
@@ -2108,8 +2143,7 @@ class MotionSketchVector {
         this.frameIndex = 0;
         this.selectedBgColor = '#ffffff';
         // RESET SELECTED OBJECT HERE TO PREVENT GHOST SELECTION
-        this.selectedObjects = [];
-        this.selectionBox = null;
+        this.selectedObject = null;
         this.dragMode = null;
         // Reset History
         this.history = [];
@@ -2120,42 +2154,35 @@ class MotionSketchVector {
         this.saveStorage();
     }
     deleteSelected() {
-        if (this.selectedObjects.length === 0) return;
+        if (!this.selectedObject) return;
         this.saveState();
         const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
         
-        this.selectedObjects.forEach(obj => {
-            const idx = list.indexOf(obj);
-            if (idx > -1) list.splice(idx, 1);
-        });
+        const idx = list.indexOf(this.selectedObject.stroke);
+        if (idx > -1) list.splice(idx, 1);
         
         // IMPORTANT: Force deselect here to prevent UI ghost
-        this.selectedObjects = [];
-        this.selectionBox = null;
+        this.selectedObject = null;
         this.dragMode = null;
         
         this.renderCanvas();
         this.saveStorage();
         this.updateThumbnails();
     }
-    copySelection() { if (this.selectedObjects.length > 0) this.clipboard = JSON.parse(JSON.stringify(this.selectedObjects)); }
+    copySelection() { if (this.selectedObject) this.clipboard = JSON.parse(JSON.stringify(this.selectedObject.stroke)); }
     pasteSelection() {
         if (this.clipboard) {
             this.saveState();
-            const newStrokes = JSON.parse(JSON.stringify(this.clipboard));
-            newStrokes.forEach(stroke => {
-                if(stroke.type === 'text') {
-                    stroke.x += 20; stroke.y += 20;
-                } else {
-                    stroke.points.forEach(p => { p.x += 20; p.y += 20; });
-                }
-            });
-            
+            const newStroke = JSON.parse(JSON.stringify(this.clipboard));
+            if(newStroke.type !== 'text') {
+                newStroke.points.forEach(p => { p.x += 20; p.y += 20; });
+            } else {
+                newStroke.x += 20; newStroke.y += 20;
+            }
             const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
-            newStrokes.forEach(s => list.push(s));
-            
-            this.selectedObjects = newStrokes;
-            this.calcGroupBounds();
+            list.push(newStroke);
+            this.selectedObject = { stroke: newStroke, layer: this.activeLayer };
+            this.calcBounds(newStroke);
             this.renderCanvas();
             this.saveStorage();
             this.updateThumbnails();
