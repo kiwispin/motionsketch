@@ -293,7 +293,6 @@
             border-radius: 6px; cursor: pointer;
             border: 2px solid transparent;
             transition: transform 0.1s;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
         .swatch:hover { transform: scale(1.1); }
         [data-theme="light"] .swatch.active { border-color: #000; }
@@ -665,6 +664,7 @@
     <div class="prop-group">
         <div class="prop-label">Layer</div>
         <div class="layer-switch">
+            <!-- Renamed Ink -> Foreground, Paper -> Background -->
             <div class="layer-option active" id="layer-ink" onclick="app.setLayer('ink')">Foreground</div>
             <div class="layer-option" id="layer-paper" onclick="app.setLayer('paper')">Background</div>
         </div>
@@ -742,6 +742,51 @@
 </div>
 
 <script>
+// IndexedDB Helper Class
+class IDBHelper {
+    constructor(dbName, storeName) {
+        this.dbName = dbName;
+        this.storeName = storeName;
+        this.db = null;
+    }
+    async init() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, 1);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(this.storeName)) {
+                    db.createObjectStore(this.storeName);
+                }
+            };
+            request.onsuccess = (e) => {
+                this.db = e.target.result;
+                resolve();
+            };
+            request.onerror = (e) => reject(e);
+        });
+    }
+    async set(key, value) {
+        if (!this.db) await this.init();
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction(this.storeName, 'readwrite');
+            const store = tx.objectStore(this.storeName);
+            const req = store.put(value, key);
+            req.onsuccess = () => resolve();
+            req.onerror = (e) => reject(e);
+        });
+    }
+    async get(key) {
+        if (!this.db) await this.init();
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction(this.storeName, 'readonly');
+            const store = tx.objectStore(this.storeName);
+            const req = store.get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = (e) => reject(e);
+        });
+    }
+}
+
 class MotionSketchVector {
     constructor() {
         this.canvas = document.getElementById('rendering-canvas');
@@ -773,7 +818,7 @@ class MotionSketchVector {
         
         this.canvasWidth = 600;
         this.canvasHeight = 600;
-        this.zoom = 1.0; // Zoom level
+        this.zoom = 1.0; 
         
         this.textInputPos = {x:0, y:0};
         
@@ -784,18 +829,22 @@ class MotionSketchVector {
         this.history = [];
         this.redoStack = [];
         
+        // Unlimited Storage Engine
+        this.db = new IDBHelper('SketchMotionDB', 'projects');
+        
         this.init();
     }
 
-    init() {
+    async init() {
         this.loadTheme();
         this.setupEvents();
         this.handleResize(); 
         window.addEventListener('resize', () => this.handleResize()); 
-        this.renderUI();
         this.resizeCanvas(this.canvasWidth, this.canvasHeight);
-        this.loadStorage();
-        this.renderPalette(); // Important: Render palette on startup
+        
+        await this.loadStorage(); // Async load
+        this.renderUI(); 
+        this.renderPalette();
         
         const picker = document.getElementById('html-color-picker');
         if(picker) picker.value = this.brushColor;
@@ -847,8 +896,7 @@ class MotionSketchVector {
         const workspace = document.querySelector('.workspace');
         if(!workspace) return;
         
-        // Get base fit dimensions
-        const availW = workspace.clientWidth - 100; // Padding
+        const availW = workspace.clientWidth - 100;
         const availH = workspace.clientHeight - 100;
         const aspect = this.canvasWidth / this.canvasHeight;
         let w, h;
@@ -859,15 +907,11 @@ class MotionSketchVector {
              w = availW; h = w / aspect;
         }
         
-        // Apply Zoom
         w *= this.zoom;
         h *= this.zoom;
         
-        // Use pixel sizes to force scrolling
         this.canvasWrapper.style.width = `${w}px`;
         this.canvasWrapper.style.height = `${h}px`;
-        
-        // Reset transform because we are sizing explicitly
         this.canvasWrapper.style.transform = 'none';
     }
 
@@ -949,9 +993,6 @@ class MotionSketchVector {
 
     getPos(e) {
         const rect = this.canvas.getBoundingClientRect();
-        // We need to map visual coordinates (rect) to internal coordinates (canvasWidth/Height)
-        // rect changes with zoom. canvas.width stays 600.
-        // This logic handles zoom automatically because rect size reflects zoom.
         const scaleX = this.canvasWidth / rect.width;
         const scaleY = this.canvasHeight / rect.height;
         return {
@@ -1035,7 +1076,7 @@ class MotionSketchVector {
             const div = document.createElement('div');
             div.className = 'swatch';
             div.style.backgroundColor = color;
-            div.title = "Double-click to edit"; // Tooltip hint
+            div.title = "Double-click to edit";
             if (this.brushColor === color) div.classList.add('active');
             
             // Single Tap: Select
@@ -1443,7 +1484,6 @@ class MotionSketchVector {
     }
 
     strokeHit(stroke, pos) {
-        // FIX: Removed the '< 2' check that was preventing Dots from being selected
         if (!stroke.points || stroke.points.length === 0) return false;
         
         const hitThresh = Math.max(10, stroke.size);
@@ -1984,9 +2024,12 @@ class MotionSketchVector {
             try {
                 const cleanFrames = this.frames.map(f => ({strokes: f.strokes}));
                 const jsonStr = JSON.stringify({...data, frames: cleanFrames});
-                const size = jsonStr.length; 
-                const limit = 5 * 1024 * 1024; 
+                
+                // Update Storage Meter
+                const size = jsonStr.length; // Approximate size in characters (bytes)
+                const limit = 5 * 1024 * 1024; // ~5MB standard limit
                 const pct = Math.min(100, (size / limit) * 100);
+                
                 const bar = document.getElementById('storage-bar');
                 if(bar) {
                     bar.style.width = pct + '%';
@@ -1994,27 +2037,27 @@ class MotionSketchVector {
                     else if (pct > 70) bar.style.background = '#f1c40f'; 
                     else bar.style.background = '#2ecc71'; 
                 }
-                localStorage.setItem('sketchMotionVector', jsonStr);
-                const ind = document.getElementById('save-indicator');
-                ind.style.opacity = 1;
-                setTimeout(()=>ind.style.opacity=0, 1500);
+
+                // Use IndexedDB for unlimited storage
+                this.db.set('currentProject', jsonStr).then(() => {
+                    const ind = document.getElementById('save-indicator');
+                    if (ind) {
+                        ind.style.opacity = 1;
+                        setTimeout(() => ind.style.opacity = 0, 1500);
+                    }
+                }).catch(e => console.error("Save failed", e));
+
             } catch(e) { 
-                console.log("Storage Limit Reached"); 
-                const bar = document.getElementById('storage-bar');
-                if(bar) {
-                    bar.style.width = '100%';
-                    bar.style.background = '#ff3b30';
-                }
-                alert("Storage Full! Please export your project to save properly.");
+                console.log("Storage Error", e); 
             }
         }, 1000);
     }
 
-    loadStorage() {
-        const raw = localStorage.getItem('sketchMotionVector');
-        if (raw) {
-            try {
-                const data = JSON.parse(raw);
+    async loadStorage() {
+        try {
+            const jsonStr = await this.db.get('currentProject');
+            if (jsonStr) {
+                const data = JSON.parse(jsonStr);
                 if(data.version >= 2) {
                     this.frames = data.frames;
                     this.paperStrokes = data.paperStrokes || [];
@@ -2028,8 +2071,8 @@ class MotionSketchVector {
                     this.renderUI();
                     this.renderCanvas();
                 }
-            } catch(e) { console.log('Error loading', e); }
-        }
+            }
+        } catch(e) { console.log('Error loading', e); }
     }
 
     exportGIF() {
