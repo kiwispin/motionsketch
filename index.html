@@ -62,11 +62,38 @@
             bottom: 190px;    
             left: 100px; 
             right: 280px;
-            display: flex; justify-content: center; align-items: center;
+            /* Changed to Grid for better centering of overflowing content */
+            display: grid; 
+            place-items: center;
+            overflow: auto; /* Enable scrollbars when zoomed */
             z-index: 0;
             overscroll-behavior: none;
-            touch-action: none; 
-            pointer-events: none; 
+            touch-action: pan-x pan-y; 
+            
+            /* Custom Scrollbar */
+            scrollbar-width: thin;
+            scrollbar-color: rgba(128, 128, 128, 0.5) transparent;
+        }
+        
+        .workspace::-webkit-scrollbar { width: 8px; height: 8px; }
+        .workspace::-webkit-scrollbar-track { background: transparent; }
+        .workspace::-webkit-scrollbar-thumb { background-color: rgba(128, 128, 128, 0.5); border-radius: 4px; }
+
+        .canvas-wrapper {
+            pointer-events: auto; 
+            position: relative;
+            background-color: #fff;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border-radius: 4px;
+            background-image: linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
+            background-size: 20px 20px;
+            transition: width 0.2s ease-out, height 0.2s ease-out; 
+            
+            /* FIX: Removed max-width/height constraints so Zoom can overflow */
+            width: auto;
+            height: auto;
+            aspect-ratio: 1/1; 
+            margin: 50px; /* Add breathing room for scrolling */
         }
 
         .canvas-wrapper {
@@ -900,8 +927,33 @@ class MotionSketchVector {
     
     applyZoom() {
         document.getElementById('zoom-disp').innerText = Math.round(this.zoom * 100) + '%';
-        this.canvasWrapper.style.transform = `scale(${this.zoom})`;
+        // Removed the conflicting CSS transform here; we rely purely on handleResize setting px width/height
         this.handleResize(); 
+    }
+
+    handleResize() {
+        const workspace = document.querySelector('.workspace');
+        if(!workspace) return;
+        
+        // Calculate base fit (Zoom 1.0)
+        const availW = workspace.clientWidth - 100; 
+        const availH = workspace.clientHeight - 100;
+        const aspect = this.canvasWidth / this.canvasHeight;
+        let w, h;
+        
+        if (availW / availH > aspect) {
+             h = availH; w = h * aspect;
+        } else {
+             w = availW; h = w / aspect;
+        }
+        
+        // Apply Zoom Multiplier
+        w *= this.zoom;
+        h *= this.zoom;
+        
+        // Apply dimensions directly to force layout flow/scrolling
+        this.canvasWrapper.style.width = `${w}px`;
+        this.canvasWrapper.style.height = `${h}px`;
     }
 
     handleResize() {
