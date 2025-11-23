@@ -534,8 +534,9 @@
 
 <input type="file" id="file-input" accept=".json" style="display:none" onchange="app.handleFileUpload(this)">
 
-<!-- Hidden Color Input for Palette Editing -->
-<input type="color" id="palette-editor-input" style="visibility:hidden; position:absolute; top:0; left:0;" onchange="app.confirmPaletteEdit(this.value)">
+<!-- UPDATED: Hidden Color Input for Palette Editing -->
+<!-- Changed visibility:hidden to opacity:0 and removed fixed top/left so we can move it via JS -->
+<input type="color" id="palette-editor-input" style="opacity:0; position:fixed; z-index:-1; width:1px; height:1px;" onchange="app.confirmPaletteEdit(this.value)">
 
 <!-- New Modal -->
 <div id="custom-modal" class="modal-overlay">
@@ -1085,7 +1086,7 @@ class MotionSketchVector {
             // Double Click: Edit
             div.ondblclick = (e) => {
                 e.stopPropagation(); 
-                this.openPaletteEditor(index);
+                this.openPaletteEditor(index, div); // Pass the div element
             }
             
             let lastTap = 0;
@@ -1094,7 +1095,7 @@ class MotionSketchVector {
                 const tapLength = currentTime - lastTap;
                 if (tapLength < 500 && tapLength > 0) {
                     e.preventDefault(); 
-                    this.openPaletteEditor(index);
+                    this.openPaletteEditor(index, div);
                 }
                 lastTap = currentTime;
             });
@@ -1103,11 +1104,28 @@ class MotionSketchVector {
         });
     }
 
-    openPaletteEditor(index) {
+    openPaletteEditor(index, element) {
         this.paletteEditIndex = index;
         const input = document.getElementById('palette-editor-input');
+        
+        // Move the hidden input to the swatch's position so the popup appears there
+        if (element) {
+            const rect = element.getBoundingClientRect();
+            input.style.left = rect.left + 'px';
+            input.style.top = rect.top + 'px';
+            input.style.width = rect.width + 'px';
+            input.style.height = rect.height + 'px';
+            input.style.zIndex = 100; // Bring to front briefly
+        }
+
         input.value = this.palette[index];
-        input.click();
+        
+        // Small timeout to ensure position applies before click
+        setTimeout(() => {
+            input.click();
+            // Reset z-index after click so it doesn't block anything
+            setTimeout(() => input.style.zIndex = -1, 100); 
+        }, 10);
     }
 
     confirmPaletteEdit(newColor) {
