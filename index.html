@@ -62,21 +62,12 @@
             bottom: 190px;    
             left: 100px; 
             right: 280px;
-            /* Layout update for Zoom scrolling */
-            display: grid; 
-            place-items: center;
-            overflow: auto; /* Enable scrolling when zoomed in */
+            display: flex; justify-content: center; align-items: center;
             z-index: 0;
             overscroll-behavior: none;
-            touch-action: pan-x pan-y; /* Allow scrolling */
-            /* Custom scrollbar styling for workspace */
-            scrollbar-width: thin;
-            scrollbar-color: var(--border-panel) transparent;
+            touch-action: none; 
+            pointer-events: none; 
         }
-        
-        .workspace::-webkit-scrollbar { width: 8px; height: 8px; }
-        .workspace::-webkit-scrollbar-track { background: transparent; }
-        .workspace::-webkit-scrollbar-thumb { background-color: rgba(128,128,128,0.5); border-radius: 4px; }
 
         .canvas-wrapper {
             pointer-events: auto; 
@@ -86,15 +77,10 @@
             border-radius: 4px;
             background-image: linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
             background-size: 20px 20px;
-            transition: transform 0.2s ease-out; /* Smooth zoom */
-            
-            /* Default size, updated by JS */
-            width: auto;
-            height: auto;
-            /* max-width removed to allow zooming larger than screen */
-            /* max-height removed to allow zooming larger than screen */
+            transition: width 0.3s, height 0.3s; 
+            max-width: 100%;
+            max-height: 100%;
             aspect-ratio: 1/1; 
-            margin: 50px; /* Add margin so we can scroll past edges */
         }
 
         canvas { 
@@ -103,30 +89,6 @@
             touch-action: none;
         }
         #rendering-canvas { z-index: 1; }
-
-        /* Zoom Controls */
-        .zoom-controls {
-            position: fixed;
-            bottom: 200px; /* Above timeline */
-            right: 300px;  /* Left of props panel */
-            background: var(--bg-panel);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--border-panel);
-            border-radius: 20px;
-            padding: 4px 8px;
-            display: flex; align-items: center; gap: 8px;
-            box-shadow: var(--shadow-elevation);
-            z-index: 15;
-            transition: opacity 0.2s;
-        }
-        .zoom-btn {
-            background: transparent; border: none; color: var(--text-main);
-            width: 24px; height: 24px; border-radius: 50%;
-            cursor: pointer; display: flex; justify-content: center; align-items: center;
-            font-size: 0.9rem;
-        }
-        .zoom-btn:hover { background: var(--btn-hover); }
-        .zoom-val { font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; width: 45px; text-align: center; cursor: pointer; }
 
         /* Panels */
         .glass-panel {
@@ -331,6 +293,7 @@
             border-radius: 6px; cursor: pointer;
             border: 2px solid transparent;
             transition: transform 0.1s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
         .swatch:hover { transform: scale(1.1); }
         [data-theme="light"] .swatch.active { border-color: #000; }
@@ -495,8 +458,31 @@
         .wiggling {
             filter: url(#wiggleFilter);
         }
+        
+        /* Zoom Controls */
+        .zoom-controls {
+            position: fixed;
+            bottom: 200px; 
+            right: 300px;  
+            background: var(--bg-panel);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-panel);
+            border-radius: 20px;
+            padding: 4px 8px;
+            display: flex; align-items: center; gap: 8px;
+            box-shadow: var(--shadow-elevation);
+            z-index: 15;
+            transition: opacity 0.2s;
+        }
+        .zoom-btn {
+            background: transparent; border: none; color: var(--text-main);
+            width: 24px; height: 24px; border-radius: 50%;
+            cursor: pointer; display: flex; justify-content: center; align-items: center;
+            font-size: 0.9rem;
+        }
+        .zoom-btn:hover { background: var(--btn-hover); }
+        .zoom-val { font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; width: 45px; text-align: center; cursor: pointer; }
 
-        /* Responsive adjustments to Layout */
         @media (max-width: 900px) {
             .props-panel { display: none; } 
             .workspace { right: 20px; left: 100px; } 
@@ -806,9 +792,10 @@ class MotionSketchVector {
         this.setupEvents();
         this.handleResize(); 
         window.addEventListener('resize', () => this.handleResize()); 
+        this.renderUI();
         this.resizeCanvas(this.canvasWidth, this.canvasHeight);
         this.loadStorage();
-        this.renderUI(); 
+        this.renderPalette(); // Important: Render palette on startup
         
         const picker = document.getElementById('html-color-picker');
         if(picker) picker.value = this.brushColor;
@@ -853,20 +840,6 @@ class MotionSketchVector {
     applyZoom() {
         document.getElementById('zoom-disp').innerText = Math.round(this.zoom * 100) + '%';
         this.canvasWrapper.style.transform = `scale(${this.zoom})`;
-        // Transform origin helps keep centering logical
-        // But with overflow: auto grid centering, standard scaling might drift.
-        // grid center + scale works if margin handles overflow.
-        // Actually, if we scale the element, the grid cell stays same size unless we change width/height.
-        // Better approach: Change width/height of wrapper instead of transform?
-        // No, transform is smoother. Let's set transform-origin.
-        // If we use zoom property? Non-standard.
-        // CSS Transform scale does NOT affect layout flow, so scrollbars won't appear automatically
-        // UNLESS we wrap it in a container that sizes to match.
-        // Let's try setting width/height instead of transform for flow-based scrolling?
-        // Or use Zoom property (works in Chrome/Safari/Edge).
-        // Let's stick to style.width/height for the wrapper to force layout update.
-        
-        // Re-run handleResize logic but apply zoom multiplier
         this.handleResize(); 
     }
 
@@ -990,9 +963,13 @@ class MotionSketchVector {
     resizeCanvas(w, h) {
         this.canvasWidth = w;
         this.canvasHeight = h;
+        
         this.canvas.width = w;
         this.canvas.height = h;
+        
         this.canvasWrapper.style.aspectRatio = `${w}/${h}`;
+        this.canvasWrapper.style.width = '100%'; 
+        this.canvasWrapper.style.height = 'auto'; 
         this.handleResize();
         this.renderCanvas();
     }
@@ -1058,6 +1035,7 @@ class MotionSketchVector {
             const div = document.createElement('div');
             div.className = 'swatch';
             div.style.backgroundColor = color;
+            div.title = "Double-click to edit"; // Tooltip hint
             if (this.brushColor === color) div.classList.add('active');
             
             // Single Tap: Select
@@ -1206,6 +1184,7 @@ class MotionSketchVector {
                     this.saveState();
                     this.dragMode = handle;
                     this.dragStart = pos;
+                    
                     if (this.selectedObject.stroke.type === 'text') {
                         this.dragOriginalProps = {
                             x: this.selectedObject.stroke.x,
@@ -1464,6 +1443,7 @@ class MotionSketchVector {
     }
 
     strokeHit(stroke, pos) {
+        // FIX: Removed the '< 2' check that was preventing Dots from being selected
         if (!stroke.points || stroke.points.length === 0) return false;
         
         const hitThresh = Math.max(10, stroke.size);
@@ -1998,7 +1978,8 @@ class MotionSketchVector {
                 paperStrokes: this.paperStrokes,
                 fps: this.fps,
                 width: this.canvasWidth,
-                height: this.canvasHeight
+                height: this.canvasHeight,
+                palette: this.palette // Save palette in history? Usually global, but why not.
             };
             try {
                 const cleanFrames = this.frames.map(f => ({strokes: f.strokes}));
