@@ -40,12 +40,10 @@
 
         .workspace {
             position: absolute;
-            top: 100px;       /* Clear Header */
-            bottom: 190px;    /* Clear Timeline */
-            left: 100px;      /* Clear Left Toolbar */
-            right: 280px;     /* Clear Right Properties */
-            width: auto; 
-            height: auto;
+            top: 100px;       
+            bottom: 190px;    
+            left: 100px; 
+            right: 280px;
             display: flex; justify-content: center; align-items: center;
             z-index: 0;
             overscroll-behavior: none;
@@ -61,10 +59,7 @@
             border-radius: 4px;
             background-image: linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
             background-size: 20px 20px;
-            transition: width 0.3s, height 0.3s; 
-            max-width: 100%;
-            max-height: 100%;
-            aspect-ratio: 1/1; /* Default, updated by JS */
+            /* Size set via JS handleResize */
         }
 
         canvas { 
@@ -74,6 +69,7 @@
         }
         #rendering-canvas { z-index: 1; }
 
+        /* Panels */
         .glass-panel {
             background: var(--bg-panel);
             backdrop-filter: blur(20px);
@@ -424,10 +420,10 @@
 
         @media (max-width: 900px) {
             .props-panel { display: none; } 
-            .workspace { right: 20px; } 
+            .workspace { right: 20px; left: 100px; } 
         }
         @media (max-height: 700px) {
-            .canvas-wrapper { /* Let aspect-ratio do work */ }
+            .canvas-wrapper { }
             .tools-panel { top: 80px; bottom: 180px; }
         }
         @media (max-width: 600px) {
@@ -711,15 +707,45 @@ class MotionSketchVector {
 
     init() {
         this.setupEvents();
+        this.handleResize(); 
+        window.addEventListener('resize', () => this.handleResize()); 
         this.renderUI();
-        this.resizeCanvas(this.canvasWidth, this.canvasHeight);
+        this.renderCanvas();
         this.loadStorage();
         
         const picker = document.getElementById('html-color-picker');
         if(picker) picker.value = this.brushColor;
     }
     
-    handleResize() {}
+    handleResize() {
+        // Get workspace dimensions
+        const workspace = document.querySelector('.workspace');
+        if(!workspace) return;
+        
+        // Available space with some padding
+        const availW = workspace.clientWidth - 40;
+        const availH = workspace.clientHeight - 40;
+        
+        // Project aspect ratio
+        const aspect = this.canvasWidth / this.canvasHeight;
+        
+        let w, h;
+        
+        // Fit logic (contain)
+        if (availW / availH > aspect) {
+             // Screen is wider than canvas -> Fit to Height
+             h = availH;
+             w = h * aspect;
+        } else {
+             // Screen is narrower -> Fit to Width
+             w = availW;
+             h = w / aspect;
+        }
+        
+        // Apply sizes in px to wrapper
+        this.canvasWrapper.style.width = `${w}px`;
+        this.canvasWrapper.style.height = `${h}px`;
+    }
 
     setupEvents() {
         const c = this.canvas;
@@ -784,14 +810,11 @@ class MotionSketchVector {
     resizeCanvas(w, h) {
         this.canvasWidth = w;
         this.canvasHeight = h;
-        
         this.canvas.width = w;
         this.canvas.height = h;
         
-        this.canvasWrapper.style.aspectRatio = `${w}/${h}`;
-        this.canvasWrapper.style.width = '100%'; 
-        this.canvasWrapper.style.height = 'auto'; 
-
+        // Recalculate visual fit
+        this.handleResize();
         this.renderCanvas();
     }
     
@@ -1163,26 +1186,7 @@ class MotionSketchVector {
         return newPoints;
     }
 
-    hitTestHandles(pos) {
-        const b = this.selectedObject.bounds;
-        const s = 10; 
-        const hit = (x, y) => Math.abs(pos.x - x) < s && Math.abs(pos.y - y) < s;
-        
-        if (hit(b.x + b.w/2, b.y - 25)) return 'rotate';
-
-        if (hit(b.x, b.y)) return 'resize-tl';
-        if (hit(b.x+b.w, b.y)) return 'resize-tr';
-        if (hit(b.x, b.y+b.h)) return 'resize-bl';
-        if (hit(b.x+b.w, b.y+b.h)) return 'resize-br';
-        
-        if (hit(b.x + b.w/2, b.y)) return 'resize-t';      
-        if (hit(b.x + b.w/2, b.y + b.h)) return 'resize-b';
-        if (hit(b.x, b.y + b.h/2)) return 'resize-l';      
-        if (hit(b.x + b.w, b.y + b.h/2)) return 'resize-r';
-        
-        return null;
-    }
-    
+    /* --- Vector Math & Hit Testing --- */
     hitTest(pos) {
         const checkList = (list, layerName) => {
             for (let i = list.length - 1; i >= 0; i--) {
@@ -1235,6 +1239,26 @@ class MotionSketchVector {
         return inside;
     }
 
+    hitTestHandles(pos) {
+        const b = this.selectedObject.bounds;
+        const s = 10; 
+        const hit = (x, y) => Math.abs(pos.x - x) < s && Math.abs(pos.y - y) < s;
+        
+        if (hit(b.x + b.w/2, b.y - 25)) return 'rotate';
+
+        if (hit(b.x, b.y)) return 'resize-tl';
+        if (hit(b.x+b.w, b.y)) return 'resize-tr';
+        if (hit(b.x, b.y+b.h)) return 'resize-bl';
+        if (hit(b.x+b.w, b.y+b.h)) return 'resize-br';
+        
+        if (hit(b.x + b.w/2, b.y)) return 'resize-t';      
+        if (hit(b.x + b.w/2, b.y + b.h)) return 'resize-b';
+        if (hit(b.x, b.y + b.h/2)) return 'resize-l';      
+        if (hit(b.x + b.w, b.y + b.h/2)) return 'resize-r';
+        
+        return null;
+    }
+
     distToSegment(p, v, w) {
         const l2 = (v.x - w.x)**2 + (v.y - w.y)**2;
         if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
@@ -1270,49 +1294,6 @@ class MotionSketchVector {
         return pos.x >= rect.x && pos.x <= rect.x + rect.w && pos.y >= rect.y && pos.y <= rect.y + rect.h;
     }
 
-    /* --- Animation --- */
-    addFrame() {
-        this.saveState();
-        this.selectedObject = null; // Fix: Deselect to prevent ghost UI
-        this.frames.splice(this.frameIndex + 1, 0, { strokes: [] });
-        this.frameIndex++;
-        this.renderUI();
-        this.renderCanvas();
-        this.saveStorage();
-    }
-
-    duplicateFrame(index) {
-        this.saveState();
-        this.selectedObject = null; // Fix: Deselect to prevent ghost UI
-        const target = index !== undefined ? index : this.frameIndex;
-        const newStrokes = JSON.parse(JSON.stringify(this.frames[target].strokes));
-        this.frames.splice(target + 1, 0, { strokes: newStrokes });
-        this.frameIndex = target + 1;
-        this.renderUI();
-        this.renderCanvas();
-        this.saveStorage();
-    }
-
-    deleteFrame(index) {
-        this.saveState();
-        this.selectedObject = null; // Fix: Deselect
-        const targetIndex = (index !== undefined) ? index : this.frameIndex;
-        if(this.frames.length <= 1) { 
-            this.frames[0].strokes = []; 
-            this.renderCanvas();
-        } else {
-            this.frames.splice(targetIndex, 1);
-            if(this.frameIndex >= this.frames.length) {
-                this.frameIndex = this.frames.length - 1;
-            } else if (this.frameIndex > targetIndex) {
-                this.frameIndex--;
-            }
-        }
-        this.renderUI();
-        this.renderCanvas();
-        this.saveStorage();
-    }
-
     /* --- Rendering --- */
     renderCanvas() {
         const ctx = this.ctx;
@@ -1340,10 +1321,8 @@ class MotionSketchVector {
     drawObject(ctx, obj) {
         if (obj.type === 'text') {
             ctx.save();
-            // Pivot to text origin
             ctx.translate(obj.x, obj.y);
             
-            // Safety check for scale to prevent invisible text bug
             const sx = (isFinite(obj.sx) && obj.sx !== 0) ? obj.sx : 1;
             const sy = (isFinite(obj.sy) && obj.sy !== 0) ? obj.sy : 1;
             
@@ -1351,12 +1330,10 @@ class MotionSketchVector {
             ctx.font = `${obj.size}px sans-serif`;
             ctx.fillStyle = obj.color;
             
-            // Fix: Multiply existing globalAlpha (onion skin) by object opacity
             const currentAlpha = ctx.globalAlpha;
             const objAlpha = obj.opacity !== undefined ? obj.opacity : 1;
             ctx.globalAlpha = currentAlpha * objAlpha;
 
-            // Draw at 0,0 because we translated
             ctx.fillText(obj.text, 0, 0);
             ctx.restore();
         } else {
@@ -1522,6 +1499,48 @@ class MotionSketchVector {
         this.isWiggle = !this.isWiggle;
         document.getElementById('wiggle-btn').classList.toggle('active', this.isWiggle);
         if(this.isPlaying) this.renderCanvas(); 
+    }
+
+    addFrame() {
+        this.saveState();
+        this.selectedObject = null; 
+        this.frames.splice(this.frameIndex + 1, 0, { strokes: [] });
+        this.frameIndex++;
+        this.renderUI();
+        this.renderCanvas();
+        this.saveStorage();
+    }
+
+    duplicateFrame(index) {
+        this.saveState();
+        this.selectedObject = null; 
+        const target = index !== undefined ? index : this.frameIndex;
+        const newStrokes = JSON.parse(JSON.stringify(this.frames[target].strokes));
+        this.frames.splice(target + 1, 0, { strokes: newStrokes });
+        this.frameIndex = target + 1;
+        this.renderUI();
+        this.renderCanvas();
+        this.saveStorage();
+    }
+
+    deleteFrame(index) {
+        this.saveState();
+        this.selectedObject = null; 
+        const targetIndex = (index !== undefined) ? index : this.frameIndex;
+        if(this.frames.length <= 1) { 
+            this.frames[0].strokes = []; 
+            this.renderCanvas();
+        } else {
+            this.frames.splice(targetIndex, 1);
+            if(this.frameIndex >= this.frames.length) {
+                this.frameIndex = this.frames.length - 1;
+            } else if (this.frameIndex > targetIndex) {
+                this.frameIndex--;
+            }
+        }
+        this.renderUI();
+        this.renderCanvas();
+        this.saveStorage();
     }
 
     togglePlay() {
