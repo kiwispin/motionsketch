@@ -667,6 +667,7 @@
 <script>
 class MotionSketchVector {
     constructor() {
+        // ... existing constructor ...
         this.canvas = document.getElementById('rendering-canvas');
         this.canvasWrapper = document.getElementById('canvas-wrapper');
         this.ctx = this.canvas.getContext('2d');
@@ -707,10 +708,8 @@ class MotionSketchVector {
 
     init() {
         this.setupEvents();
-        this.handleResize(); 
-        window.addEventListener('resize', () => this.handleResize()); 
         this.renderUI();
-        this.renderCanvas();
+        this.resizeCanvas(this.canvasWidth, this.canvasHeight);
         this.loadStorage();
         
         const picker = document.getElementById('html-color-picker');
@@ -750,29 +749,32 @@ class MotionSketchVector {
     setupEvents() {
         const c = this.canvas;
         
-        const start = (e) => this.onDown(this.getPos(e));
-        const move = (e) => this.onMove(this.getPos(e));
-        const end = (e) => this.onUp(this.getPos(e));
+        // Switched to Pointer Events for Wacom/Apple Pencil support
+        c.addEventListener('pointerdown', (e) => {
+            c.setPointerCapture(e.pointerId); // Capture pen focus
+            this.onDown(this.getPos(e), e.pressure);
+        });
+        
+        window.addEventListener('pointermove', (e) => {
+             // Only track if we are active on this canvas
+             if (this.isDrawing || this.selectedObject) {
+                 // e.pressure is 0.5 for mouse in some browsers, 0 for hover
+                 // For drawing, we need distinct pressure.
+                 let p = e.pressure;
+                 if (e.pointerType === 'mouse' && e.buttons === 1) p = 0.5; // Force const for mouse
+                 this.onMove(this.getPos(e), p);
+             }
+        });
+        
+        window.addEventListener('pointerup', (e) => {
+            c.releasePointerCapture(e.pointerId);
+            this.onUp();
+        });
+        
+        // Prevent touch scrolling
+        c.addEventListener('touchstart', (e) => e.preventDefault(), {passive: false});
+        c.addEventListener('touchmove', (e) => e.preventDefault(), {passive: false});
 
-        c.addEventListener('mousedown', start);
-        window.addEventListener('mousemove', move);
-        window.addEventListener('mouseup', end);
-        
-        c.addEventListener('touchstart', (e) => { 
-            if(e.touches.length === 1) {
-                e.preventDefault(); 
-                start(e.touches[0]); 
-            }
-        }, {passive:false});
-        
-        window.addEventListener('touchmove', (e) => { 
-            if((this.isDrawing || this.selectedObject) && e.touches.length === 1) {
-                e.preventDefault(); 
-                move(e.touches[0]); 
-            }
-        }, {passive:false});
-        
-        window.addEventListener('touchend', end);
 
         document.addEventListener('click', (e) => {
             const shapeWrapper = document.getElementById('shape-wrapper');
@@ -807,13 +809,15 @@ class MotionSketchVector {
         };
     }
 
+    // ... existing resizeCanvas, openSettings, applySettings, openTextModal, confirmAddText ...
     resizeCanvas(w, h) {
         this.canvasWidth = w;
         this.canvasHeight = h;
         this.canvas.width = w;
         this.canvas.height = h;
-        
-        // Recalculate visual fit
+        this.canvasWrapper.style.aspectRatio = `${w}/${h}`;
+        this.canvasWrapper.style.width = '100%'; 
+        this.canvasWrapper.style.height = 'auto'; 
         this.handleResize();
         this.renderCanvas();
     }
@@ -832,7 +836,6 @@ class MotionSketchVector {
         this.saveStorage();
     }
     
-    /* --- Text Modal --- */
     openTextModal(pos) {
         this.textInputPos = pos;
         document.getElementById('text-input-value').value = "";
@@ -871,7 +874,7 @@ class MotionSketchVector {
         this.setTool('select'); 
     }
 
-    /* --- History --- */
+    // ... existing History ...
     saveState() {
         if (this.history.length > 20) this.history.shift();
         this.redoStack = [];
@@ -934,9 +937,10 @@ class MotionSketchVector {
 
     /* --- Core Logic --- */
 
-    onDown(pos) {
+    onDown(pos, pressure = 0.5) {
         if(this.isPlaying) return;
 
+        // ... bucket logic ...
         if (this.tool === 'bucket') {
             this.saveState();
             const found = this.hitTest(pos);
@@ -960,13 +964,13 @@ class MotionSketchVector {
         }
 
         if (this.tool === 'select') {
+            // ... select logic ...
             if (this.selectedObject) {
                 const handle = this.hitTestHandles(pos);
                 if (handle) {
                     this.saveState();
                     this.dragMode = handle;
                     this.dragStart = pos;
-                    
                     if (this.selectedObject.stroke.type === 'text') {
                         this.dragOriginalProps = {
                             x: this.selectedObject.stroke.x,
@@ -1027,12 +1031,16 @@ class MotionSketchVector {
         this.selectedObject = null;
         this.dragStart = pos; 
         
+        // Add pressure info to points
+        // Ensure pressure is valid number (default 0.5)
+        const p = (typeof pressure === 'number') ? pressure : 0.5;
+
         this.currentStroke = {
             type: this.tool, 
             color: this.tool === 'eraser' ? '#ffffff' : this.brushColor,
             size: this.brushSize,
             opacity: this.opacity,
-            points: [pos], 
+            points: [{x: pos.x, y: pos.y, p: p}], 
             fillColor: null 
         };
         
@@ -1041,17 +1049,17 @@ class MotionSketchVector {
         this.renderCanvas();
     }
 
-    onMove(pos) {
+    onMove(pos, pressure = 0.5) {
         if (this.isPlaying) return;
 
         if (this.tool === 'select' && this.dragMode && this.selectedObject) {
+            // ... existing move logic ...
             const stroke = this.selectedObject.stroke;
             const bounds = this.dragOriginalBounds;
 
             if (this.dragMode === 'move') {
                 const dx = pos.x - this.dragStart.x;
                 const dy = pos.y - this.dragStart.y;
-                
                 if (stroke.type === 'text') {
                     stroke.x = this.dragOriginalProps.x + dx;
                     stroke.y = this.dragOriginalProps.y + dy;
@@ -1070,10 +1078,8 @@ class MotionSketchVector {
                     const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
                     const angleDiff = currAngle - startAngle;
                     const cos = Math.cos(angleDiff), sin = Math.sin(angleDiff);
-                    
                     const pts = stroke.points;
                     const origPts = this.dragOriginalPoints;
-                    
                     for(let i=0; i<pts.length; i++) {
                         const nx = origPts[i].x - this.dragCenter.x;
                         const ny = origPts[i].y - this.dragCenter.y;
@@ -1112,7 +1118,6 @@ class MotionSketchVector {
                     }
                 }
             }
-
             this.calcBounds(this.selectedObject.stroke);
             this.renderCanvas();
             return;
@@ -1120,19 +1125,22 @@ class MotionSketchVector {
 
         if (this.isDrawing && this.currentStroke) {
             if (this.tool === 'brush' || this.tool === 'eraser') {
-                this.currentStroke.points.push(pos);
+                // Add pressure data
+                const p = (typeof pressure === 'number') ? pressure : 0.5;
+                this.currentStroke.points.push({x: pos.x, y: pos.y, p: p});
             } 
             else {
+                // ... shapes ...
                 const start = this.dragStart;
                 const end = pos;
                 if (this.tool === 'line') {
-                    this.currentStroke.points = [start, end];
+                    this.currentStroke.points = [{x:start.x, y:start.y, p:0.5}, {x:end.x, y:end.y, p:0.5}];
                 } 
                 else if (this.tool === 'rect') {
                     this.currentStroke.points = [
-                        {x: start.x, y: start.y}, {x: end.x, y: start.y},
-                        {x: end.x, y: end.y}, {x: start.x, y: end.y},
-                        {x: start.x, y: start.y}
+                        {x: start.x, y: start.y, p:0.5}, {x: end.x, y: start.y, p:0.5},
+                        {x: end.x, y: end.y, p:0.5}, {x: start.x, y: end.y, p:0.5},
+                        {x: start.x, y: start.y, p:0.5}
                     ];
                 }
                 else if (this.tool === 'circle') {
@@ -1146,7 +1154,8 @@ class MotionSketchVector {
                         const theta = (i / segments) * Math.PI * 2;
                         pts.push({
                             x: cx + rx * Math.cos(theta),
-                            y: cy + ry * Math.sin(theta)
+                            y: cy + ry * Math.sin(theta),
+                            p: 0.5
                         });
                     }
                     this.currentStroke.points = pts;
@@ -1156,6 +1165,7 @@ class MotionSketchVector {
         }
     }
 
+    // ... onUp, simplifyPoints, hitTest, etc ...
     onUp() {
         if (this.isDrawing) {
             if ((this.tool === 'brush' || this.tool === 'eraser') && this.currentStroke.points.length > 5) {
@@ -1293,7 +1303,7 @@ class MotionSketchVector {
     isInBounds(pos, rect) {
         return pos.x >= rect.x && pos.x <= rect.x + rect.w && pos.y >= rect.y && pos.y <= rect.y + rect.h;
     }
-
+    
     /* --- Rendering --- */
     renderCanvas() {
         const ctx = this.ctx;
@@ -1306,7 +1316,8 @@ class MotionSketchVector {
         
         if (this.isOnion && this.frameIndex > 0 && !this.isPlaying) {
             ctx.globalAlpha = 0.3;
-            this.frames[this.frameIndex - 1].strokes.forEach(s => this.drawObject(ctx, s));
+            // Fix: Pass 'true' for simpleMode to prevent alpha accumulation
+            this.frames[this.frameIndex - 1].strokes.forEach(s => this.drawObject(ctx, s, true));
             ctx.globalAlpha = 1.0;
         }
 
@@ -1318,7 +1329,7 @@ class MotionSketchVector {
         if (this.selectedObject && !this.isPlaying) this.drawSelectionUI(ctx);
     }
 
-    drawObject(ctx, obj) {
+    drawObject(ctx, obj, simpleMode = false) {
         if (obj.type === 'text') {
             ctx.save();
             ctx.translate(obj.x, obj.y);
@@ -1337,83 +1348,78 @@ class MotionSketchVector {
             ctx.fillText(obj.text, 0, 0);
             ctx.restore();
         } else {
-            this.drawStroke(ctx, obj);
+            this.drawStroke(ctx, obj, simpleMode);
         }
     }
 
-    drawSelectionUI(ctx) {
-        const b = this.selectedObject.bounds;
-        ctx.save();
-        ctx.strokeStyle = '#0A84FF';
-        ctx.lineWidth = 1;
-        
-        ctx.beginPath();
-        ctx.moveTo(b.x + b.w/2, b.y);
-        ctx.lineTo(b.x + b.w/2, b.y - 25);
-        ctx.stroke();
-        
-        ctx.beginPath();
-        ctx.arc(b.x + b.w/2, b.y - 25, 5, 0, Math.PI*2);
-        ctx.fillStyle = '#fff';
-        ctx.fill();
-        ctx.stroke();
+    // ... drawSelectionUI ...
 
-        ctx.setLineDash([5, 5]);
-        ctx.strokeRect(b.x, b.y, b.w, b.h);
-        ctx.setLineDash([]);
-        
-        const drawHandle = (x, y) => {
-            ctx.fillStyle = '#fff';
-            ctx.strokeStyle = '#3498db';
-            ctx.fillRect(x-4, y-4, 8, 8);
-            ctx.strokeRect(x-4, y-4, 8, 8);
-        };
-        
-        drawHandle(b.x, b.y);
-        drawHandle(b.x+b.w, b.y);
-        drawHandle(b.x, b.y+b.h);
-        drawHandle(b.x+b.w, b.y+b.h);
-
-        drawHandle(b.x + b.w/2, b.y);           
-        drawHandle(b.x + b.w/2, b.y + b.h);     
-        drawHandle(b.x, b.y + b.h/2);           
-        drawHandle(b.x + b.w, b.y + b.h/2);     
-        
-        ctx.restore();
-    }
-
-    drawStroke(ctx, stroke) {
+    // Updated to accept simpleMode
+    drawStroke(ctx, stroke, simpleMode = false) {
         if (!stroke.points || stroke.points.length === 0) return;
-        ctx.beginPath();
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.lineWidth = stroke.size;
         
         const hex = stroke.color;
         const alpha = stroke.opacity !== undefined ? stroke.opacity : 1.0;
-        const fillAlpha = alpha; 
-
         const rgba = this.hexToRgba(hex, alpha);
+        
+        ctx.fillStyle = rgba;
         ctx.strokeStyle = rgba;
         
-        if (stroke.points.length === 1) {
-            ctx.fillStyle = rgba;
-            ctx.arc(stroke.points[0].x, stroke.points[0].y, stroke.size/2, 0, Math.PI*2);
+        // Fix: If simpleMode (Onion Skin) OR Geometric shape, use standard line drawing
+        // This avoids the "dark overlap" issue with transparency
+        if (simpleMode || stroke.type === 'rect' || stroke.type === 'line' || stroke.type === 'circle') {
+             ctx.beginPath();
+             ctx.lineWidth = stroke.size;
+             ctx.lineCap = 'round';
+             ctx.lineJoin = 'round';
+             
+             ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+             for (let i = 1; i < stroke.points.length; i++) {
+                 ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+             }
+             if (stroke.fillColor) {
+                 ctx.fillStyle = this.hexToRgba(stroke.fillColor, alpha); 
+                 ctx.fill();
+                 ctx.fillStyle = rgba; 
+             }
+             ctx.stroke();
+             return;
+        }
+
+        // Pressure Sensitive Rendering (Only for active frame brush/eraser)
+        
+        if (stroke.points.length < 2) {
+            const p = stroke.points[0];
+            const w = stroke.size * (p.p !== undefined ? p.p : 0.5); 
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, w/2, 0, Math.PI*2);
             ctx.fill();
-        } else {
-            ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-            for (let i = 1; i < stroke.points.length; i++) {
-                ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
-            }
+            return;
+        }
+        
+        for (let i = 0; i < stroke.points.length - 1; i++) {
+            const p1 = stroke.points[i];
+            const p2 = stroke.points[i+1];
             
-            if (stroke.fillColor) {
-                ctx.fillStyle = this.hexToRgba(stroke.fillColor, fillAlpha); 
+            const w1 = stroke.size * (p1.p !== undefined ? p1.p : 0.5);
+            const w2 = stroke.size * (p2.p !== undefined ? p2.p : 0.5);
+            
+            const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+            const steps = Math.ceil(dist / 2); 
+            
+            for (let j = 0; j <= steps; j++) {
+                const t = j / steps;
+                const x = p1.x + (p2.x - p1.x) * t;
+                const y = p1.y + (p2.y - p1.y) * t;
+                const w = w1 + (w2 - w1) * t;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, Math.max(1, w/2), 0, Math.PI * 2);
                 ctx.fill();
             }
-            ctx.stroke();
         }
     }
-    
+
     hexToRgba(hex, alpha) {
         let r=0,g=0,b=0;
         if (hex && hex.length === 7) {
@@ -1423,7 +1429,8 @@ class MotionSketchVector {
         }
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
-
+    
+    // ... Rest of the class methods ...
     setTool(t) {
         this.tool = t;
         document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
