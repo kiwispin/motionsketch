@@ -1812,7 +1812,8 @@ class MotionSketchVector {
 
         const hit = (x, y) => Math.abs(p.x - x) < s && Math.abs(p.y - y) < s;
         
-        if (hit(b.x + b.w/2, b.y - 25)) return 'rotate';
+        // Only check rotate handle if NOT a group
+        if (!this.selectedObject.isGroup && hit(b.x + b.w/2, b.y - 25)) return 'rotate';
 
         if (hit(b.x, b.y)) return 'resize-tl';
         if (hit(b.x+b.w, b.y)) return 'resize-tr';
@@ -2011,7 +2012,7 @@ class MotionSketchVector {
         ctx.save();
         
         // Rotate Selection Box if needed (Unified for Stroke and Text)
-        if (this.selectedObject.stroke && (this.selectedObject.stroke.angle || this.selectedObject.stroke.angle === 0)) {
+        if (this.selectedObject.stroke && this.selectedObject.stroke.angle) {
              const cx = b.x + b.w/2;
              const cy = b.y + b.h/2;
              ctx.translate(cx, cy);
