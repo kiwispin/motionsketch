@@ -1800,7 +1800,7 @@ class MotionSketchVector {
         let p = {x: pos.x, y: pos.y};
         
         // If rotated object, un-rotate the mouse position relative to the box center
-        if (this.selectedObject.stroke.angle) {
+        if (this.selectedObject.stroke && this.selectedObject.stroke.angle) {
             const cx = b.x + b.w/2;
             const cy = b.y + b.h/2;
             const dx = pos.x - cx;
@@ -1860,6 +1860,7 @@ class MotionSketchVector {
             return { x: p.x - w/2, y: p.y - h/2, w: w, h: h };
         }
         else {
+            if(stroke.points.length === 0) return {x:0, y:0, w:0, h:0};
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             stroke.points.forEach(p => {
                 if(p.x < minX) minX = p.x;
@@ -1893,7 +1894,7 @@ class MotionSketchVector {
 
     isInBounds(pos, rect) {
         // FIX: If rotated object, unrotate pos for checking
-        if (this.selectedObject && this.selectedObject.stroke.angle) {
+        if (this.selectedObject && this.selectedObject.stroke && this.selectedObject.stroke.angle) {
              const cx = rect.x + rect.w/2;
              const cy = rect.y + rect.h/2;
              const dx = pos.x - cx;
@@ -2010,7 +2011,7 @@ class MotionSketchVector {
         ctx.save();
         
         // Rotate Selection Box if needed (Unified for Stroke and Text)
-        if (this.selectedObject.stroke.angle) {
+        if (this.selectedObject.stroke && (this.selectedObject.stroke.angle || this.selectedObject.stroke.angle === 0)) {
              const cx = b.x + b.w/2;
              const cy = b.y + b.h/2;
              ctx.translate(cx, cy);
@@ -2021,16 +2022,19 @@ class MotionSketchVector {
         ctx.strokeStyle = '#0A84FF';
         ctx.lineWidth = 1;
         
-        ctx.beginPath();
-        ctx.moveTo(b.x + b.w/2, b.y);
-        ctx.lineTo(b.x + b.w/2, b.y - 25);
-        ctx.stroke();
-        
-        ctx.beginPath();
-        ctx.arc(b.x + b.w/2, b.y - 25, 5, 0, Math.PI*2);
-        ctx.fillStyle = '#fff';
-        ctx.fill();
-        ctx.stroke();
+        // Only Draw Rotate Handle if NOT a Group
+        if (!this.selectedObject.isGroup) {
+            ctx.beginPath();
+            ctx.moveTo(b.x + b.w/2, b.y);
+            ctx.lineTo(b.x + b.w/2, b.y - 25);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.arc(b.x + b.w/2, b.y - 25, 5, 0, Math.PI*2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            ctx.stroke();
+        }
 
         ctx.setLineDash([5, 5]);
         ctx.strokeRect(b.x, b.y, b.w, b.h);
