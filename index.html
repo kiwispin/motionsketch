@@ -1314,6 +1314,8 @@ class MotionSketchVector {
                     if (this.selectedObject.isGroup) {
                          // Prepare Group Drag
                          this.dragOriginalBounds = {...this.selectedObject.bounds};
+                         this.dragOriginalAngle = this.selectedObject.angle || 0; // FIX: Capture group angle
+
                          this.dragCenter = {
                              x: this.selectedObject.bounds.x + this.selectedObject.bounds.w/2,
                              y: this.selectedObject.bounds.y + this.selectedObject.bounds.h/2
@@ -1475,6 +1477,9 @@ class MotionSketchVector {
                         const cx = this.dragCenter.x;
                         const cy = this.dragCenter.y;
                         
+                        // Update Group Angle
+                        this.selectedObject.angle = (this.dragOriginalAngle || 0) + angleDiff;
+
                         this.selectedObject.items.forEach((item, i) => {
                              const orig = this.dragOriginalItems[i];
                              if (!orig) return;
@@ -1489,16 +1494,8 @@ class MotionSketchVector {
                                  item.stroke.angle = (orig.angle || 0) + angleDiff;
                              } else {
                                  // Rotate Position of every point around Group Center
-                                 // AND update item angle? 
-                                 // Better approach for strokes: Rotate the points themselves around group center
-                                 // AND rotate the stroke's own angle if it had one.
-                                 
-                                 // NOTE: To support "Rigid Body" rotation of a group of drawings, 
-                                 // we need to rotate their point coordinates around the group center, 
-                                 // BUT we also need to rotate their "orientation" if they have `angle`.
-                                 // Since our strokes are just points, rotating points IS rotating orientation.
-                                 // UNLESS the stroke has a non-zero angle property. 
-                                 // Since we are moving points, we just add to angle.
+                                 // NOTE: We rotate ORIGINAL points to avoid drift, then apply global group offset if needed
+                                 // BUT here we are moving the points themselves.
                                  
                                  const pts = item.stroke.points;
                                  for(let k=0; k<pts.length; k++) {
@@ -1509,11 +1506,12 @@ class MotionSketchVector {
                                          pts[k].y = (px * sin + py * cos) + cy;
                                      }
                                  }
+                                 // Also rotate the stroke's own local angle
                                  item.stroke.angle = (orig.angle || 0) + angleDiff;
                              }
                         });
-                        // Recalculate bounds after rotation (AABB grows/shrinks)
-                        this.selectedObject.bounds = this.getGroupBounds(this.selectedObject.items);
+                        // Don't recalculate bounds here. We want the box to rotate with the group.
+                        // this.selectedObject.bounds = this.getGroupBounds(this.selectedObject.items);
                     }
                     else if (this.dragMode.startsWith('resize')) {
                          // Simple resize logic for groups
@@ -1714,7 +1712,8 @@ class MotionSketchVector {
                     this.selectedObject = {
                         isGroup: true,
                         items: items,
-                        bounds: this.getGroupBounds(items)
+                        bounds: this.getGroupBounds(items),
+                        angle: 0 // Initialize Group Angle
                     };
                 }
             }
@@ -1850,7 +1849,7 @@ class MotionSketchVector {
         let p = {x: pos.x, y: pos.y};
         
         // If rotated object, un-rotate the mouse position relative to the box center
-        // ONLY for single objects. Group rotation keeps AABB for now.
+        // Handles SINGLE OBJECT rotation
         if (this.selectedObject.stroke && this.selectedObject.stroke.angle) {
             const cx = b.x + b.w/2;
             const cy = b.y + b.h/2;
@@ -1860,10 +1859,21 @@ class MotionSketchVector {
             p.x = cx + dx * Math.cos(ang) - dy * Math.sin(ang);
             p.y = cy + dx * Math.sin(ang) + dy * Math.cos(ang);
         }
+        // Handles GROUP rotation
+        else if (this.selectedObject.isGroup && this.selectedObject.angle) {
+            const cx = b.x + b.w/2;
+            const cy = b.y + b.h/2;
+            const dx = pos.x - cx;
+            const dy = pos.y - cy;
+            const ang = -this.selectedObject.angle;
+            p.x = cx + dx * Math.cos(ang) - dy * Math.sin(ang);
+            p.y = cy + dx * Math.sin(ang) + dy * Math.cos(ang);
+        }
 
         const hit = (x, y) => Math.abs(p.x - x) < s && Math.abs(p.y - y) < s;
         
         // UPDATED: Allow rotate handle for both Single and Group
+        // NOTE: For Groups, be careful not to freeze if logic is missing
         if (hit(b.x + b.w/2, b.y - 25)) return 'rotate';
 
         if (hit(b.x, b.y)) return 'resize-tl';
@@ -1946,15 +1956,21 @@ class MotionSketchVector {
 
     isInBounds(pos, rect) {
         // FIX: If rotated object, unrotate pos for checking
-        if (this.selectedObject && this.selectedObject.stroke && this.selectedObject.stroke.angle) {
-             const cx = rect.x + rect.w/2;
-             const cy = rect.y + rect.h/2;
-             const dx = pos.x - cx;
-             const dy = pos.y - cy;
-             const ang = -this.selectedObject.stroke.angle;
-             const rx = cx + dx * Math.cos(ang) - dy * Math.sin(ang);
-             const ry = cy + dx * Math.sin(ang) + dy * Math.cos(ang);
-             return rx >= rect.x && rx <= rect.x + rect.w && ry >= rect.y && ry <= rect.y + rect.h;
+        if (this.selectedObject) {
+            let angle = 0;
+            if (this.selectedObject.isGroup) angle = this.selectedObject.angle;
+            else if (this.selectedObject.stroke) angle = this.selectedObject.stroke.angle;
+            
+            if (angle) {
+                 const cx = rect.x + rect.w/2;
+                 const cy = rect.y + rect.h/2;
+                 const dx = pos.x - cx;
+                 const dy = pos.y - cy;
+                 const ang = -angle;
+                 const rx = cx + dx * Math.cos(ang) - dy * Math.sin(ang);
+                 const ry = cy + dx * Math.sin(ang) + dy * Math.cos(ang);
+                 return rx >= rect.x && rx <= rect.x + rect.w && ry >= rect.y && ry <= rect.y + rect.h;
+            }
         }
         return pos.x >= rect.x && pos.x <= rect.x + rect.w && pos.y >= rect.y && pos.y <= rect.y + rect.h;
     }
@@ -2063,11 +2079,15 @@ class MotionSketchVector {
         ctx.save();
         
         // Rotate Selection Box if needed (Unified for Stroke and Text)
-        if (this.selectedObject.stroke && this.selectedObject.stroke.angle) {
+        let angle = 0;
+        if (this.selectedObject.isGroup) angle = this.selectedObject.angle;
+        else if (this.selectedObject.stroke) angle = this.selectedObject.stroke.angle;
+
+        if (angle) {
              const cx = b.x + b.w/2;
              const cy = b.y + b.h/2;
              ctx.translate(cx, cy);
-             ctx.rotate(this.selectedObject.stroke.angle);
+             ctx.rotate(angle);
              ctx.translate(-cx, -cy);
         }
 
