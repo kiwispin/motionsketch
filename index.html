@@ -369,7 +369,9 @@
             flex-shrink: 0;
             overflow: hidden;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            cursor: grab;
         }
+        .frame-card:active { cursor: grabbing; }
         .frame-card img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
         .frame-card.active {
             border-color: var(--accent-blue);
@@ -634,8 +636,18 @@
 </header>
 
 <div class="glass-panel tools-panel">
-    <div class="tool-btn active" id="tool-brush" onclick="app.setTool('brush')" title="Brush (B)">
-        <i class="fas fa-paint-brush"></i>
+    <!-- BRUSH FLYOUT GROUP -->
+    <div class="tool-flyout-wrapper" id="brush-wrapper" onclick="this.classList.toggle('expanded')">
+        <div class="tool-btn active" id="tool-brush-anchor" title="Brushes">
+            <i class="fas fa-paint-brush main-icon"></i>
+            <i class="fas fa-caret-right" style="font-size: 0.6rem; position: absolute; bottom: 4px; right: 4px; color: var(--text-muted);"></i>
+        </div>
+        <div class="flyout-menu">
+            <div class="tool-btn" id="tool-brush-standard" onclick="event.stopPropagation(); app.setBrushType('brush')" title="Standard Brush"><i class="fas fa-paint-brush"></i></div>
+            <div class="tool-btn" id="tool-pencil" onclick="event.stopPropagation(); app.setBrushType('pencil')" title="Pencil"><i class="fas fa-pencil-alt"></i></div>
+            <div class="tool-btn" id="tool-marker" onclick="event.stopPropagation(); app.setBrushType('marker')" title="Marker"><i class="fas fa-pen"></i></div>
+            <div class="tool-btn" id="tool-highlighter" onclick="event.stopPropagation(); app.setBrushType('highlighter')" title="Highlighter"><i class="fas fa-highlighter"></i></div>
+        </div>
     </div>
     
     <div class="tool-flyout-wrapper" id="shape-wrapper" onclick="this.classList.toggle('expanded')">
@@ -678,7 +690,6 @@
     <div class="prop-group">
         <div class="prop-label">Layer</div>
         <div class="layer-switch">
-            <!-- Renamed Ink -> Foreground, Paper -> Background -->
             <div class="layer-option active" id="layer-ink" onclick="app.setLayer('ink')">Foreground</div>
             <div class="layer-option" id="layer-paper" onclick="app.setLayer('paper')">Background</div>
         </div>
@@ -813,6 +824,7 @@ class MotionSketchVector {
         
         this.activeLayer = 'ink'; 
         this.tool = 'brush'; 
+        this.brushType = 'brush'; // brush, pencil, marker, highlighter
         
         this.brushColor = '#000000';
         this.brushSize = 10;
@@ -857,7 +869,7 @@ class MotionSketchVector {
         window.addEventListener('resize', () => this.handleResize()); 
         this.resizeCanvas(this.canvasWidth, this.canvasHeight);
         
-        await this.loadStorage(); // Async load
+        await this.loadStorage(); 
         this.renderUI(); 
         this.renderPalette();
         
@@ -910,8 +922,7 @@ class MotionSketchVector {
         const workspace = document.querySelector('.workspace');
         if(!workspace) return;
         
-        // Get base fit dimensions
-        const availW = workspace.clientWidth - 100; // Padding
+        const availW = workspace.clientWidth - 100; 
         const availH = workspace.clientHeight - 100;
         const aspect = this.canvasWidth / this.canvasHeight;
         let w, h;
@@ -922,16 +933,11 @@ class MotionSketchVector {
              w = availW; h = w / aspect;
         }
         
-        // Apply Zoom Multiplier
         w *= this.zoom;
         h *= this.zoom;
         
-        // Use pixel sizes to force scrolling
         this.canvasWrapper.style.width = `${w}px`;
         this.canvasWrapper.style.height = `${h}px`;
-        
-        // Reset transform because we are sizing explicitly
-        this.canvasWrapper.style.transform = 'none';
     }
 
     setupEvents() {
@@ -950,7 +956,7 @@ class MotionSketchVector {
             start(e);
         });
         window.addEventListener('pointermove', (e) => {
-             if (this.isDrawing || this.selectedObject) move(e);
+             if (this.isDrawing || this.selectedObject || this.isSelectingBox) move(e);
         });
         window.addEventListener('pointerup', (e) => {
             c.releasePointerCapture(e.pointerId);
@@ -961,16 +967,21 @@ class MotionSketchVector {
         c.addEventListener('touchmove', (e) => e.preventDefault(), {passive: false});
 
         document.addEventListener('click', (e) => {
+            // Handle Shape flyout
             const shapeWrapper = document.getElementById('shape-wrapper');
             if (shapeWrapper && !shapeWrapper.contains(e.target)) {
                 shapeWrapper.classList.remove('expanded');
+            }
+            // Handle Brush flyout
+            const brushWrapper = document.getElementById('brush-wrapper');
+            if (brushWrapper && !brushWrapper.contains(e.target)) {
+                brushWrapper.classList.remove('expanded');
             }
         });
 
         document.addEventListener('keydown', (e) => {
             if(e.target.tagName === 'INPUT') return; 
             
-            // Delete Logic: Selected Object -> Frame
             if(e.key === 'Delete' || e.key === 'Backspace') {
                 if (this.selectedObject) {
                     this.deleteSelected();
@@ -979,25 +990,21 @@ class MotionSketchVector {
                 }
             }
             
-            // Frame Management Shortcuts
             if(e.key === 'd' || e.key === 'D') this.duplicateFrame();
             if(e.key === 'n' || e.key === 'N') this.addFrame();
-            if(e.code === 'Space') { e.preventDefault(); this.togglePlay(); } // Spacebar to play
+            if(e.code === 'Space') { e.preventDefault(); this.togglePlay(); } 
 
-            // Clipboard
             if((e.ctrlKey || e.metaKey) && e.key === 'c') this.copySelection();
             if((e.ctrlKey || e.metaKey) && e.key === 'v') this.pasteSelection();
             if((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); this.undo(); }
             if((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); this.redo(); }
             
-            // Tools
             if(e.key === 'b') this.setTool('brush');
             if(e.key === 'e') this.setTool('eraser');
             if(e.key === 'v') this.setTool('select');
             if(e.key === 'f') this.setTool('bucket');
             if(e.key === 't') this.setTool('text');
             
-            // Timeline Navigation (Arrow Keys)
             if(e.key === 'ArrowLeft') {
                 if(this.frameIndex > 0) {
                     this.frameIndex--;
@@ -1028,12 +1035,11 @@ class MotionSketchVector {
     resizeCanvas(w, h) {
         this.canvasWidth = w;
         this.canvasHeight = h;
-        
         this.canvas.width = w;
         this.canvas.height = h;
         
         this.canvasWrapper.style.aspectRatio = `${w}/${h}`;
-        // Remove constraints to allow zoom overflow
+        // Ensure constraints are removed for zoom
         this.canvasWrapper.style.width = 'auto'; 
         this.canvasWrapper.style.height = 'auto'; 
         this.handleResize();
@@ -1104,13 +1110,11 @@ class MotionSketchVector {
             div.title = "Double-click to edit";
             if (this.brushColor === color) div.classList.add('active');
             
-            // Single Tap: Select
             div.onclick = () => this.setColor(color);
             
-            // Double Click: Edit
             div.ondblclick = (e) => {
                 e.stopPropagation(); 
-                this.openPaletteEditor(index, div); // Pass the div element
+                this.openPaletteEditor(index, div);
             }
             
             let lastTap = 0;
@@ -1132,22 +1136,19 @@ class MotionSketchVector {
         this.paletteEditIndex = index;
         const input = document.getElementById('palette-editor-input');
         
-        // Move the hidden input to the swatch's position so the popup appears there
         if (element) {
             const rect = element.getBoundingClientRect();
             input.style.left = rect.left + 'px';
             input.style.top = rect.top + 'px';
             input.style.width = rect.width + 'px';
             input.style.height = rect.height + 'px';
-            input.style.zIndex = 100; // Bring to front briefly
+            input.style.zIndex = 100; 
         }
 
         input.value = this.palette[index];
         
-        // Small timeout to ensure position applies before click
         setTimeout(() => {
             input.click();
-            // Reset z-index after click so it doesn't block anything
             setTimeout(() => input.style.zIndex = -1, 100); 
         }, 10);
     }
@@ -1332,13 +1333,14 @@ class MotionSketchVector {
         if (p <= 0) p = 0.5;
 
         this.currentStroke = {
-            type: this.tool, 
+            type: this.tool, // can be 'brush', 'pencil', 'marker', 'highlighter', 'rect', etc
+            brushType: this.brushType, // Specific style for brush/pencil/marker
             color: this.tool === 'eraser' ? '#ffffff' : this.brushColor,
             size: this.brushSize,
             opacity: this.opacity,
             points: [{x: pos.x, y: pos.y, p: p}], 
             fillColor: null,
-            sx: 1, sy: 1 // Initialize scale for dots
+            sx: 1, sy: 1 
         };
         
         const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
@@ -1530,23 +1532,18 @@ class MotionSketchVector {
     }
 
     strokeHit(stroke, pos) {
-        // FIX: Removed the '< 2' check that was preventing Dots from being selected
         if (!stroke.points || stroke.points.length === 0) return false;
         
         const hitThresh = Math.max(10, stroke.size);
 
-        // 0. Handle Dot (Single Point)
         if (stroke.points.length === 1) {
              const p = stroke.points[0];
-             // Hit test against squashed ellipse? 
-             // Simplified circular hit test using max dimension is usually fine for UI
              const dist = Math.hypot(pos.x - p.x, pos.y - p.y);
-             // Use scale factors if they exist (squashed dot), otherwise 1
              const sx = stroke.sx || 1;
              const sy = stroke.sy || 1;
              const maxDim = Math.max(sx, sy) * (stroke.size/2);
              
-             return dist < maxDim + 10; // +10 for easier grabbing
+             return dist < maxDim + 10; 
         }
         
         let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
@@ -1615,9 +1612,7 @@ class MotionSketchVector {
             };
         } 
         else if (stroke.points.length === 1) {
-            // FIX: Specific bounds for single Dots
             const s = stroke.size;
-            // Use stored scale or default to 1
             const sx = stroke.sx || 1;
             const sy = stroke.sy || 1;
             
@@ -1659,7 +1654,6 @@ class MotionSketchVector {
         
         this.paperStrokes.forEach(s => this.drawObject(ctx, s));
         
-        // Draw Current Ink Layer FIRST
         this.frames[this.frameIndex].strokes.forEach(s => this.drawObject(ctx, s));
 
         // Draw Onion Skin LAST (On Top)
@@ -1674,12 +1668,11 @@ class MotionSketchVector {
         else this.canvas.classList.remove('wiggling');
 
         if (this.selectedObject && !this.isPlaying) {
-            // Safety Check: Ensure object actually exists in current list before drawing UI
             const list = this.selectedObject.layer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
             if (list.includes(this.selectedObject.stroke)) {
                 this.drawSelectionUI(ctx);
             } else {
-                this.selectedObject = null; // Cleanup ghost selection
+                this.selectedObject = null;
             }
         }
     }
@@ -1696,7 +1689,6 @@ class MotionSketchVector {
             ctx.font = `${obj.size}px sans-serif`;
             ctx.fillStyle = obj.color;
             
-            // Fix: Multiply existing globalAlpha (onion skin) by object opacity
             const currentAlpha = ctx.globalAlpha;
             const objAlpha = obj.opacity !== undefined ? obj.opacity : 1;
             ctx.globalAlpha = currentAlpha * objAlpha;
@@ -1749,7 +1741,6 @@ class MotionSketchVector {
         ctx.restore();
     }
 
-    // Updated to accept simpleMode
     drawStroke(ctx, stroke, simpleMode = false) {
         if (!stroke.points || stroke.points.length === 0) return;
         
@@ -1759,41 +1750,40 @@ class MotionSketchVector {
         
         ctx.fillStyle = rgba;
         ctx.strokeStyle = rgba;
-        
-        // FIX: Handle Dots (Length 1) FIRST so they work in Onion Skin mode
-        if (stroke.points.length === 1) {
-            const p = stroke.points[0];
-            // In simpleMode (Onion), ignore pressure variation, use default 0.5 or stored p
-            const pressure = simpleMode ? 0.5 : (p.p !== undefined ? p.p : 0.5);
-            const w = stroke.size * pressure; 
-            
-            ctx.save();
-            ctx.translate(p.x, p.y);
-            // Apply squash transforms
-            ctx.scale(stroke.sx || 1, stroke.sy || 1);
-            
-            ctx.beginPath();
-            ctx.arc(0, 0, w/2, 0, Math.PI*2); // Draw at center
-            ctx.fill();
-            
-            ctx.restore();
-            return;
-        }
 
-        // Standard Line Rendering (Onion Skin or Geometric Shapes)
-        if (simpleMode || stroke.type === 'rect' || stroke.type === 'line' || stroke.type === 'circle') {
+        // Determine render style based on Brush Type
+        const type = stroke.brushType || 'brush'; // Default if missing
+
+        // --- 1. SIMPLE RENDER (Onion Skin, Shapes, or Pencil/Marker) ---
+        // If simpleMode is true OR it's a geometric shape OR it's a specific brush type (pencil/marker)
+        if (simpleMode || ['rect', 'circle', 'line'].includes(stroke.type) || ['pencil', 'marker', 'highlighter'].includes(type)) {
              ctx.beginPath();
              
-             // FIX: Apply 0.5 scale for Brush/Eraser onion skins so they match the pressure-sensitive look
-             // Geometric shapes (rect/circle) keep full width
              let renderWidth = stroke.size;
-             if (stroke.type === 'brush' || stroke.type === 'eraser') {
-                 renderWidth = stroke.size * 0.5;
-             }
+             if (simpleMode && (type === 'brush' || stroke.type === 'brush')) renderWidth *= 0.5; // Thinner onion for brush
              
-             ctx.lineWidth = renderWidth;
-             ctx.lineCap = 'round';
-             ctx.lineJoin = 'round';
+             // Specific Brush Styles
+             if (type === 'pencil') {
+                 ctx.lineWidth = 2; // Fixed thin line
+                 // Pencil effect: lower opacity
+                 if (!simpleMode) ctx.strokeStyle = this.hexToRgba(hex, alpha * 0.7); 
+             } 
+             else if (type === 'marker') {
+                 ctx.lineWidth = stroke.size; // Constant width
+                 ctx.lineCap = 'round';
+                 ctx.lineJoin = 'round';
+             }
+             else if (type === 'highlighter') {
+                 ctx.lineWidth = stroke.size * 2; // Wide
+                 ctx.lineCap = 'butt'; // Chisel tip feel
+                 if (!simpleMode) ctx.strokeStyle = this.hexToRgba(hex, alpha * 0.4); // Transparent
+             }
+             else {
+                 // Fallback / Geometric
+                 ctx.lineWidth = renderWidth;
+                 ctx.lineCap = 'round';
+                 ctx.lineJoin = 'round';
+             }
              
              ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
              for (let i = 1; i < stroke.points.length; i++) {
@@ -1802,13 +1792,29 @@ class MotionSketchVector {
              if (stroke.fillColor) {
                  ctx.fillStyle = this.hexToRgba(stroke.fillColor, alpha); 
                  ctx.fill();
-                 ctx.fillStyle = rgba; 
+                 // Restore stroke style
+                 if(type === 'highlighter') ctx.fillStyle = this.hexToRgba(hex, alpha * 0.4);
+                 else ctx.fillStyle = rgba; 
              }
              ctx.stroke();
              return;
         }
         
-        // Pressure Sensitive Rendering (Active Brush)
+        // --- 2. PRESSURE SENSITIVE RENDER (Standard Brush) ---
+        if (stroke.points.length < 2) {
+            const p = stroke.points[0];
+            const w = stroke.size * (p.p !== undefined ? p.p : 0.5); 
+            
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.scale(stroke.sx || 1, stroke.sy || 1);
+            ctx.beginPath();
+            ctx.arc(0, 0, w/2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+            return;
+        }
+        
         for (let i = 0; i < stroke.points.length - 1; i++) {
             const p1 = stroke.points[i];
             const p2 = stroke.points[i+1];
@@ -1851,6 +1857,7 @@ class MotionSketchVector {
         const shapeAnchor = document.getElementById('tool-shape-anchor');
         const shapeIcon = shapeAnchor.querySelector('.main-icon');
         
+        // Handle Shape Anchor State
         if (['rect', 'circle', 'line'].includes(t)) {
             shapeAnchor.classList.add('active');
             if (t === 'rect') { shapeIcon.className = 'far fa-square main-icon'; shapeIcon.style.transform = ''; }
@@ -1860,8 +1867,29 @@ class MotionSketchVector {
             shapeAnchor.classList.remove('active');
         }
 
+        // Handle Brush Anchor State
+        const brushAnchor = document.getElementById('tool-brush-anchor');
+        if (brushAnchor) {
+            const brushIcon = brushAnchor.querySelector('.main-icon');
+            if (['brush', 'pencil', 'marker', 'highlighter'].includes(t)) {
+                brushAnchor.classList.add('active');
+                // Update icon based on brush sub-type
+                 if (this.brushType === 'brush') brushIcon.className = 'fas fa-paint-brush main-icon';
+                 if (this.brushType === 'pencil') brushIcon.className = 'fas fa-pencil-alt main-icon';
+                 if (this.brushType === 'marker') brushIcon.className = 'fas fa-pen main-icon';
+                 if (this.brushType === 'highlighter') brushIcon.className = 'fas fa-highlighter main-icon';
+            } else {
+                brushAnchor.classList.remove('active');
+            }
+        }
+
         this.selectedObject = null;
         this.renderCanvas();
+    }
+    
+    setBrushType(type) {
+        this.brushType = type;
+        this.setTool('brush'); // Activate tool group
     }
     
     setLayer(l) {
