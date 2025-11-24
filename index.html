@@ -760,6 +760,10 @@
         </div>
         <div style="width:10px"></div>
         
+        <button class="btn-ghost" onclick="app.rewind()" title="Rewind to Start">
+            <i class="fas fa-fast-backward"></i>
+        </button>
+
         <button class="btn-ghost" id="onion-btn" onclick="app.toggleOnion()" title="Onion Skin">
             <i class="fas fa-layer-group"></i>
         </button>
@@ -2362,6 +2366,14 @@ class MotionSketchVector {
         this.isWiggle = !this.isWiggle;
         document.getElementById('wiggle-btn').classList.toggle('active', this.isWiggle);
         if(this.isPlaying) this.renderCanvas(); 
+    }
+    
+    // Added Rewind Method
+    rewind() {
+        this.frameIndex = 0;
+        this.selectedObject = null; // Clear selection to prevent potential glitches
+        this.renderCanvas();
+        this.renderUI(true);
     }
 
     addFrame() {
