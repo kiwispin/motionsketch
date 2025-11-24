@@ -1092,6 +1092,7 @@ class MotionSketchVector {
                 color: this.brushColor,
                 size: h,
                 opacity: this.opacity,
+                angle: 0, // Initialize Angle
                 points: [] 
             };
             const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
@@ -1270,7 +1271,8 @@ class MotionSketchVector {
                             w: this.selectedObject.stroke.width,
                             h: this.selectedObject.stroke.height,
                             sx: this.selectedObject.stroke.sx,
-                            sy: this.selectedObject.stroke.sy
+                            sy: this.selectedObject.stroke.sy,
+                            angle: this.selectedObject.stroke.angle || 0 // Capture Angle
                         };
                         this.dragOriginalBounds = {...this.selectedObject.bounds};
                         this.dragCenter = { x: this.selectedObject.bounds.x + this.selectedObject.bounds.w/2, y: this.selectedObject.bounds.y + this.selectedObject.bounds.h/2 };
@@ -1464,11 +1466,14 @@ class MotionSketchVector {
                     }
                 } 
                 else if (this.dragMode === 'rotate') {
-                    if (stroke.type !== 'text') {
-                        const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
-                        const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
-                        const angleDiff = currAngle - startAngle;
-                        
+                    const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
+                    const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
+                    const angleDiff = currAngle - startAngle;
+
+                    if (stroke.type === 'text') {
+                        stroke.angle = (this.dragOriginalProps.angle || 0) + angleDiff;
+                    }
+                    else {
                         const cos = Math.cos(angleDiff), sin = Math.sin(angleDiff);
                         const pts = stroke.points;
                         const origPts = this.dragOriginalPoints;
@@ -1656,8 +1661,21 @@ class MotionSketchVector {
                     const h = obj.height * obj.sy;
                     const bx = obj.x;
                     const by = obj.y - h; 
-                    if(pos.x >= bx && pos.x <= bx + w && pos.y >= by && pos.y <= by + h + 10) {
-                        return { stroke: obj, layer: layerName, index: i };
+                    // Simple bounding box check for hit test
+                    // For rotated text, we use a simplified check: unrotate the mouse pos
+                    if (obj.angle) {
+                        const cx = bx + w/2;
+                        const cy = by + h/2;
+                        const dx = pos.x - cx;
+                        const dy = pos.y - cy;
+                        const ang = -obj.angle;
+                        const rx = cx + dx * Math.cos(ang) - dy * Math.sin(ang);
+                        const ry = cy + dx * Math.sin(ang) + dy * Math.cos(ang);
+                        if(rx >= bx && rx <= bx + w && ry >= by && ry <= by + h + 10) return { stroke: obj, layer: layerName, index: i };
+                    } else {
+                        if(pos.x >= bx && pos.x <= bx + w && pos.y >= by && pos.y <= by + h + 10) {
+                            return { stroke: obj, layer: layerName, index: i };
+                        }
                     }
                 } else {
                     if (this.strokeHit(obj, pos)) return { stroke: obj, layer: layerName, index: i };
@@ -1710,7 +1728,21 @@ class MotionSketchVector {
     hitTestHandles(pos) {
         const b = this.selectedObject.bounds;
         const s = 10; 
-        const hit = (x, y) => Math.abs(pos.x - x) < s && Math.abs(pos.y - y) < s;
+        
+        let p = {x: pos.x, y: pos.y};
+        
+        // If rotated text, un-rotate the mouse position relative to the box center
+        if (this.selectedObject.stroke.type === 'text' && this.selectedObject.stroke.angle) {
+            const cx = b.x + b.w/2;
+            const cy = b.y + b.h/2;
+            const dx = pos.x - cx;
+            const dy = pos.y - cy;
+            const ang = -this.selectedObject.stroke.angle;
+            p.x = cx + dx * Math.cos(ang) - dy * Math.sin(ang);
+            p.y = cy + dx * Math.sin(ang) + dy * Math.cos(ang);
+        }
+
+        const hit = (x, y) => Math.abs(p.x - x) < s && Math.abs(p.y - y) < s;
         
         if (hit(b.x + b.w/2, b.y - 25)) return 'rotate';
 
@@ -1792,6 +1824,17 @@ class MotionSketchVector {
     }
 
     isInBounds(pos, rect) {
+        // FIX: If rotated text, unrotate pos for checking
+        if (this.selectedObject && this.selectedObject.stroke.type === 'text' && this.selectedObject.stroke.angle) {
+             const cx = rect.x + rect.w/2;
+             const cy = rect.y + rect.h/2;
+             const dx = pos.x - cx;
+             const dy = pos.y - cy;
+             const ang = -this.selectedObject.stroke.angle;
+             const rx = cx + dx * Math.cos(ang) - dy * Math.sin(ang);
+             const ry = cy + dx * Math.sin(ang) + dy * Math.cos(ang);
+             return rx >= rect.x && rx <= rect.x + rect.w && ry >= rect.y && ry <= rect.y + rect.h;
+        }
         return pos.x >= rect.x && pos.x <= rect.x + rect.w && pos.y >= rect.y && pos.y <= rect.y + rect.h;
     }
 
@@ -1850,6 +1893,21 @@ class MotionSketchVector {
     drawObject(ctx, obj, simpleMode = false) {
         if (obj.type === 'text') {
             ctx.save();
+            
+            // Rotate around center of text box
+            const w = obj.width * (obj.sx||1);
+            const h = obj.height * (obj.sy||1);
+            
+            // Text anchor (obj.x, obj.y) is roughly bottom-left (baseline) or top-left depending on metrics
+            // Based on calcBounds: y is bottom (y-h), x is left. 
+            // So visual center is:
+            const cx = obj.x + w/2;
+            const cy = obj.y - h/2;
+
+            ctx.translate(cx, cy);
+            if (obj.angle) ctx.rotate(obj.angle);
+            ctx.translate(-cx, -cy);
+
             ctx.translate(obj.x, obj.y);
             const sx = (isFinite(obj.sx) && obj.sx !== 0) ? obj.sx : 1;
             const sy = (isFinite(obj.sy) && obj.sy !== 0) ? obj.sy : 1;
@@ -1869,6 +1927,16 @@ class MotionSketchVector {
     drawSelectionUI(ctx) {
         const b = this.selectedObject.bounds;
         ctx.save();
+        
+        // Rotate Selection Box if needed
+        if (this.selectedObject.stroke.type === 'text' && this.selectedObject.stroke.angle) {
+             const cx = b.x + b.w/2;
+             const cy = b.y + b.h/2;
+             ctx.translate(cx, cy);
+             ctx.rotate(this.selectedObject.stroke.angle);
+             ctx.translate(-cx, -cy);
+        }
+
         ctx.strokeStyle = '#0A84FF';
         ctx.lineWidth = 1;
         
