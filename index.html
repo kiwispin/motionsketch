@@ -1013,6 +1013,7 @@ class MotionSketchVector {
             if(e.key === 'ArrowLeft') {
                 if(this.frameIndex > 0) {
                     this.frameIndex--;
+                    this.selectedObject = null; // FIX: Clear selection when changing frame
                     this.renderCanvas();
                     this.renderUI(true);
                 }
@@ -1020,6 +1021,7 @@ class MotionSketchVector {
             if(e.key === 'ArrowRight') {
                 if(this.frameIndex < this.frames.length - 1) {
                     this.frameIndex++;
+                    this.selectedObject = null; // FIX: Clear selection when changing frame
                     this.renderCanvas();
                     this.renderUI(true);
                 }
@@ -2202,7 +2204,13 @@ class MotionSketchVector {
             this.frames.forEach((f, i) => {
                 const el = document.createElement('div');
                 el.className = `frame-card ${i === this.frameIndex ? 'active' : ''}`;
-                el.onclick = () => { this.frameIndex = i; this.renderCanvas(); this.renderUI(true); };
+                // FIX: Clear selection when switching frames via UI click
+                el.onclick = () => { 
+                    this.frameIndex = i; 
+                    this.selectedObject = null; 
+                    this.renderCanvas(); 
+                    this.renderUI(true); 
+                };
                 
                 let html = `<div class="frame-num">${i+1}</div><img src="${f.thumb || ''}">`;
                 if(this.frames.length > 1) {
