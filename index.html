@@ -838,6 +838,11 @@ class MotionSketchVector {
         this.dragMode = null; 
         this.draggedFrameIndex = null;
         
+        // Multi-select Marquee Logic
+        this.isSelectingBox = false;
+        this.selectionStart = {x:0, y:0};
+        this.selectionCurr = {x:0, y:0};
+        
         this.isPlaying = false;
         this.fps = 12;
         this.isOnion = false;
@@ -1039,7 +1044,6 @@ class MotionSketchVector {
         this.canvas.height = h;
         
         this.canvasWrapper.style.aspectRatio = `${w}/${h}`;
-        // Ensure constraints are removed for zoom
         this.canvasWrapper.style.width = 'auto'; 
         this.canvasWrapper.style.height = 'auto'; 
         this.handleResize();
@@ -1060,7 +1064,6 @@ class MotionSketchVector {
         this.saveStorage();
     }
     
-    /* --- Text Modal --- */
     openTextModal(pos) {
         this.textInputPos = pos;
         document.getElementById('text-input-value').value = "";
@@ -1099,7 +1102,6 @@ class MotionSketchVector {
         this.setTool('select'); 
     }
 
-    /* --- Palette Management --- */
     renderPalette() {
         const container = document.getElementById('palette-container');
         container.innerHTML = '';
@@ -1109,25 +1111,8 @@ class MotionSketchVector {
             div.style.backgroundColor = color;
             div.title = "Double-click to edit";
             if (this.brushColor === color) div.classList.add('active');
-            
             div.onclick = () => this.setColor(color);
-            
-            div.ondblclick = (e) => {
-                e.stopPropagation(); 
-                this.openPaletteEditor(index, div);
-            }
-            
-            let lastTap = 0;
-            div.addEventListener('touchend', (e) => {
-                const currentTime = new Date().getTime();
-                const tapLength = currentTime - lastTap;
-                if (tapLength < 500 && tapLength > 0) {
-                    e.preventDefault(); 
-                    this.openPaletteEditor(index, div);
-                }
-                lastTap = currentTime;
-            });
-
+            div.ondblclick = (e) => { e.stopPropagation(); this.openPaletteEditor(index, div); }
             container.appendChild(div);
         });
     }
@@ -1135,7 +1120,6 @@ class MotionSketchVector {
     openPaletteEditor(index, element) {
         this.paletteEditIndex = index;
         const input = document.getElementById('palette-editor-input');
-        
         if (element) {
             const rect = element.getBoundingClientRect();
             input.style.left = rect.left + 'px';
@@ -1144,9 +1128,7 @@ class MotionSketchVector {
             input.style.height = rect.height + 'px';
             input.style.zIndex = 100; 
         }
-
         input.value = this.palette[index];
-        
         setTimeout(() => {
             input.click();
             setTimeout(() => input.style.zIndex = -1, 100); 
@@ -1162,7 +1144,6 @@ class MotionSketchVector {
         }
     }
 
-    /* --- History --- */
     saveState() {
         if (this.history.length > 20) this.history.shift();
         this.redoStack = [];
@@ -1234,8 +1215,6 @@ class MotionSketchVector {
         this.renderUI(true);
     }
 
-    /* --- Core Logic --- */
-
     onDown(pos, pressure = 0.5) {
         if(this.isPlaying) return;
 
@@ -1248,7 +1227,6 @@ class MotionSketchVector {
                 this.renderCanvas();
             } else {
                 this.selectedBgColor = this.brushColor;
-                // Update global BG color only to avoid per-frame confusion in this version
                 this.frames[this.frameIndex].frameBgColor = this.brushColor; 
                 this.updateThumbnails(); 
                 this.renderCanvas();
@@ -1270,7 +1248,20 @@ class MotionSketchVector {
                     this.dragMode = handle;
                     this.dragStart = pos;
                     
-                    if (this.selectedObject.stroke.type === 'text') {
+                    if (this.selectedObject.isGroup) {
+                         // Prepare Group Drag
+                         this.dragOriginalBounds = {...this.selectedObject.bounds};
+                         this.dragCenter = {
+                             x: this.selectedObject.bounds.x + this.selectedObject.bounds.w/2,
+                             y: this.selectedObject.bounds.y + this.selectedObject.bounds.h/2
+                         };
+                         // Store original positions for all items in group
+                         this.dragOriginalItems = this.selectedObject.items.map(item => {
+                             if(item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height };
+                             return { points: item.stroke.points.map(p => ({...p})) };
+                         });
+                    }
+                    else if (this.selectedObject.stroke.type === 'text') {
                         this.dragOriginalProps = {
                             x: this.selectedObject.stroke.x,
                             y: this.selectedObject.stroke.y,
@@ -1279,14 +1270,13 @@ class MotionSketchVector {
                             sx: this.selectedObject.stroke.sx,
                             sy: this.selectedObject.stroke.sy
                         };
+                        this.dragOriginalBounds = {...this.selectedObject.bounds};
+                        this.dragCenter = { x: this.selectedObject.bounds.x + this.selectedObject.bounds.w/2, y: this.selectedObject.bounds.y + this.selectedObject.bounds.h/2 };
                     } else {
                         this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({...p}));
+                        this.dragOriginalBounds = {...this.selectedObject.bounds};
+                        this.dragCenter = { x: this.selectedObject.bounds.x + this.selectedObject.bounds.w/2, y: this.selectedObject.bounds.y + this.selectedObject.bounds.h/2 };
                     }
-                    this.dragOriginalBounds = {...this.selectedObject.bounds};
-                    this.dragCenter = {
-                        x: this.selectedObject.bounds.x + this.selectedObject.bounds.w/2,
-                        y: this.selectedObject.bounds.y + this.selectedObject.bounds.h/2
-                    };
                     return;
                 }
                 
@@ -1294,11 +1284,18 @@ class MotionSketchVector {
                     this.saveState();
                     this.dragMode = 'move';
                     this.dragStart = pos;
-                    if (this.selectedObject.stroke.type === 'text') {
-                        this.dragOriginalProps = {
-                            x: this.selectedObject.stroke.x,
-                            y: this.selectedObject.stroke.y,
-                        };
+                    
+                    // FIX 1: Initialize bounds here to prevent "undefined reading x" errors
+                    this.dragOriginalBounds = {...this.selectedObject.bounds};
+
+                    if (this.selectedObject.isGroup) {
+                         this.dragOriginalItems = this.selectedObject.items.map(item => {
+                             if(item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y };
+                             return { points: item.stroke.points.map(p => ({...p})) };
+                         });
+                    }
+                    else if (this.selectedObject.stroke.type === 'text') {
+                        this.dragOriginalProps = { x: this.selectedObject.stroke.x, y: this.selectedObject.stroke.y };
                     } else {
                         this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({...p}));
                     }
@@ -1313,12 +1310,20 @@ class MotionSketchVector {
                 this.calcBounds(found.stroke);
                 this.dragMode = 'move';
                 this.dragStart = pos;
+                
+                // Safely init bounds here too just in case
+                this.dragOriginalBounds = {...this.selectedObject.bounds};
+
                 if (found.stroke.type === 'text') {
                     this.dragOriginalProps = { x: found.stroke.x, y: found.stroke.y };
                 } else {
                     this.dragOriginalPoints = found.stroke.points.map(p => ({...p}));
                 }
             } else {
+                // START BOX SELECTION
+                this.isSelectingBox = true;
+                this.selectionStart = pos;
+                this.selectionCurr = pos;
                 this.selectedObject = null;
             }
             this.renderCanvas();
@@ -1334,8 +1339,8 @@ class MotionSketchVector {
         if (p <= 0) p = 0.5;
 
         this.currentStroke = {
-            type: this.tool, // can be 'brush', 'pencil', 'marker', 'highlighter', 'rect', etc
-            brushType: this.brushType, // Specific style for brush/pencil/marker
+            type: this.tool,
+            brushType: this.brushType,
             color: this.tool === 'eraser' ? '#ffffff' : this.brushColor,
             size: this.brushSize,
             opacity: this.opacity,
@@ -1352,86 +1357,175 @@ class MotionSketchVector {
     onMove(pos, pressure = 0.5) {
         if (this.isPlaying) return;
 
-        if (this.tool === 'select' && this.dragMode && this.selectedObject) {
-            const stroke = this.selectedObject.stroke;
-            const bounds = this.dragOriginalBounds;
-
-            if (this.dragMode === 'move') {
-                const dx = pos.x - this.dragStart.x;
-                const dy = pos.y - this.dragStart.y;
-                
-                if (stroke.type === 'text') {
-                    stroke.x = this.dragOriginalProps.x + dx;
-                    stroke.y = this.dragOriginalProps.y + dy;
-                } else {
-                    const pts = stroke.points;
-                    const origPts = this.dragOriginalPoints;
-                    for(let i=0; i<pts.length; i++) {
-                        pts[i].x = origPts[i].x + dx;
-                        pts[i].y = origPts[i].y + dy;
-                    }
-                }
-            } 
-            else if (this.dragMode === 'rotate') {
-                if (stroke.type !== 'text') {
-                    const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
-                    const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
-                    const angleDiff = currAngle - startAngle;
-                    
-                    const cos = Math.cos(angleDiff), sin = Math.sin(angleDiff);
-                    
-                    const pts = stroke.points;
-                    const origPts = this.dragOriginalPoints;
-                    
-                    for(let i=0; i<pts.length; i++) {
-                        const nx = origPts[i].x - this.dragCenter.x;
-                        const ny = origPts[i].y - this.dragCenter.y;
-                        pts[i].x = (nx * cos - ny * sin) + this.dragCenter.x;
-                        pts[i].y = (nx * sin + ny * cos) + this.dragCenter.y;
-                    }
-                }
+        if (this.tool === 'select') {
+            if (this.isSelectingBox) {
+                this.selectionCurr = pos;
+                this.renderCanvas();
+                return;
             }
-            else {
-                // Resize
-                const dx = pos.x - this.dragStart.x;
-                const dy = pos.y - this.dragStart.y;
-                let newW = bounds.w, newH = bounds.h, newX = bounds.x, newY = bounds.y;
-                const dir = this.dragMode.split('-')[1] || '';
+            
+            if (this.dragMode && this.selectedObject) {
+                // --- FIX: Safety Check ---
+                if (!this.dragStart) return;
 
-                if (dir.includes('r')) newW += dx; 
-                if (dir.includes('l')) { newX += dx; newW -= dx; } 
-                if (dir.includes('b')) newH += dy; 
-                if (dir.includes('t')) { newY += dy; newH -= dy; } 
+                // --- HANDLING GROUPS ---
+                if (this.selectedObject.isGroup) {
+                    const bounds = this.dragOriginalBounds;
+                    // FIX 2: Safety check for bounds
+                    if (!bounds) return; 
 
-                if(newW < 5) newW = 5; if(newH < 5) newH = 5;
+                    const dx = pos.x - this.dragStart.x;
+                    const dy = pos.y - this.dragStart.y;
+                    
+                    if (this.dragMode === 'move') {
+                        // Move all items
+                        this.selectedObject.items.forEach((item, i) => {
+                            const orig = this.dragOriginalItems[i];
+                            if (!orig) return; // FIX 3: Safety check for items
+                            if (item.stroke.type === 'text') {
+                                item.stroke.x = orig.x + dx;
+                                item.stroke.y = orig.y + dy;
+                            } else {
+                                const pts = item.stroke.points;
+                                for(let k=0; k<pts.length; k++) {
+                                    if (orig.points[k]) {
+                                        pts[k].x = orig.points[k].x + dx;
+                                        pts[k].y = orig.points[k].y + dy;
+                                    }
+                                }
+                            }
+                        });
+                        this.selectedObject.bounds.x = bounds.x + dx;
+                        this.selectedObject.bounds.y = bounds.y + dy;
+                    } 
+                    else if (this.dragMode.startsWith('resize')) {
+                         // Simple resize logic for groups
+                        let newW = bounds.w, newH = bounds.h, newX = bounds.x, newY = bounds.y;
+                        const dir = this.dragMode.split('-')[1] || '';
+                        
+                        if (dir.includes('r')) newW += dx; 
+                        if (dir.includes('l')) { newX += dx; newW -= dx; } 
+                        if (dir.includes('b')) newH += dy; 
+                        if (dir.includes('t')) { newY += dy; newH -= dy; } 
+                        if(newW < 5) newW = 5; if(newH < 5) newH = 5;
 
-                if (stroke.type === 'text') {
-                    stroke.sx = newW / this.dragOriginalProps.w;
-                    stroke.sy = newH / this.dragOriginalProps.h;
-                    stroke.x = this.dragOriginalProps.x + (newX - bounds.x);
-                    stroke.y = this.dragOriginalProps.y + (newY - bounds.y);
+                        const scaleX = newW / bounds.w;
+                        const scaleY = newH / bounds.h;
+                        
+                        this.selectedObject.items.forEach((item, i) => {
+                            const orig = this.dragOriginalItems[i];
+                            if (!orig) return; // FIX 3: Safety check for items
+                             if (item.stroke.type === 'text') {
+                                 // Scale relative to group bounds
+                                 const relX = orig.x - bounds.x;
+                                 const relY = orig.y - bounds.y;
+                                 item.stroke.x = newX + relX * scaleX;
+                                 item.stroke.y = newY + relY * scaleY;
+                             } else {
+                                 const pts = item.stroke.points;
+                                 for(let k=0; k<pts.length; k++) {
+                                     if (orig.points[k]) {
+                                         const relX = orig.points[k].x - bounds.x;
+                                         const relY = orig.points[k].y - bounds.y;
+                                         pts[k].x = newX + relX * scaleX;
+                                         pts[k].y = newY + relY * scaleY;
+                                     }
+                                 }
+                             }
+                        });
+                        this.selectedObject.bounds = {x:newX, y:newY, w:newW, h:newH};
+                    }
+                    this.renderCanvas();
+                    return;
+                }
+
+                // --- HANDLING SINGLE OBJECTS ---
+                const stroke = this.selectedObject.stroke;
+                const bounds = this.dragOriginalBounds;
+
+                if (this.dragMode === 'move') {
+                    const dx = pos.x - this.dragStart.x;
+                    const dy = pos.y - this.dragStart.y;
+                    
+                    if (stroke.type === 'text') {
+                        stroke.x = this.dragOriginalProps.x + dx;
+                        stroke.y = this.dragOriginalProps.y + dy;
+                    } else {
+                        const pts = stroke.points;
+                        const origPts = this.dragOriginalPoints;
+                        for(let i=0; i<pts.length; i++) {
+                            if (origPts[i]) {
+                                pts[i].x = origPts[i].x + dx;
+                                pts[i].y = origPts[i].y + dy;
+                            }
+                        }
+                    }
                 } 
-                else if (stroke.points.length === 1) {
-                    // Squash Dot Logic
-                    stroke.sx = newW / this.dragOriginalBounds.w;
-                    stroke.sy = newH / this.dragOriginalBounds.h;
-                    stroke.points[0].x = newX + newW/2;
-                    stroke.points[0].y = newY + newH/2;
+                else if (this.dragMode === 'rotate') {
+                    if (stroke.type !== 'text') {
+                        const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
+                        const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
+                        const angleDiff = currAngle - startAngle;
+                        
+                        const cos = Math.cos(angleDiff), sin = Math.sin(angleDiff);
+                        const pts = stroke.points;
+                        const origPts = this.dragOriginalPoints;
+                        
+                        for(let i=0; i<pts.length; i++) {
+                            if (origPts[i]) {
+                                const nx = origPts[i].x - this.dragCenter.x;
+                                const ny = origPts[i].y - this.dragCenter.y;
+                                pts[i].x = (nx * cos - ny * sin) + this.dragCenter.x;
+                                pts[i].y = (nx * sin + ny * cos) + this.dragCenter.y;
+                            }
+                        }
+                    }
                 }
                 else {
-                    const pts = stroke.points;
-                    const origPts = this.dragOriginalPoints;
-                    for(let i=0; i<pts.length; i++) {
-                        const normX = (origPts[i].x - bounds.x) / bounds.w;
-                        const normY = (origPts[i].y - bounds.y) / bounds.h;
-                        pts[i].x = newX + (normX * newW);
-                        pts[i].y = newY + (normY * newH);
+                    // Resize
+                    // FIX 4: Check bounds exists before accessing bounds.w
+                    if (!bounds) return; 
+
+                    const dx = pos.x - this.dragStart.x;
+                    const dy = pos.y - this.dragStart.y;
+                    let newW = bounds.w, newH = bounds.h, newX = bounds.x, newY = bounds.y;
+                    const dir = this.dragMode.split('-')[1] || '';
+
+                    if (dir.includes('r')) newW += dx; 
+                    if (dir.includes('l')) { newX += dx; newW -= dx; } 
+                    if (dir.includes('b')) newH += dy; 
+                    if (dir.includes('t')) { newY += dy; newH -= dy; } 
+
+                    if(newW < 5) newW = 5; if(newH < 5) newH = 5;
+
+                    if (stroke.type === 'text') {
+                        stroke.sx = newW / this.dragOriginalProps.w;
+                        stroke.sy = newH / this.dragOriginalProps.h;
+                        stroke.x = this.dragOriginalProps.x + (newX - bounds.x);
+                        stroke.y = this.dragOriginalProps.y + (newY - bounds.y);
+                    } 
+                    else if (stroke.points.length === 1) {
+                        stroke.sx = newW / this.dragOriginalBounds.w;
+                        stroke.sy = newH / this.dragOriginalBounds.h;
+                        stroke.points[0].x = newX + newW/2;
+                        stroke.points[0].y = newY + newH/2;
+                    }
+                    else {
+                        const pts = stroke.points;
+                        const origPts = this.dragOriginalPoints;
+                        for(let i=0; i<pts.length; i++) {
+                            if (origPts[i]) {
+                                const normX = (origPts[i].x - bounds.x) / bounds.w;
+                                const normY = (origPts[i].y - bounds.y) / bounds.h;
+                                pts[i].x = newX + (normX * newW);
+                                pts[i].y = newY + (normY * newH);
+                            }
+                        }
                     }
                 }
+                this.calcBounds(this.selectedObject.stroke);
+                this.renderCanvas();
             }
-
-            this.calcBounds(this.selectedObject.stroke);
-            this.renderCanvas();
             return;
         }
 
@@ -1442,6 +1536,9 @@ class MotionSketchVector {
             } 
             else {
                 const start = this.dragStart;
+                // --- FIX: Safety Check for Shapes ---
+                if (!start) return;
+
                 const end = pos;
                 if (this.tool === 'line') {
                     this.currentStroke.points = [{x:start.x, y:start.y, p:0.5}, {x:end.x, y:end.y, p:0.5}];
@@ -1476,6 +1573,44 @@ class MotionSketchVector {
     }
 
     onUp() {
+        if (this.isSelectingBox) {
+            // FINALIZE BOX SELECTION
+            this.isSelectingBox = false;
+            
+            // Calculate Box
+            const x1 = Math.min(this.selectionStart.x, this.selectionCurr.x);
+            const y1 = Math.min(this.selectionStart.y, this.selectionCurr.y);
+            const x2 = Math.max(this.selectionStart.x, this.selectionCurr.x);
+            const y2 = Math.max(this.selectionStart.y, this.selectionCurr.y);
+            const selBox = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+            
+            // Only select if box has some size, else it was a click (handled in OnDown)
+            if (selBox.w > 2 || selBox.h > 2) {
+                const items = [];
+                const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+                
+                list.forEach((stroke, i) => {
+                    // Check intersection
+                    const b = this.getStrokeBounds(stroke);
+                    if (this.rectIntersect(selBox, b)) {
+                        items.push({ stroke, layer: this.activeLayer, index: i });
+                    }
+                });
+                
+                if (items.length === 1) {
+                    this.selectedObject = items[0];
+                    this.calcBounds(items[0].stroke);
+                } else if (items.length > 1) {
+                    this.selectedObject = {
+                        isGroup: true,
+                        items: items,
+                        bounds: this.getGroupBounds(items)
+                    };
+                }
+            }
+            this.renderCanvas();
+        }
+
         if (this.isDrawing) {
             if ((this.tool === 'brush' || this.tool === 'eraser') && this.currentStroke.points.length > 5) {
                 this.currentStroke.points = this.simplifyPoints(this.currentStroke.points, 1.5);
@@ -1534,7 +1669,6 @@ class MotionSketchVector {
 
     strokeHit(stroke, pos) {
         if (!stroke.points || stroke.points.length === 0) return false;
-        
         const hitThresh = Math.max(10, stroke.size);
 
         if (stroke.points.length === 1) {
@@ -1543,13 +1677,11 @@ class MotionSketchVector {
              const sx = stroke.sx || 1;
              const sy = stroke.sy || 1;
              const maxDim = Math.max(sx, sy) * (stroke.size/2);
-             
              return dist < maxDim + 10; 
         }
         
         let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
         stroke.points.forEach(p=>{ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; });
-        
         if(pos.x < minX-hitThresh || pos.x > maxX+hitThresh || pos.y < minY-hitThresh || pos.y > maxY+hitThresh) return false;
 
         for (let i = 0; i < stroke.points.length - 1; i++) {
@@ -1602,10 +1734,14 @@ class MotionSketchVector {
     }
 
     calcBounds(stroke) {
+        this.selectedObject.bounds = this.getStrokeBounds(stroke);
+    }
+    
+    getStrokeBounds(stroke) {
         if (stroke.type === 'text') {
             const w = stroke.width * stroke.sx;
             const h = stroke.height * stroke.sy;
-            this.selectedObject.bounds = {
+            return {
                 x: stroke.x - 5,
                 y: stroke.y - h - 5,
                 w: w + 10,
@@ -1616,17 +1752,10 @@ class MotionSketchVector {
             const s = stroke.size;
             const sx = stroke.sx || 1;
             const sy = stroke.sy || 1;
-            
             const p = stroke.points[0];
             const w = s * sx;
             const h = s * sy;
-            
-            this.selectedObject.bounds = {
-                x: p.x - w/2, 
-                y: p.y - h/2, 
-                w: w, 
-                h: h
-            };
+            return { x: p.x - w/2, y: p.y - h/2, w: w, h: h };
         }
         else {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -1637,8 +1766,27 @@ class MotionSketchVector {
                 if(p.y > maxY) maxY = p.y;
             });
             const pad = stroke.size / 2;
-            this.selectedObject.bounds = { x: minX - pad, y: minY - pad, w: (maxX - minX) + pad*2, h: (maxY - minY) + pad*2 };
+            return { x: minX - pad, y: minY - pad, w: (maxX - minX) + pad*2, h: (maxY - minY) + pad*2 };
         }
+    }
+    
+    getGroupBounds(items) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        items.forEach(item => {
+            const b = this.getStrokeBounds(item.stroke);
+            if(b.x < minX) minX = b.x;
+            if(b.y < minY) minY = b.y;
+            if(b.x + b.w > maxX) maxX = b.x + b.w;
+            if(b.y + b.h > maxY) maxY = b.y + b.h;
+        });
+        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+    }
+    
+    rectIntersect(r1, r2) {
+        return !(r2.x > r1.x + r1.w || 
+                 r2.x + r2.w < r1.x || 
+                 r2.y > r1.y + r1.h || 
+                 r2.y + r2.h < r1.y);
     }
 
     isInBounds(pos, rect) {
@@ -1654,13 +1802,11 @@ class MotionSketchVector {
         ctx.fillRect(0,0,this.canvasWidth, this.canvasHeight);
         
         this.paperStrokes.forEach(s => this.drawObject(ctx, s));
-        
         this.frames[this.frameIndex].strokes.forEach(s => this.drawObject(ctx, s));
 
         // Draw Onion Skin LAST (On Top)
         if (this.isOnion && this.frameIndex > 0 && !this.isPlaying) {
             ctx.globalAlpha = 0.3;
-            // Fix: Pass 'true' for simpleMode to prevent alpha accumulation
             this.frames[this.frameIndex - 1].strokes.forEach(s => this.drawObject(ctx, s, true));
             ctx.globalAlpha = 1.0;
         }
@@ -1669,12 +1815,33 @@ class MotionSketchVector {
         else this.canvas.classList.remove('wiggling');
 
         if (this.selectedObject && !this.isPlaying) {
-            const list = this.selectedObject.layer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
-            if (list.includes(this.selectedObject.stroke)) {
+            const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+            
+            // Check validity (single object must still exist, group handled differently)
+            if (this.selectedObject.isGroup) {
+                // For MVP, assume group valid until deselected
+                this.drawSelectionUI(ctx);
+            }
+            else if (list.includes(this.selectedObject.stroke)) {
                 this.drawSelectionUI(ctx);
             } else {
                 this.selectedObject = null;
             }
+        }
+        
+        if (this.isSelectingBox) {
+            ctx.save();
+            ctx.strokeStyle = '#0A84FF';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            const x = Math.min(this.selectionStart.x, this.selectionCurr.x);
+            const y = Math.min(this.selectionStart.y, this.selectionCurr.y);
+            const w = Math.abs(this.selectionCurr.x - this.selectionStart.x);
+            const h = Math.abs(this.selectionCurr.y - this.selectionStart.y);
+            ctx.strokeRect(x, y, w, h);
+            ctx.fillStyle = 'rgba(10, 132, 255, 0.1)';
+            ctx.fillRect(x, y, w, h);
+            ctx.restore();
         }
     }
 
@@ -1682,18 +1849,14 @@ class MotionSketchVector {
         if (obj.type === 'text') {
             ctx.save();
             ctx.translate(obj.x, obj.y);
-            
             const sx = (isFinite(obj.sx) && obj.sx !== 0) ? obj.sx : 1;
             const sy = (isFinite(obj.sy) && obj.sy !== 0) ? obj.sy : 1;
-            
             ctx.scale(sx, sy);
             ctx.font = `${obj.size}px sans-serif`;
             ctx.fillStyle = obj.color;
-            
             const currentAlpha = ctx.globalAlpha;
             const objAlpha = obj.opacity !== undefined ? obj.opacity : 1;
             ctx.globalAlpha = currentAlpha * objAlpha;
-
             ctx.fillText(obj.text, 0, 0);
             ctx.restore();
         } else {
@@ -1752,35 +1915,28 @@ class MotionSketchVector {
         ctx.fillStyle = rgba;
         ctx.strokeStyle = rgba;
 
-        // Determine render style based on Brush Type
-        const type = stroke.brushType || 'brush'; // Default if missing
+        const type = stroke.brushType || 'brush'; 
 
-        // --- 1. SIMPLE RENDER (Onion Skin, Shapes, or Pencil/Marker) ---
-        // If simpleMode is true OR it's a geometric shape OR it's a specific brush type (pencil/marker)
         if (simpleMode || ['rect', 'circle', 'line'].includes(stroke.type) || ['pencil', 'marker', 'highlighter'].includes(type)) {
              ctx.beginPath();
-             
              let renderWidth = stroke.size;
-             if (simpleMode && (type === 'brush' || stroke.type === 'brush')) renderWidth *= 0.5; // Thinner onion for brush
+             if (simpleMode && (type === 'brush' || stroke.type === 'brush')) renderWidth *= 0.5; 
              
-             // Specific Brush Styles
              if (type === 'pencil') {
-                 ctx.lineWidth = 2; // Fixed thin line
-                 // Pencil effect: lower opacity
+                 ctx.lineWidth = 2; 
                  if (!simpleMode) ctx.strokeStyle = this.hexToRgba(hex, alpha * 0.7); 
              } 
              else if (type === 'marker') {
-                 ctx.lineWidth = stroke.size; // Constant width
+                 ctx.lineWidth = stroke.size; 
                  ctx.lineCap = 'round';
                  ctx.lineJoin = 'round';
              }
              else if (type === 'highlighter') {
-                 ctx.lineWidth = stroke.size * 2; // Wide
-                 ctx.lineCap = 'butt'; // Chisel tip feel
-                 if (!simpleMode) ctx.strokeStyle = this.hexToRgba(hex, alpha * 0.4); // Transparent
+                 ctx.lineWidth = stroke.size * 2; 
+                 ctx.lineCap = 'butt'; 
+                 if (!simpleMode) ctx.strokeStyle = this.hexToRgba(hex, alpha * 0.4); 
              }
              else {
-                 // Fallback / Geometric
                  ctx.lineWidth = renderWidth;
                  ctx.lineCap = 'round';
                  ctx.lineJoin = 'round';
@@ -1793,7 +1949,6 @@ class MotionSketchVector {
              if (stroke.fillColor) {
                  ctx.fillStyle = this.hexToRgba(stroke.fillColor, alpha); 
                  ctx.fill();
-                 // Restore stroke style
                  if(type === 'highlighter') ctx.fillStyle = this.hexToRgba(hex, alpha * 0.4);
                  else ctx.fillStyle = rgba; 
              }
@@ -1801,11 +1956,9 @@ class MotionSketchVector {
              return;
         }
         
-        // --- 2. PRESSURE SENSITIVE RENDER (Standard Brush) ---
         if (stroke.points.length < 2) {
             const p = stroke.points[0];
             const w = stroke.size * (p.p !== undefined ? p.p : 0.5); 
-            
             ctx.save();
             ctx.translate(p.x, p.y);
             ctx.scale(stroke.sx || 1, stroke.sy || 1);
@@ -1819,10 +1972,8 @@ class MotionSketchVector {
         for (let i = 0; i < stroke.points.length - 1; i++) {
             const p1 = stroke.points[i];
             const p2 = stroke.points[i+1];
-            
             const w1 = stroke.size * (p1.p !== undefined ? p1.p : 0.5);
             const w2 = stroke.size * (p2.p !== undefined ? p2.p : 0.5);
-            
             const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
             const steps = Math.ceil(dist / 2); 
             
@@ -1831,7 +1982,6 @@ class MotionSketchVector {
                 const x = p1.x + (p2.x - p1.x) * t;
                 const y = p1.y + (p2.y - p1.y) * t;
                 const w = w1 + (w2 - w1) * t;
-                
                 ctx.beginPath();
                 ctx.arc(x, y, Math.max(1, w/2), 0, Math.PI * 2);
                 ctx.fill();
@@ -1858,7 +2008,6 @@ class MotionSketchVector {
         const shapeAnchor = document.getElementById('tool-shape-anchor');
         const shapeIcon = shapeAnchor.querySelector('.main-icon');
         
-        // Handle Shape Anchor State
         if (['rect', 'circle', 'line'].includes(t)) {
             shapeAnchor.classList.add('active');
             if (t === 'rect') { shapeIcon.className = 'far fa-square main-icon'; shapeIcon.style.transform = ''; }
@@ -1868,13 +2017,11 @@ class MotionSketchVector {
             shapeAnchor.classList.remove('active');
         }
 
-        // Handle Brush Anchor State
         const brushAnchor = document.getElementById('tool-brush-anchor');
         if (brushAnchor) {
             const brushIcon = brushAnchor.querySelector('.main-icon');
             if (['brush', 'pencil', 'marker', 'highlighter'].includes(t)) {
                 brushAnchor.classList.add('active');
-                // Update icon based on brush sub-type
                  if (this.brushType === 'brush') brushIcon.className = 'fas fa-paint-brush main-icon';
                  if (this.brushType === 'pencil') brushIcon.className = 'fas fa-pencil-alt main-icon';
                  if (this.brushType === 'marker') brushIcon.className = 'fas fa-pen main-icon';
@@ -1883,14 +2030,13 @@ class MotionSketchVector {
                 brushAnchor.classList.remove('active');
             }
         }
-
         this.selectedObject = null;
         this.renderCanvas();
     }
     
     setBrushType(type) {
         this.brushType = type;
-        this.setTool('brush'); // Activate tool group
+        this.setTool('brush'); 
     }
     
     setLayer(l) {
@@ -1906,39 +2052,44 @@ class MotionSketchVector {
         document.getElementById('html-color-picker').value = c;
         if (this.selectedObject) {
             this.saveState();
-            this.selectedObject.stroke.color = c;
-            if(this.selectedObject.stroke.fillColor) this.selectedObject.stroke.fillColor = c;
+            if (this.selectedObject.isGroup) {
+                this.selectedObject.items.forEach(item => {
+                    item.stroke.color = c;
+                    if(item.stroke.fillColor) item.stroke.fillColor = c;
+                });
+            } else {
+                this.selectedObject.stroke.color = c;
+                if(this.selectedObject.stroke.fillColor) this.selectedObject.stroke.fillColor = c;
+            }
             this.renderCanvas();
             this.saveStorage();
         }
     }
     
-    // MISSING METHOD 1: Restored background color updating
     updateBgColor(color) {
         this.selectedBgColor = color;
-        // Optionally update the current frame's background data if you are storing it per frame
         this.frames[this.frameIndex].frameBgColor = color;
-        
         this.renderCanvas();
         this.updateThumbnails();
         this.saveStorage();
     }
     
-    // MISSING METHOD 2: Restored dummy method for HTML compatibility
-    setColorMode(mode) {
-        // This method is called by the UI onclick event, but the input inside it
-        // handles the actual color change via updateBgColor. 
-        // We keep this to prevent errors if the user clicks the edge of the button.
-        // We could also use this to switch the palette context if we wanted.
-    }
+    setColorMode(mode) {}
 
     setSize(s) {
         this.brushSize = parseInt(s);
         document.getElementById('size-disp').innerText = s;
         if (this.selectedObject) {
             this.saveState();
-            this.selectedObject.stroke.size = this.brushSize;
-            this.calcBounds(this.selectedObject.stroke);
+            if (this.selectedObject.isGroup) {
+                this.selectedObject.items.forEach(item => {
+                    item.stroke.size = this.brushSize;
+                });
+                this.selectedObject.bounds = this.getGroupBounds(this.selectedObject.items);
+            } else {
+                this.selectedObject.stroke.size = this.brushSize;
+                this.calcBounds(this.selectedObject.stroke);
+            }
             this.renderCanvas();
             this.saveStorage();
         }
@@ -1949,7 +2100,13 @@ class MotionSketchVector {
         document.getElementById('op-disp').innerText = v;
         if (this.selectedObject) {
             this.saveState();
-            this.selectedObject.stroke.opacity = this.opacity;
+            if (this.selectedObject.isGroup) {
+                this.selectedObject.items.forEach(item => {
+                    item.stroke.opacity = this.opacity;
+                });
+            } else {
+                this.selectedObject.stroke.opacity = this.opacity;
+            }
             this.renderCanvas();
             this.saveStorage();
         }
@@ -1975,8 +2132,6 @@ class MotionSketchVector {
         this.renderUI();
         this.renderCanvas();
         this.saveStorage();
-
-        // FIX: Auto-scroll to show the Add Button
         setTimeout(() => {
             const addBtn = this.framesList.querySelector('.add-frame-btn');
             if(addBtn) addBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
@@ -1985,9 +2140,8 @@ class MotionSketchVector {
 
     duplicateFrame(index) {
         this.saveState();
-        this.selectedObject = null; // Fix: Deselect to prevent ghost UI
+        this.selectedObject = null; 
         const target = index !== undefined ? index : this.frameIndex;
-        // Ensure deep copy of all properties including text specific ones
         const newStrokes = JSON.parse(JSON.stringify(this.frames[target].strokes));
         this.frames.splice(target + 1, 0, { strokes: newStrokes });
         this.frameIndex = target + 1;
@@ -1998,7 +2152,7 @@ class MotionSketchVector {
 
     deleteFrame(index) {
         this.saveState();
-        this.selectedObject = null; // Fix: Deselect
+        this.selectedObject = null; 
         const targetIndex = (index !== undefined) ? index : this.frameIndex;
         if(this.frames.length <= 1) { 
             this.frames[0].strokes = []; 
@@ -2057,7 +2211,6 @@ class MotionSketchVector {
                 html += `<div class="frame-copy-btn" onclick="event.stopPropagation(); app.duplicateFrame(${i})" title="Duplicate Frame"><i class="fas fa-copy"></i></div>`;
                 el.innerHTML = html;
                 
-                // Add drag handlers
                 el.draggable = true;
                 el.ondragstart = (e) => this.handleDragStart(e, i);
                 el.ondragover = (e) => this.handleDragOver(e);
@@ -2086,23 +2239,14 @@ class MotionSketchVector {
         }
     }
     
-    /* --- Drag & Drop Handlers --- */
     handleDragStart(e, index) {
         this.draggedFrameIndex = index;
         e.dataTransfer.effectAllowed = 'move';
         e.currentTarget.style.opacity = '0.5';
     }
-    handleDragOver(e) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        return false;
-    }
-    handleDragEnter(e) {
-        e.currentTarget.classList.add('drag-over');
-    }
-    handleDragLeave(e) {
-        e.currentTarget.classList.remove('drag-over');
-    }
+    handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
+    handleDragEnter(e) { e.currentTarget.classList.add('drag-over'); }
+    handleDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
     handleDrop(e, targetIndex) {
         e.stopPropagation();
         e.currentTarget.classList.remove('drag-over');
@@ -2173,8 +2317,8 @@ class MotionSketchVector {
                 const cleanFrames = this.frames.map(f => ({strokes: f.strokes}));
                 const jsonStr = JSON.stringify({...data, frames: cleanFrames});
                 
-                const size = jsonStr.length; // Approximate size in characters (bytes)
-                const limit = 5 * 1024 * 1024; // ~5MB standard limit
+                const size = jsonStr.length; 
+                const limit = 5 * 1024 * 1024; 
                 const pct = Math.min(100, (size / limit) * 100);
                 
                 const bar = document.getElementById('storage-bar');
@@ -2184,17 +2328,12 @@ class MotionSketchVector {
                     else if (pct > 70) bar.style.background = '#f1c40f'; 
                     else bar.style.background = '#2ecc71'; 
                 }
-
-                // Use IndexedDB for unlimited storage
                 this.db.set('currentProject', jsonStr).then(() => {
                      const ind = document.getElementById('save-indicator');
                      ind.style.opacity = 1;
                      setTimeout(()=>ind.style.opacity=0, 1500);
                 }).catch(e => console.log("IDB Error", e));
-                
-            } catch(e) { 
-                console.log("Serialization Error", e); 
-            }
+            } catch(e) { console.log("Serialization Error", e); }
         }, 1000);
     }
 
@@ -2311,10 +2450,8 @@ class MotionSketchVector {
         this.paperStrokes = [];
         this.frameIndex = 0;
         this.selectedBgColor = '#ffffff';
-        // RESET SELECTED OBJECT HERE TO PREVENT GHOST SELECTION
         this.selectedObject = null;
         this.dragMode = null;
-        // Reset History
         this.history = [];
         this.redoStack = [];
         
@@ -2322,15 +2459,27 @@ class MotionSketchVector {
         this.renderCanvas();
         this.saveStorage();
     }
+    
     deleteSelected() {
         if (!this.selectedObject) return;
         this.saveState();
         const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
         
-        const idx = list.indexOf(this.selectedObject.stroke);
-        if (idx > -1) list.splice(idx, 1);
+        // Handle Group Delete
+        if (this.selectedObject.isGroup) {
+            // Delete items in reverse order to preserve indices for the current pass (if indices were stored differently)
+            // Since we are referencing object equality, we just filter
+            const itemsToRemove = new Set(this.selectedObject.items.map(i => i.stroke));
+            if (this.activeLayer === 'ink') {
+                this.frames[this.frameIndex].strokes = this.frames[this.frameIndex].strokes.filter(s => !itemsToRemove.has(s));
+            } else {
+                this.paperStrokes = this.paperStrokes.filter(s => !itemsToRemove.has(s));
+            }
+        } else {
+            const idx = list.indexOf(this.selectedObject.stroke);
+            if (idx > -1) list.splice(idx, 1);
+        }
         
-        // IMPORTANT: Force deselect here to prevent UI ghost
         this.selectedObject = null;
         this.dragMode = null;
         
@@ -2338,20 +2487,52 @@ class MotionSketchVector {
         this.saveStorage();
         this.updateThumbnails();
     }
-    copySelection() { if (this.selectedObject) this.clipboard = JSON.parse(JSON.stringify(this.selectedObject.stroke)); }
+    
+    copySelection() { 
+        if (this.selectedObject) {
+            if (this.selectedObject.isGroup) {
+                // Clipboard gets array of strokes
+                this.clipboard = { isGroup: true, items: JSON.parse(JSON.stringify(this.selectedObject.items)) };
+            } else {
+                this.clipboard = JSON.parse(JSON.stringify(this.selectedObject.stroke));
+            }
+        }
+    }
+    
     pasteSelection() {
         if (this.clipboard) {
             this.saveState();
-            const newStroke = JSON.parse(JSON.stringify(this.clipboard));
-            if(newStroke.type !== 'text') {
-                newStroke.points.forEach(p => { p.x += 20; p.y += 20; });
-            } else {
-                newStroke.x += 20; newStroke.y += 20;
-            }
             const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
-            list.push(newStroke);
-            this.selectedObject = { stroke: newStroke, layer: this.activeLayer };
-            this.calcBounds(newStroke);
+            
+            if (this.clipboard.isGroup) {
+                const newItems = [];
+                this.clipboard.items.forEach(item => {
+                    const newStroke = item.stroke; // it's already a copy from JSON.parse above
+                     if(newStroke.type !== 'text') {
+                        newStroke.points.forEach(p => { p.x += 20; p.y += 20; });
+                    } else {
+                        newStroke.x += 20; newStroke.y += 20;
+                    }
+                    list.push(newStroke);
+                    newItems.push({ stroke: newStroke, layer: this.activeLayer });
+                });
+                
+                this.selectedObject = {
+                    isGroup: true,
+                    items: newItems,
+                    bounds: this.getGroupBounds(newItems)
+                };
+            } else {
+                const newStroke = JSON.parse(JSON.stringify(this.clipboard));
+                if(newStroke.type !== 'text') {
+                    newStroke.points.forEach(p => { p.x += 20; p.y += 20; });
+                } else {
+                    newStroke.x += 20; newStroke.y += 20;
+                }
+                list.push(newStroke);
+                this.selectedObject = { stroke: newStroke, layer: this.activeLayer };
+                this.calcBounds(newStroke);
+            }
             this.renderCanvas();
             this.saveStorage();
             this.updateThumbnails();
