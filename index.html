@@ -1320,8 +1320,8 @@ class MotionSketchVector {
                          };
                          // Store original positions for all items in group
                          this.dragOriginalItems = this.selectedObject.items.map(item => {
-                             if(item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height };
-                             return { points: item.stroke.points.map(p => ({...p})) };
+                             if(item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height, angle: item.stroke.angle || 0 };
+                             return { points: item.stroke.points.map(p => ({...p})), angle: item.stroke.angle || 0 };
                          });
                     }
                     else if (this.selectedObject.stroke.type === 'text') {
@@ -1465,6 +1465,56 @@ class MotionSketchVector {
                         this.selectedObject.bounds.x = bounds.x + dx;
                         this.selectedObject.bounds.y = bounds.y + dy;
                     } 
+                    else if (this.dragMode === 'rotate') {
+                        const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
+                        const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
+                        const angleDiff = currAngle - startAngle;
+                        
+                        const cos = Math.cos(angleDiff);
+                        const sin = Math.sin(angleDiff);
+                        const cx = this.dragCenter.x;
+                        const cy = this.dragCenter.y;
+                        
+                        this.selectedObject.items.forEach((item, i) => {
+                             const orig = this.dragOriginalItems[i];
+                             if (!orig) return;
+                             
+                             if (item.stroke.type === 'text') {
+                                 // Rotate Position around Group Center
+                                 const nx = orig.x - cx;
+                                 const ny = orig.y - cy;
+                                 item.stroke.x = (nx * cos - ny * sin) + cx;
+                                 item.stroke.y = (nx * sin + ny * cos) + cy;
+                                 // Rotate Item Angle
+                                 item.stroke.angle = (orig.angle || 0) + angleDiff;
+                             } else {
+                                 // Rotate Position of every point around Group Center
+                                 // AND update item angle? 
+                                 // Better approach for strokes: Rotate the points themselves around group center
+                                 // AND rotate the stroke's own angle if it had one.
+                                 
+                                 // NOTE: To support "Rigid Body" rotation of a group of drawings, 
+                                 // we need to rotate their point coordinates around the group center, 
+                                 // BUT we also need to rotate their "orientation" if they have `angle`.
+                                 // Since our strokes are just points, rotating points IS rotating orientation.
+                                 // UNLESS the stroke has a non-zero angle property. 
+                                 // Since we are moving points, we just add to angle.
+                                 
+                                 const pts = item.stroke.points;
+                                 for(let k=0; k<pts.length; k++) {
+                                     if (orig.points[k]) {
+                                         const px = orig.points[k].x - cx;
+                                         const py = orig.points[k].y - cy;
+                                         pts[k].x = (px * cos - py * sin) + cx;
+                                         pts[k].y = (px * sin + py * cos) + cy;
+                                     }
+                                 }
+                                 item.stroke.angle = (orig.angle || 0) + angleDiff;
+                             }
+                        });
+                        // Recalculate bounds after rotation (AABB grows/shrinks)
+                        this.selectedObject.bounds = this.getGroupBounds(this.selectedObject.items);
+                    }
                     else if (this.dragMode.startsWith('resize')) {
                          // Simple resize logic for groups
                         let newW = bounds.w, newH = bounds.h, newX = bounds.x, newY = bounds.y;
@@ -1800,6 +1850,7 @@ class MotionSketchVector {
         let p = {x: pos.x, y: pos.y};
         
         // If rotated object, un-rotate the mouse position relative to the box center
+        // ONLY for single objects. Group rotation keeps AABB for now.
         if (this.selectedObject.stroke && this.selectedObject.stroke.angle) {
             const cx = b.x + b.w/2;
             const cy = b.y + b.h/2;
@@ -1812,8 +1863,8 @@ class MotionSketchVector {
 
         const hit = (x, y) => Math.abs(p.x - x) < s && Math.abs(p.y - y) < s;
         
-        // Only check rotate handle if NOT a group
-        if (!this.selectedObject.isGroup && hit(b.x + b.w/2, b.y - 25)) return 'rotate';
+        // UPDATED: Allow rotate handle for both Single and Group
+        if (hit(b.x + b.w/2, b.y - 25)) return 'rotate';
 
         if (hit(b.x, b.y)) return 'resize-tl';
         if (hit(b.x+b.w, b.y)) return 'resize-tr';
@@ -2023,20 +2074,18 @@ class MotionSketchVector {
         ctx.strokeStyle = '#0A84FF';
         ctx.lineWidth = 1;
         
-        // Only Draw Rotate Handle if NOT a Group
-        if (!this.selectedObject.isGroup) {
-            ctx.beginPath();
-            ctx.moveTo(b.x + b.w/2, b.y);
-            ctx.lineTo(b.x + b.w/2, b.y - 25);
-            ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.arc(b.x + b.w/2, b.y - 25, 5, 0, Math.PI*2);
-            ctx.fillStyle = '#fff';
-            ctx.fill();
-            ctx.stroke();
-        }
-
+        // Draw Rotate Handle (Now enabled for both Single and Group)
+        ctx.beginPath();
+        ctx.moveTo(b.x + b.w/2, b.y);
+        ctx.lineTo(b.x + b.w/2, b.y - 25);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.arc(b.x + b.w/2, b.y - 25, 5, 0, Math.PI*2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.stroke();
+        
         ctx.setLineDash([5, 5]);
         ctx.strokeRect(b.x, b.y, b.w, b.h);
         ctx.setLineDash([]);
