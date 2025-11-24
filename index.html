@@ -1416,7 +1416,7 @@ class MotionSketchVector {
                         
                         this.selectedObject.items.forEach((item, i) => {
                             const orig = this.dragOriginalItems[i];
-                            if (!orig) return; // FIX 3: Safety check for items
+                            if (!orig) return; // FIX: Safety check for items
                              if (item.stroke.type === 'text') {
                                  // Scale relative to group bounds
                                  const relX = orig.x - bounds.x;
@@ -1920,6 +1920,18 @@ class MotionSketchVector {
         const type = stroke.brushType || 'brush'; 
 
         if (simpleMode || ['rect', 'circle', 'line'].includes(stroke.type) || ['pencil', 'marker', 'highlighter'].includes(type)) {
+             // FIX: Handle Dot in Simple Mode (Onion Skinning)
+             if (stroke.points.length === 1 && stroke.type !== 'rect' && stroke.type !== 'circle' && stroke.type !== 'line') {
+                 const p = stroke.points[0];
+                 let renderWidth = stroke.size;
+                 if (simpleMode && (type === 'brush' || stroke.type === 'brush')) renderWidth *= 0.5; 
+                 
+                 ctx.beginPath();
+                 ctx.arc(p.x, p.y, renderWidth/2, 0, Math.PI*2);
+                 ctx.fill();
+                 return;
+             }
+
              ctx.beginPath();
              let renderWidth = stroke.size;
              if (simpleMode && (type === 'brush' || stroke.type === 'brush')) renderWidth *= 0.5; 
