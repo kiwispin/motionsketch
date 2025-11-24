@@ -498,6 +498,19 @@
         .zoom-btn:hover { background: var(--btn-hover); }
         .zoom-val { font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; width: 45px; text-align: center; cursor: pointer; }
 
+        /* Brush Cursor */
+        .brush-cursor {
+            position: fixed;
+            pointer-events: none;
+            border: 1px solid rgba(0,0,0,0.5);
+            border-radius: 50%;
+            z-index: 9999;
+            display: none;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.1);
+            transition: width 0.1s, height 0.1s, background-color 0.1s;
+        }
+
         @media (max-width: 900px) {
             .props-panel { display: none; } 
             .workspace { right: 20px; left: 100px; } 
@@ -540,6 +553,8 @@
         </filter>
     </defs>
 </svg>
+
+<div id="brush-cursor" class="brush-cursor"></div>
 
 <div id="loading-overlay">
     <i class="fas fa-spinner fa-spin fa-2x"></i>
@@ -816,6 +831,7 @@ class MotionSketchVector {
     constructor() {
         this.canvas = document.getElementById('rendering-canvas');
         this.canvasWrapper = document.getElementById('canvas-wrapper');
+        this.cursorEl = document.getElementById('brush-cursor');
         this.ctx = this.canvas.getContext('2d');
         this.framesList = document.getElementById('frames-list');
         this.frames = [{ strokes: [] }]; 
@@ -877,6 +893,7 @@ class MotionSketchVector {
         await this.loadStorage(); 
         this.renderUI(); 
         this.renderPalette();
+        this.updateCursorStyle();
         
         const picker = document.getElementById('html-color-picker');
         if(picker) picker.value = this.brushColor;
@@ -921,6 +938,7 @@ class MotionSketchVector {
     applyZoom() {
         document.getElementById('zoom-disp').innerText = Math.round(this.zoom * 100) + '%';
         this.handleResize(); 
+        this.updateCursorStyle();
     }
 
     handleResize() {
@@ -956,12 +974,18 @@ class MotionSketchVector {
         };
         const end = (e) => this.onUp();
 
+        // Cursor Tracking
+        window.addEventListener('pointermove', (e) => {
+             this.updateCursorPos(e);
+             if (this.isDrawing || this.selectedObject || this.isSelectingBox) move(e);
+        });
+        
+        c.addEventListener('pointerenter', () => { if(this.isDrawingTool()) this.cursorEl.style.display = 'block'; });
+        c.addEventListener('pointerleave', () => { this.cursorEl.style.display = 'none'; });
+
         c.addEventListener('pointerdown', (e) => {
             c.setPointerCapture(e.pointerId);
             start(e);
-        });
-        window.addEventListener('pointermove', (e) => {
-             if (this.isDrawing || this.selectedObject || this.isSelectingBox) move(e);
         });
         window.addEventListener('pointerup', (e) => {
             c.releasePointerCapture(e.pointerId);
@@ -1027,6 +1051,42 @@ class MotionSketchVector {
                 }
             }
         });
+    }
+    
+    isDrawingTool() {
+        return ['brush', 'pencil', 'marker', 'highlighter', 'eraser'].includes(this.tool);
+    }
+    
+    updateCursorPos(e) {
+        if (this.isDrawingTool()) {
+            this.cursorEl.style.left = e.clientX + 'px';
+            this.cursorEl.style.top = e.clientY + 'px';
+        }
+    }
+    
+    updateCursorStyle() {
+        if (!this.isDrawingTool()) {
+            this.cursorEl.style.display = 'none';
+            return;
+        }
+        
+        const size = this.brushSize * this.zoom;
+        
+        // Special Sizing for Marker/Highlighter
+        let visualSize = size;
+        if (this.tool === 'brush' && this.brushType === 'highlighter') visualSize = size * 2;
+        if (this.tool === 'brush' && this.brushType === 'pencil') visualSize = 2 * this.zoom; // Fixed thin visual
+        
+        this.cursorEl.style.width = visualSize + 'px';
+        this.cursorEl.style.height = visualSize + 'px';
+        
+        if (this.tool === 'eraser') {
+            this.cursorEl.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+            this.cursorEl.style.borderColor = '#000';
+        } else {
+            this.cursorEl.style.backgroundColor = this.hexToRgba(this.brushColor, 0.5);
+            this.cursorEl.style.borderColor = 'rgba(0,0,0,0.2)';
+        }
     }
 
     getPos(e) {
