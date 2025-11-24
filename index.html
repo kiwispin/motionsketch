@@ -1494,8 +1494,6 @@ class MotionSketchVector {
                                  item.stroke.angle = (orig.angle || 0) + angleDiff;
                              } else {
                                  // Rotate Position of every point around Group Center
-                                 // NOTE: We rotate ORIGINAL points to avoid drift, then apply global group offset if needed
-                                 // BUT here we are moving the points themselves.
                                  
                                  const pts = item.stroke.points;
                                  for(let k=0; k<pts.length; k++) {
@@ -1506,8 +1504,8 @@ class MotionSketchVector {
                                          pts[k].y = (px * sin + py * cos) + cy;
                                      }
                                  }
-                                 // Also rotate the stroke's own local angle
-                                 item.stroke.angle = (orig.angle || 0) + angleDiff;
+                                 // FIX: DO NOT update item.stroke.angle for strokes as points are moved physically
+                                 // item.stroke.angle = (orig.angle || 0) + angleDiff; <-- REMOVED
                              }
                         });
                         // Don't recalculate bounds here. We want the box to rotate with the group.
@@ -1873,7 +1871,6 @@ class MotionSketchVector {
         const hit = (x, y) => Math.abs(p.x - x) < s && Math.abs(p.y - y) < s;
         
         // UPDATED: Allow rotate handle for both Single and Group
-        // NOTE: For Groups, be careful not to freeze if logic is missing
         if (hit(b.x + b.w/2, b.y - 25)) return 'rotate';
 
         if (hit(b.x, b.y)) return 'resize-tl';
