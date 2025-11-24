@@ -2338,7 +2338,7 @@ class MotionSketchVector {
                 const jsonStr = JSON.stringify({...data, frames: cleanFrames});
                 
                 const size = jsonStr.length; 
-                const limit = 5 * 1024 * 1024; 
+                const limit = 100 * 1024 * 1024; // Visual reference bumped to 100MB since we are using IDB
                 const pct = Math.min(100, (size / limit) * 100);
                 
                 const bar = document.getElementById('storage-bar');
