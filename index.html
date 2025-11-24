@@ -503,6 +503,7 @@
             position: fixed;
             pointer-events: none;
             border: 1px solid rgba(0,0,0,0.5);
+            box-shadow: 0 0 2px rgba(255,255,255,0.8);
             border-radius: 50%;
             z-index: 9999;
             display: none;
@@ -2266,11 +2267,13 @@ class MotionSketchVector {
         }
         this.selectedObject = null;
         this.renderCanvas();
+        this.updateCursorStyle(); // Add this
     }
     
     setBrushType(type) {
         this.brushType = type;
         this.setTool('brush'); 
+        this.updateCursorStyle(); // Add this
     }
     
     setLayer(l) {
@@ -2298,6 +2301,7 @@ class MotionSketchVector {
             this.renderCanvas();
             this.saveStorage();
         }
+        this.updateCursorStyle(); // Add this
     }
     
     updateBgColor(color) {
@@ -2327,6 +2331,7 @@ class MotionSketchVector {
             this.renderCanvas();
             this.saveStorage();
         }
+        this.updateCursorStyle(); // Add this
     }
     
     setOpacity(v) {
@@ -2344,6 +2349,7 @@ class MotionSketchVector {
             this.renderCanvas();
             this.saveStorage();
         }
+        this.updateCursorStyle(); // Add this
     }
 
     toggleOnion() {
