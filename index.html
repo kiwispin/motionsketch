@@ -58,8 +58,8 @@
 
         .workspace {
             position: absolute;
-            top: 100px;       
-            bottom: 190px;    
+            top: 100px;        
+            bottom: 190px;     
             left: 100px; 
             right: 280px;
             /* Grid handles centering even when content overflows */
@@ -1248,6 +1248,7 @@ class MotionSketchVector {
                 this.renderCanvas();
             } else {
                 this.selectedBgColor = this.brushColor;
+                // Update global BG color only to avoid per-frame confusion in this version
                 this.frames[this.frameIndex].frameBgColor = this.brushColor; 
                 this.updateThumbnails(); 
                 this.renderCanvas();
@@ -1584,9 +1585,9 @@ class MotionSketchVector {
         if (hit(b.x, b.y+b.h)) return 'resize-bl';
         if (hit(b.x+b.w, b.y+b.h)) return 'resize-br';
         
-        if (hit(b.x + b.w/2, b.y)) return 'resize-t';      
+        if (hit(b.x + b.w/2, b.y)) return 'resize-t';            
         if (hit(b.x + b.w/2, b.y + b.h)) return 'resize-b';
-        if (hit(b.x, b.y + b.h/2)) return 'resize-l';      
+        if (hit(b.x, b.y + b.h/2)) return 'resize-l';            
         if (hit(b.x + b.w, b.y + b.h/2)) return 'resize-r';
         
         return null;
@@ -1733,10 +1734,10 @@ class MotionSketchVector {
         drawHandle(b.x, b.y+b.h);
         drawHandle(b.x+b.w, b.y+b.h);
 
-        drawHandle(b.x + b.w/2, b.y);           
-        drawHandle(b.x + b.w/2, b.y + b.h);     
-        drawHandle(b.x, b.y + b.h/2);           
-        drawHandle(b.x + b.w, b.y + b.h/2);     
+        drawHandle(b.x + b.w/2, b.y);            
+        drawHandle(b.x + b.w/2, b.y + b.h);      
+        drawHandle(b.x, b.y + b.h/2);            
+        drawHandle(b.x + b.w, b.y + b.h/2);      
         
         ctx.restore();
     }
@@ -1910,6 +1911,25 @@ class MotionSketchVector {
             this.renderCanvas();
             this.saveStorage();
         }
+    }
+    
+    // MISSING METHOD 1: Restored background color updating
+    updateBgColor(color) {
+        this.selectedBgColor = color;
+        // Optionally update the current frame's background data if you are storing it per frame
+        this.frames[this.frameIndex].frameBgColor = color;
+        
+        this.renderCanvas();
+        this.updateThumbnails();
+        this.saveStorage();
+    }
+    
+    // MISSING METHOD 2: Restored dummy method for HTML compatibility
+    setColorMode(mode) {
+        // This method is called by the UI onclick event, but the input inside it
+        // handles the actual color change via updateBgColor. 
+        // We keep this to prevent errors if the user clicks the edge of the button.
+        // We could also use this to switch the palette context if we wanted.
     }
 
     setSize(s) {
@@ -2147,7 +2167,7 @@ class MotionSketchVector {
                 fps: this.fps,
                 width: this.canvasWidth,
                 height: this.canvasHeight,
-                palette: this.palette // Save palette in history? Usually global, but why not.
+                palette: this.palette 
             };
             try {
                 const cleanFrames = this.frames.map(f => ({strokes: f.strokes}));
