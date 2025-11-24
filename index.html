@@ -1278,6 +1278,8 @@ class MotionSketchVector {
                         this.dragCenter = { x: this.selectedObject.bounds.x + this.selectedObject.bounds.w/2, y: this.selectedObject.bounds.y + this.selectedObject.bounds.h/2 };
                     } else {
                         this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({...p}));
+                        // FIX: Capture angle for Drawings too
+                        this.dragOriginalAngle = this.selectedObject.stroke.angle || 0; 
                         this.dragOriginalBounds = {...this.selectedObject.bounds};
                         this.dragCenter = { x: this.selectedObject.bounds.x + this.selectedObject.bounds.w/2, y: this.selectedObject.bounds.y + this.selectedObject.bounds.h/2 };
                     }
@@ -1350,7 +1352,8 @@ class MotionSketchVector {
             opacity: this.opacity,
             points: [{x: pos.x, y: pos.y, p: p}], 
             fillColor: null,
-            sx: 1, sy: 1 
+            sx: 1, sy: 1,
+            angle: 0 // FIX: Initialize angle for drawings
         };
         
         const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
@@ -1474,18 +1477,8 @@ class MotionSketchVector {
                         stroke.angle = (this.dragOriginalProps.angle || 0) + angleDiff;
                     }
                     else {
-                        const cos = Math.cos(angleDiff), sin = Math.sin(angleDiff);
-                        const pts = stroke.points;
-                        const origPts = this.dragOriginalPoints;
-                        
-                        for(let i=0; i<pts.length; i++) {
-                            if (origPts[i]) {
-                                const nx = origPts[i].x - this.dragCenter.x;
-                                const ny = origPts[i].y - this.dragCenter.y;
-                                pts[i].x = (nx * cos - ny * sin) + this.dragCenter.x;
-                                pts[i].y = (nx * sin + ny * cos) + this.dragCenter.y;
-                            }
-                        }
+                        // FIX: Use angle property for drawings instead of moving points
+                        stroke.angle = (this.dragOriginalAngle || 0) + angleDiff;
                     }
                 }
                 else {
@@ -1691,9 +1684,24 @@ class MotionSketchVector {
         if (!stroke.points || stroke.points.length === 0) return false;
         const hitThresh = Math.max(10, stroke.size);
 
+        // FIX: Inverse-transform mouse pos if stroke is rotated
+        let checkPos = pos;
+        if(stroke.angle) {
+            const b = this.getStrokeBounds(stroke);
+            const cx = b.x + b.w/2; 
+            const cy = b.y + b.h/2;
+            const dx = pos.x - cx;
+            const dy = pos.y - cy;
+            const ang = -stroke.angle;
+            checkPos = {
+                x: cx + dx * Math.cos(ang) - dy * Math.sin(ang),
+                y: cy + dx * Math.sin(ang) + dy * Math.cos(ang)
+            };
+        }
+
         if (stroke.points.length === 1) {
              const p = stroke.points[0];
-             const dist = Math.hypot(pos.x - p.x, pos.y - p.y);
+             const dist = Math.hypot(checkPos.x - p.x, checkPos.y - p.y);
              const sx = stroke.sx || 1;
              const sy = stroke.sy || 1;
              const maxDim = Math.max(sx, sy) * (stroke.size/2);
@@ -1702,14 +1710,14 @@ class MotionSketchVector {
         
         let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
         stroke.points.forEach(p=>{ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; });
-        if(pos.x < minX-hitThresh || pos.x > maxX+hitThresh || pos.y < minY-hitThresh || pos.y > maxY+hitThresh) return false;
+        if(checkPos.x < minX-hitThresh || checkPos.x > maxX+hitThresh || checkPos.y < minY-hitThresh || checkPos.y > maxY+hitThresh) return false;
 
         for (let i = 0; i < stroke.points.length - 1; i++) {
-            if (this.distToSegment(pos, stroke.points[i], stroke.points[i+1]) < hitThresh) return true;
+            if (this.distToSegment(checkPos, stroke.points[i], stroke.points[i+1]) < hitThresh) return true;
         }
 
         if (this.tool === 'bucket' || stroke.fillColor) {
-            if (this.containsPoint(stroke.points, pos)) return true;
+            if (this.containsPoint(stroke.points, checkPos)) return true;
         }
         return false;
     }
@@ -1731,8 +1739,8 @@ class MotionSketchVector {
         
         let p = {x: pos.x, y: pos.y};
         
-        // If rotated text, un-rotate the mouse position relative to the box center
-        if (this.selectedObject.stroke.type === 'text' && this.selectedObject.stroke.angle) {
+        // If rotated object, un-rotate the mouse position relative to the box center
+        if (this.selectedObject.stroke.angle) {
             const cx = b.x + b.w/2;
             const cy = b.y + b.h/2;
             const dx = pos.x - cx;
@@ -1824,8 +1832,8 @@ class MotionSketchVector {
     }
 
     isInBounds(pos, rect) {
-        // FIX: If rotated text, unrotate pos for checking
-        if (this.selectedObject && this.selectedObject.stroke.type === 'text' && this.selectedObject.stroke.angle) {
+        // FIX: If rotated object, unrotate pos for checking
+        if (this.selectedObject && this.selectedObject.stroke.angle) {
              const cx = rect.x + rect.w/2;
              const cy = rect.y + rect.h/2;
              const dx = pos.x - cx;
@@ -1891,16 +1899,12 @@ class MotionSketchVector {
     }
 
     drawObject(ctx, obj, simpleMode = false) {
+        // Unified Rotation Logic for both Text and Strokes
         if (obj.type === 'text') {
             ctx.save();
             
-            // Rotate around center of text box
             const w = obj.width * (obj.sx||1);
             const h = obj.height * (obj.sy||1);
-            
-            // Text anchor (obj.x, obj.y) is roughly bottom-left (baseline) or top-left depending on metrics
-            // Based on calcBounds: y is bottom (y-h), x is left. 
-            // So visual center is:
             const cx = obj.x + w/2;
             const cy = obj.y - h/2;
 
@@ -1920,7 +1924,24 @@ class MotionSketchVector {
             ctx.fillText(obj.text, 0, 0);
             ctx.restore();
         } else {
-            this.drawStroke(ctx, obj, simpleMode);
+            // FIX: Apply rotation for drawing strokes too
+            if (obj.angle) {
+                ctx.save();
+                // Calculate center from bounds (expensive but necessary for un-baked rotation)
+                // Optimization: In a real app, cache this center.
+                let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+                obj.points.forEach(p=>{ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; });
+                const cx = (minX + maxX) / 2;
+                const cy = (minY + maxY) / 2;
+                
+                ctx.translate(cx, cy);
+                ctx.rotate(obj.angle);
+                ctx.translate(-cx, -cy);
+                this.drawStroke(ctx, obj, simpleMode);
+                ctx.restore();
+            } else {
+                this.drawStroke(ctx, obj, simpleMode);
+            }
         }
     }
 
@@ -1928,8 +1949,8 @@ class MotionSketchVector {
         const b = this.selectedObject.bounds;
         ctx.save();
         
-        // Rotate Selection Box if needed
-        if (this.selectedObject.stroke.type === 'text' && this.selectedObject.stroke.angle) {
+        // Rotate Selection Box if needed (Unified for Stroke and Text)
+        if (this.selectedObject.stroke.angle) {
              const cx = b.x + b.w/2;
              const cy = b.y + b.h/2;
              ctx.translate(cx, cy);
