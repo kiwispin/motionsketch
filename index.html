@@ -1291,6 +1291,7 @@
             async init() {
                 this.loadTheme();
                 this.setupEvents();
+                this.setupEditableNumbers(); // Enable double-click to edit numbers
                 this.handleResize();
                 window.addEventListener('resize', () => this.handleResize());
                 this.resizeCanvas(this.canvasWidth, this.canvasHeight);
@@ -1456,6 +1457,62 @@
                         }
                     }
                 });
+            }
+
+
+            setupEditableNumbers() {
+                // Helper function to make a number display editable
+                const makeEditable = (displayId, sliderId, setterMethod, min, max) => {
+                    const display = document.getElementById(displayId);
+                    const slider = document.getElementById(sliderId);
+
+                    if (!display || !slider) return;
+
+                    display.style.cursor = 'pointer';
+                    display.title = 'Double-click to edit';
+
+                    display.addEventListener('dblclick', () => {
+                        const currentValue = display.innerText;
+                        display.contentEditable = 'true';
+                        display.focus();
+
+                        // Select all text
+                        const range = document.createRange();
+                        range.selectNodeContents(display);
+                        const sel = window.getSelection();
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                    });
+
+                    display.addEventListener('blur', () => {
+                        display.contentEditable = 'false';
+                        let value = parseInt(display.innerText);
+
+                        // Validate and clamp
+                        if (isNaN(value)) value = parseInt(slider.value);
+                        value = Math.max(min, Math.min(max, value));
+
+                        // Update slider and call setter
+                        slider.value = value;
+                        setterMethod.call(this, value);
+                    });
+
+                    display.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            display.blur();
+                        } else if (e.key === 'Escape') {
+                            display.innerText = slider.value;
+                            display.blur();
+                        }
+                    });
+                };
+
+                // Setup brush size
+                makeEditable('size-disp', 'brush-size', this.setSize, 1, 200);
+
+                // Setup opacity
+                makeEditable('op-disp', 'brush-opacity', this.setOpacity, 1, 100);
             }
 
             isDrawingTool() {
