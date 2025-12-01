@@ -1075,12 +1075,15 @@ class MotionSketchVector {
             return;
         }
         
-        const size = this.brushSize * this.zoom;
+        // Account for canvas scaling: canvas resolution vs displayed size
+        const rect = this.canvas.getBoundingClientRect();
+        const displayScale = rect.width / this.canvasWidth;
+        const size = this.brushSize * 0.5 * displayScale // 0.5 for default pressure;
         
         // Special Sizing for Marker/Highlighter
         let visualSize = size;
         if (this.tool === 'brush' && this.brushType === 'highlighter') visualSize = size * 2;
-        if (this.tool === 'brush' && this.brushType === 'pencil') visualSize = 2 * this.zoom; // Fixed thin visual
+        if (this.tool === 'brush' && this.brushType === 'pencil') visualSize = 1 * displayScale // pencil with 0.5 pressure; // Fixed thin visual
         
         this.cursorEl.style.width = visualSize + 'px';
         this.cursorEl.style.height = visualSize + 'px';
