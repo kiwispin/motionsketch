@@ -500,6 +500,10 @@
             flex-direction: column;
             padding: 0;
             overflow: hidden;
+            border-radius: var(--radius-lg);
+            /* Ensure rounded corners */
+            box-shadow: var(--shadow-elevation);
+            /* Ensure shadow for float effect */
         }
 
         .timeline-controls {
@@ -510,6 +514,19 @@
             padding: 0 15px;
             gap: 15px;
             background: var(--input-bg);
+            justify-content: center;
+            /* Align with Workspace (Left 100, Right 280) vs Panel (Left 20, Right 20) */
+            /* Diff: Left 80, Right 260 */
+            padding-left: 80px;
+            padding-right: 260px;
+        }
+
+        .timeline-controls-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: auto;
         }
 
         .frames-track {
@@ -773,9 +790,7 @@
             margin-bottom: 4px;
         }
 
-        .wiggling {
-            filter: url(#wiggleFilter);
-        }
+
 
         /* Zoom Controls */
         .zoom-controls {
@@ -849,6 +864,14 @@
             .zoom-controls {
                 right: 20px;
             }
+
+            .timeline-controls {
+                /* Workspace: Left 100, Right 20 */
+                /* Panel: Left 20, Right 20 */
+                /* Diff: Left 80, Right 0 */
+                padding-left: 80px;
+                padding-right: 0;
+            }
         }
 
         @media (max-height: 700px) {
@@ -917,22 +940,21 @@
                 right: 10px;
                 bottom: 140px;
             }
+
+            .timeline-controls {
+                /* Workspace: Left 70, Right 10 */
+                /* Panel: Left 10, Right 10 */
+                /* Diff: Left 60, Right 0 */
+                padding-left: 60px;
+                padding-right: 0;
+            }
         }
     </style>
 </head>
 
 <body>
 
-    <svg style="display: none;">
-        <defs>
-            <filter id="wiggleFilter">
-                <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="3" result="noise">
-                    <animate attributeName="seed" values="1;100;1" dur="0.2s" repeatCount="indefinite" />
-                </feTurbulence>
-                <feDisplacementMap in="SourceGraphic" in2="noise" scale="4" />
-            </filter>
-        </defs>
-    </svg>
+
 
     <div id="brush-cursor" class="brush-cursor"></div>
 
@@ -1035,6 +1057,10 @@
     </header>
 
     <div class="glass-panel tools-panel">
+        <div class="tool-btn" id="tool-select" onclick="app.setTool('select')" title="Select (V)">
+            <i class="fas fa-mouse-pointer"></i>
+        </div>
+
         <!-- BRUSH FLYOUT GROUP -->
         <div class="tool-flyout-wrapper" id="brush-wrapper" onclick="this.classList.toggle('expanded')">
             <div class="tool-btn active" id="tool-brush-anchor" title="Brushes">
@@ -1085,8 +1111,10 @@
 
         <div class="divider"></div>
 
-        <div class="tool-btn" id="tool-select" onclick="app.setTool('select')" title="Select (V)">
-            <i class="fas fa-mouse-pointer"></i>
+
+
+        <div class="tool-btn" id="onion-btn" onclick="app.toggleOnion()" title="Onion Skin">
+            <i class="fas fa-layer-group"></i>
         </div>
 
         <div style="flex:1"></div>
@@ -1153,34 +1181,25 @@
 
     <div class="glass-panel timeline-panel">
         <div class="timeline-controls">
-            <div class="play-fab" id="play-btn" onclick="app.togglePlay()">
-                <i class="fas fa-play"></i>
+            <div class="timeline-controls-wrapper">
+                <div class="play-fab" id="play-btn" onclick="app.togglePlay()">
+                    <i class="fas fa-play"></i>
+                </div>
+
+                <button class="btn-ghost" onclick="app.rewind()" title="Rewind to Start">
+                    <i class="fas fa-fast-backward"></i>
+                </button>
+
+                <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
+
+                <i class="fas fa-tachometer-alt" style="color:var(--text-muted); font-size:0.8rem;"></i>
+                <!-- Force strict width on slider -->
+                <input type="range" min="1" max="24" value="12" style="width:50px; flex: 0 0 50px; margin:0 5px;"
+                    oninput="app.setFps(this.value)">
+                <span id="fps-disp"
+                    style="width: 45px; text-align: left; font-size:0.8rem; font-variant-numeric: tabular-nums; color:var(--text-muted)">12
+                    FPS</span>
             </div>
-            <div style="width:10px"></div>
-
-            <button class="btn-ghost" onclick="app.rewind()" title="Rewind to Start">
-                <i class="fas fa-fast-backward"></i>
-            </button>
-
-            <button class="btn-ghost" id="onion-btn" onclick="app.toggleOnion()" title="Onion Skin">
-                <i class="fas fa-layer-group"></i>
-            </button>
-
-            <button class="btn-ghost" onclick="app.duplicateFrame(app.frameIndex)" title="Duplicate Current Frame">
-                <i class="fas fa-copy"></i>
-            </button>
-
-            <button class="btn-ghost" id="wiggle-btn" onclick="app.toggleWiggle()" title="Wiggledoodle Mode">
-                <i class="fas fa-water"></i>
-            </button>
-
-            <div style="flex:1"></div>
-
-            <i class="fas fa-tachometer-alt" style="color:var(--text-muted); font-size:0.8rem;"></i>
-            <input type="range" min="1" max="24" value="12" style="width:80px; margin:0 10px;"
-                oninput="app.setFps(this.value)">
-            <span id="fps-disp" style="font-size:0.8rem; font-variant-numeric: tabular-nums; color:var(--text-muted)">12
-                FPS</span>
         </div>
 
         <div class="frames-track" id="frames-list"></div>
@@ -1267,7 +1286,6 @@
                 this.isPlaying = false;
                 this.fps = 12;
                 this.isOnion = false;
-                this.isWiggle = false;
 
                 this.canvasWidth = 600;
                 this.canvasHeight = 600;
@@ -2464,9 +2482,6 @@
                     ctx.globalAlpha = 1.0;
                 }
 
-                if (this.isWiggle && this.isPlaying) this.canvas.classList.add('wiggling');
-                else this.canvas.classList.remove('wiggling');
-
                 if (this.selectedObject && !this.isPlaying) {
                     const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
 
@@ -2842,11 +2857,7 @@
                 this.renderCanvas();
             }
 
-            toggleWiggle() {
-                this.isWiggle = !this.isWiggle;
-                document.getElementById('wiggle-btn').classList.toggle('active', this.isWiggle);
-                if (this.isPlaying) this.renderCanvas();
-            }
+
 
             // Added Rewind Method
             rewind() {
