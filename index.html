@@ -445,6 +445,53 @@
             transition: width 0.1s, height 0.1s, background-color 0.1s;
         }
 
+        /* Floating Group Toolbar */
+        .group-toolbar {
+            position: fixed;
+            top: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-panel);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-panel);
+            border-radius: 12px;
+            padding: 5px 8px;
+            display: none;
+            align-items: center;
+            gap: 6px;
+            box-shadow: var(--shadow-elevation);
+            z-index: 50;
+            animation: floatIn 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        @keyframes floatIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.95); }
+            to   { opacity: 1; transform: translateX(-50%) translateY(0)     scale(1);    }
+        }
+
+        .group-toolbar.visible { display: flex; }
+
+        .group-toolbar-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            padding: 0 4px;
+            font-weight: 500;
+        }
+
+        .group-toolbar-divider {
+            width: 1px;
+            height: 20px;
+            background: var(--border-panel);
+            margin: 0 2px;
+        }
+
+        .group-toolbar .btn-ghost {
+            padding: 5px 10px;
+            font-size: 0.8rem;
+            gap: 5px;
+        }
+
         @media (max-width: 900px) {
             .props-panel { display: none; }
             .workspace { right: 20px; left: 100px; }
@@ -646,6 +693,18 @@
                 <span style="pointer-events:none; z-index:1; text-shadow: 0 1px 2px rgba(255,255,255,0.8);">Set Background Color</span>
             </div>
         </div>
+    </div>
+
+    <!-- Floating Group Toolbar - appears when selection is active -->
+    <div class="group-toolbar" id="group-toolbar">
+        <span class="group-toolbar-label" id="group-toolbar-label">2 objects</span>
+        <div class="group-toolbar-divider"></div>
+        <button class="btn-ghost" id="btn-group" onclick="app.groupSelection()" title="Group (⌘G)">
+            <i class="fas fa-object-group"></i> Group
+        </button>
+        <button class="btn-ghost" id="btn-ungroup" onclick="app.ungroupSelection()" title="Ungroup (⌘⇧G)" style="display:none">
+            <i class="fas fa-object-ungroup"></i> Ungroup
+        </button>
     </div>
 
     <div class="workspace">
@@ -900,6 +959,8 @@
                     if ((e.ctrlKey || e.metaKey) && e.key === 'v') this.pasteSelection();
                     if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); this.undo(); }
                     if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); this.redo(); }
+                    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'g' || e.key === 'G')) { e.preventDefault(); this.ungroupSelection(); }
+                    else if ((e.ctrlKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) { e.preventDefault(); this.groupSelection(); }
 
                     if (e.key === 'b') this.setTool('brush');
                     if (e.key === 'e') this.setTool('eraser');
@@ -1275,17 +1336,39 @@
                     const found = this.hitTest(pos);
                     if (found) {
                         this.saveState();
-                        this.selectedObject = found;
-                        this.calcBounds(found.stroke);
+
+                        if (found.isPersistentGroup) {
+                            // Persistent group — wrap as isGroup selection so existing move/resize/rotate logic works
+                            const grp = found.stroke;
+                            const bounds = this.getStrokeBounds(grp);
+                            const items = grp.items.map((item, i) => ({ stroke: item, layer: found.layer, index: i }));
+                            this.selectedObject = {
+                                isGroup: true,
+                                isPersistentGroup: true,
+                                persistentGroupStroke: grp,
+                                items: items,
+                                bounds: bounds,
+                                angle: grp.angle || 0
+                            };
+                            this.dragOriginalBounds = { ...bounds };
+                            this.dragOriginalAngle = grp.angle || 0;
+                            this.dragCenter = { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 };
+                            this.dragOriginalItems = items.map(item => {
+                                if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height, angle: item.stroke.angle || 0 };
+                                return { points: item.stroke.points.map(p => ({ ...p })), angle: item.stroke.angle || 0 };
+                            });
+                        } else {
+                            this.selectedObject = found;
+                            this.calcBounds(found.stroke);
+                            this.dragOriginalBounds = { ...this.selectedObject.bounds };
+                            if (found.stroke.type === 'text') {
+                                this.dragOriginalProps = { x: found.stroke.x, y: found.stroke.y };
+                            } else {
+                                this.dragOriginalPoints = found.stroke.points.map(p => ({ ...p }));
+                            }
+                        }
                         this.dragMode = 'move';
                         this.dragStart = pos;
-                        this.dragOriginalBounds = { ...this.selectedObject.bounds };
-
-                        if (found.stroke.type === 'text') {
-                            this.dragOriginalProps = { x: found.stroke.x, y: found.stroke.y };
-                        } else {
-                            this.dragOriginalPoints = found.stroke.points.map(p => ({ ...p }));
-                        }
                     } else {
                         this.isSelectingBox = true;
                         this.selectionStart = pos;
@@ -1429,6 +1512,10 @@
                                 this.selectedObject.bounds = { x: newX, y: newY, w: newW, h: newH };
                             }
                             this.renderCanvas();
+                            // Sync angle back to persistent group stroke if applicable
+                            if (this.selectedObject.isPersistentGroup && this.selectedObject.persistentGroupStroke) {
+                                this.selectedObject.persistentGroupStroke.angle = this.selectedObject.angle;
+                            }
                             return;
                         }
 
@@ -1614,6 +1701,29 @@
                 const checkList = (list, layerName) => {
                     for (let i = list.length - 1; i >= 0; i--) {
                         const obj = list[i];
+                        // Handle persistent group objects stored in strokes array
+                        if (obj.type === 'group') {
+                            const b = this.getStrokeBounds(obj);
+                            // Unrotate pos if group has angle
+                            let checkPos = pos;
+                            if (obj.angle) {
+                                const cx = b.x + b.w / 2;
+                                const cy = b.y + b.h / 2;
+                                const dx = pos.x - cx;
+                                const dy = pos.y - cy;
+                                const ang = -obj.angle;
+                                checkPos = {
+                                    x: cx + dx * Math.cos(ang) - dy * Math.sin(ang),
+                                    y: cy + dx * Math.sin(ang) + dy * Math.cos(ang)
+                                };
+                            }
+                            if (checkPos.x >= b.x && checkPos.x <= b.x + b.w &&
+                                checkPos.y >= b.y && checkPos.y <= b.y + b.h) {
+                                // Return as a persistent group selection
+                                return { stroke: obj, layer: layerName, index: i, isPersistentGroup: true };
+                            }
+                            continue;
+                        }
                         if (obj.type === 'text') {
                             const w = obj.width * obj.sx;
                             const h = obj.height * obj.sy;
@@ -1745,6 +1855,18 @@
             calcBounds(stroke) { this.selectedObject.bounds = this.getStrokeBounds(stroke); }
 
             getStrokeBounds(stroke) {
+                // Handle persistent group
+                if (stroke.type === 'group') {
+                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                    stroke.items.forEach(item => {
+                        const b = this.getStrokeBounds(item);
+                        if (b.x < minX) minX = b.x;
+                        if (b.y < minY) minY = b.y;
+                        if (b.x + b.w > maxX) maxX = b.x + b.w;
+                        if (b.y + b.h > maxY) maxY = b.y + b.h;
+                    });
+                    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+                }
                 if (stroke.type === 'text') {
                     const w = stroke.width * stroke.sx;
                     const h = stroke.height * stroke.sy;
@@ -1850,9 +1972,27 @@
                     ctx.fillRect(x, y, w, h);
                     ctx.restore();
                 }
+
+                // Update floating group toolbar
+                this.updateGroupToolbar();
             }
 
             drawObject(ctx, obj, simpleMode = false) {
+                // Handle persistent group objects
+                if (obj.type === 'group') {
+                    ctx.save();
+                    if (obj.angle) {
+                        const b = this.getStrokeBounds(obj);
+                        const cx = b.x + b.w / 2;
+                        const cy = b.y + b.h / 2;
+                        ctx.translate(cx, cy);
+                        ctx.rotate(obj.angle);
+                        ctx.translate(-cx, -cy);
+                    }
+                    obj.items.forEach(item => this.drawObject(ctx, item, simpleMode));
+                    ctx.restore();
+                    return;
+                }
                 if (obj.type === 'text') {
                     ctx.save();
                     const w = obj.width * (obj.sx || 1);
@@ -1909,7 +2049,9 @@
                     ctx.translate(-cx, -cy);
                 }
 
-                ctx.strokeStyle = '#0A84FF';
+                // Persistent groups get a teal accent; temporary selections get blue
+                const accentColor = this.selectedObject.isPersistentGroup ? '#2ecc71' : '#0A84FF';
+                ctx.strokeStyle = accentColor;
                 ctx.lineWidth = 1;
 
                 ctx.beginPath();
@@ -1923,13 +2065,25 @@
                 ctx.fill();
                 ctx.stroke();
 
-                ctx.setLineDash([5, 5]);
+                // Persistent groups: solid border; temporary: dashed
+                if (this.selectedObject.isPersistentGroup) {
+                    ctx.setLineDash([4, 3]);
+                } else {
+                    ctx.setLineDash([5, 5]);
+                }
                 ctx.strokeRect(b.x, b.y, b.w, b.h);
                 ctx.setLineDash([]);
 
+                // Label for persistent group
+                if (this.selectedObject.isPersistentGroup) {
+                    ctx.fillStyle = accentColor;
+                    ctx.font = '10px sans-serif';
+                    ctx.fillText('GROUP', b.x + 3, b.y - 4);
+                }
+
                 const drawHandle = (x, y) => {
                     ctx.fillStyle = '#fff';
-                    ctx.strokeStyle = '#3498db';
+                    ctx.strokeStyle = accentColor;
                     ctx.fillRect(x - 4, y - 4, 8, 8);
                     ctx.strokeRect(x - 4, y - 4, 8, 8);
                 };
@@ -2524,12 +2678,110 @@
                 this.saveStorage();
             }
 
+            groupSelection() {
+                // Only works when a temporary multi-select (isGroup but NOT isPersistentGroup) is active
+                if (!this.selectedObject || !this.selectedObject.isGroup || this.selectedObject.isPersistentGroup) return;
+                this.saveState();
+
+                const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+
+                // Collect all the individual strokes
+                const itemStrokes = this.selectedObject.items.map(i => i.stroke);
+
+                // Remove them from the layer
+                itemStrokes.forEach(s => {
+                    const idx = list.indexOf(s);
+                    if (idx > -1) list.splice(idx, 1);
+                });
+
+                // Create persistent group object
+                const groupStroke = {
+                    type: 'group',
+                    items: itemStrokes,
+                    angle: 0
+                };
+                list.push(groupStroke);
+
+                // Select the new group
+                const bounds = this.getStrokeBounds(groupStroke);
+                const items = itemStrokes.map((s, i) => ({ stroke: s, layer: this.activeLayer, index: i }));
+                this.selectedObject = {
+                    isGroup: true,
+                    isPersistentGroup: true,
+                    persistentGroupStroke: groupStroke,
+                    items,
+                    bounds,
+                    angle: 0
+                };
+
+                this.renderCanvas();
+                this.updateGroupToolbar();
+                this.saveStorage();
+                this.updateThumbnails();
+            }
+
+            ungroupSelection() {
+                // Only works on a persistent group selection
+                if (!this.selectedObject || !this.selectedObject.isPersistentGroup) return;
+                this.saveState();
+
+                const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+                const grp = this.selectedObject.persistentGroupStroke;
+
+                // Remove the group stroke
+                const idx = list.indexOf(grp);
+                if (idx > -1) list.splice(idx, 1);
+
+                // Re-add each item individually
+                grp.items.forEach(s => list.push(s));
+
+                this.selectedObject = null;
+                this.renderCanvas();
+                this.updateGroupToolbar();
+                this.saveStorage();
+                this.updateThumbnails();
+            }
+
+            updateGroupToolbar() {
+                const toolbar = document.getElementById('group-toolbar');
+                const btnGroup = document.getElementById('btn-group');
+                const btnUngroup = document.getElementById('btn-ungroup');
+                const label = document.getElementById('group-toolbar-label');
+                if (!toolbar) return;
+
+                if (!this.selectedObject || this.isPlaying) {
+                    toolbar.classList.remove('visible');
+                    return;
+                }
+
+                if (this.selectedObject.isPersistentGroup) {
+                    // Show Ungroup only
+                    toolbar.classList.add('visible');
+                    btnGroup.style.display = 'none';
+                    btnUngroup.style.display = '';
+                    label.textContent = `Group (${this.selectedObject.items.length} objects)`;
+                } else if (this.selectedObject.isGroup) {
+                    // Show Group button for temporary multi-select
+                    toolbar.classList.add('visible');
+                    btnGroup.style.display = '';
+                    btnUngroup.style.display = 'none';
+                    label.textContent = `${this.selectedObject.items.length} selected`;
+                } else {
+                    // Single object — hide toolbar
+                    toolbar.classList.remove('visible');
+                }
+            }
+
             deleteSelected() {
                 if (!this.selectedObject) return;
                 this.saveState();
                 const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
 
-                if (this.selectedObject.isGroup) {
+                if (this.selectedObject.isPersistentGroup) {
+                    // Remove the single persistent group stroke
+                    const idx = list.indexOf(this.selectedObject.persistentGroupStroke);
+                    if (idx > -1) list.splice(idx, 1);
+                } else if (this.selectedObject.isGroup) {
                     const itemsToRemove = new Set(this.selectedObject.items.map(i => i.stroke));
                     if (this.activeLayer === 'ink') {
                         this.frames[this.frameIndex].strokes = this.frames[this.frameIndex].strokes.filter(s => !itemsToRemove.has(s));
@@ -2550,7 +2802,9 @@
 
             copySelection() {
                 if (this.selectedObject) {
-                    if (this.selectedObject.isGroup) {
+                    if (this.selectedObject.isPersistentGroup) {
+                        this.clipboard = JSON.parse(JSON.stringify(this.selectedObject.persistentGroupStroke));
+                    } else if (this.selectedObject.isGroup) {
                         this.clipboard = { isGroup: true, items: JSON.parse(JSON.stringify(this.selectedObject.items)) };
                     } else {
                         this.clipboard = JSON.parse(JSON.stringify(this.selectedObject.stroke));
@@ -2563,7 +2817,28 @@
                     this.saveState();
                     const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
 
-                    if (this.clipboard.isGroup) {
+                    if (this.clipboard.type === 'group') {
+                        // Paste persistent group as a new group stroke
+                        const newGroup = JSON.parse(JSON.stringify(this.clipboard));
+                        newGroup.items.forEach(item => {
+                            if (item.type !== 'text') {
+                                item.points.forEach(p => { p.x += 20; p.y += 20; });
+                            } else {
+                                item.x += 20; item.y += 20;
+                            }
+                        });
+                        list.push(newGroup);
+                        const bounds = this.getStrokeBounds(newGroup);
+                        const items = newGroup.items.map((item, i) => ({ stroke: item, layer: this.activeLayer, index: i }));
+                        this.selectedObject = {
+                            isGroup: true,
+                            isPersistentGroup: true,
+                            persistentGroupStroke: newGroup,
+                            items,
+                            bounds,
+                            angle: newGroup.angle || 0
+                        };
+                    } else if (this.clipboard.isGroup) {
                         const newItems = [];
                         this.clipboard.items.forEach(item => {
                             const newStroke = item.stroke;
@@ -2575,7 +2850,6 @@
                             list.push(newStroke);
                             newItems.push({ stroke: newStroke, layer: this.activeLayer });
                         });
-
                         this.selectedObject = {
                             isGroup: true,
                             items: newItems,
