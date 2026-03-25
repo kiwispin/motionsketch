@@ -908,7 +908,7 @@
             setupEvents() {
                 const c = this.canvas;
 
-                const start = (e) => this.onDown(this.getPos(e), e.pressure);
+                const start = (e) => this.onDown(this.getPos(e), e.pressure, e.ctrlKey || e.metaKey);
                 const move = (e) => {
                     let p = e.pressure;
                     if (e.pointerType === 'mouse' && e.buttons === 1) p = 0.5;
@@ -1248,8 +1248,103 @@
                 this.renderUI(true);
             }
 
-            onDown(pos, pressure = 0.5) {
+            onDown(pos, pressure = 0.5, ctrlKey = false) {
                 if (this.isPlaying) return;
+
+                // ── Ctrl+Click multi-select (select tool only) ──────────────────
+                if (ctrlKey && this.tool === 'select') {
+                    const found = this.hitTest(pos);
+
+                    // Helper: extract the raw stroke list for current layer
+                    const list = this.activeLayer === 'ink'
+                        ? this.frames[this.frameIndex].strokes
+                        : this.paperStrokes;
+
+                    if (found) {
+                        this.saveState();
+
+                        // Case 1: Ctrl+click on a persistent group → add all its items into
+                        // the working multi-select (flattening the group back out visually)
+                        if (found.isPersistentGroup) {
+                            const grp = found.stroke;
+                            // Remove the group stroke from the layer and re-expand its items
+                            const gIdx = list.indexOf(grp);
+                            if (gIdx > -1) list.splice(gIdx, 1);
+                            grp.items.forEach(s => list.push(s));
+
+                            const newItems = grp.items.map((s, i) => ({ stroke: s, layer: found.layer, index: i }));
+
+                            if (this.selectedObject && this.selectedObject.isGroup) {
+                                // Merge into existing multi-select
+                                newItems.forEach(ni => {
+                                    const already = this.selectedObject.items.find(ex => ex.stroke === ni.stroke);
+                                    if (!already) this.selectedObject.items.push(ni);
+                                });
+                                this.selectedObject.bounds = this.getGroupBounds(this.selectedObject.items);
+                            } else if (this.selectedObject && !this.selectedObject.isGroup) {
+                                // Upgrade single selection to multi
+                                const existingItems = [{ stroke: this.selectedObject.stroke, layer: this.selectedObject.layer, index: this.selectedObject.index }];
+                                newItems.forEach(ni => existingItems.push(ni));
+                                this.selectedObject = { isGroup: true, items: existingItems, bounds: this.getGroupBounds(existingItems), angle: 0 };
+                            } else {
+                                // Nothing was selected — just select the expanded group items
+                                this.selectedObject = { isGroup: true, items: newItems, bounds: this.getGroupBounds(newItems), angle: 0 };
+                            }
+
+                        } else {
+                            // Case 2: Ctrl+click on a regular stroke
+                            const clickedStroke = found.stroke;
+
+                            if (this.selectedObject && this.selectedObject.isGroup && !this.selectedObject.isPersistentGroup) {
+                                // Already have a temp multi-select — toggle this stroke in/out
+                                const existingIdx = this.selectedObject.items.findIndex(i => i.stroke === clickedStroke);
+                                if (existingIdx > -1) {
+                                    // Deselect it
+                                    this.selectedObject.items.splice(existingIdx, 1);
+                                    if (this.selectedObject.items.length === 1) {
+                                        // Collapse back to single selection
+                                        const remaining = this.selectedObject.items[0];
+                                        this.selectedObject = remaining;
+                                        this.calcBounds(remaining.stroke);
+                                    } else if (this.selectedObject.items.length === 0) {
+                                        this.selectedObject = null;
+                                    } else {
+                                        this.selectedObject.bounds = this.getGroupBounds(this.selectedObject.items);
+                                    }
+                                } else {
+                                    // Add it
+                                    this.selectedObject.items.push(found);
+                                    this.selectedObject.bounds = this.getGroupBounds(this.selectedObject.items);
+                                }
+
+                            } else if (this.selectedObject && !this.selectedObject.isGroup) {
+                                // Upgrade single → multi
+                                if (this.selectedObject.stroke === clickedStroke) {
+                                    // Clicking the same object deselects it
+                                    this.selectedObject = null;
+                                } else {
+                                    const items = [
+                                        { stroke: this.selectedObject.stroke, layer: this.selectedObject.layer, index: this.selectedObject.index },
+                                        found
+                                    ];
+                                    this.selectedObject = { isGroup: true, items, bounds: this.getGroupBounds(items), angle: 0 };
+                                }
+
+                            } else {
+                                // Nothing selected — start fresh single selection
+                                this.selectedObject = found;
+                                this.calcBounds(found.stroke);
+                            }
+                        }
+                    } else {
+                        // Ctrl+click on empty space — clear selection
+                        this.selectedObject = null;
+                    }
+
+                    this.renderCanvas();
+                    return;
+                }
+                // ── End Ctrl+Click ───────────────────────────────────────────────
 
                 if (this.tool === 'bucket') {
                     this.saveState();
