@@ -69,33 +69,19 @@
             bottom: 190px;
             left: 100px;
             right: 280px;
-            /* Grid handles centering even when content overflows */
             display: grid;
             place-items: center;
             overflow: auto;
-            /* Enable scrolling when zoomed */
             z-index: 0;
             overscroll-behavior: none;
             touch-action: pan-x pan-y;
-
-            /* Custom Scrollbar */
             scrollbar-width: thin;
             scrollbar-color: var(--border-panel) transparent;
         }
 
-        .workspace::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-
-        .workspace::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .workspace::-webkit-scrollbar-thumb {
-            background-color: rgba(128, 128, 128, 0.5);
-            border-radius: 4px;
-        }
+        .workspace::-webkit-scrollbar { width: 8px; height: 8px; }
+        .workspace::-webkit-scrollbar-track { background: transparent; }
+        .workspace::-webkit-scrollbar-thumb { background-color: rgba(128, 128, 128, 0.5); border-radius: 4px; }
 
         .canvas-wrapper {
             pointer-events: auto;
@@ -106,13 +92,10 @@
             background-image: linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
             background-size: 20px 20px;
             transition: width 0.2s ease-out, height 0.2s ease-out;
-
-            /* FIX: Removed max-width/height constraints so Zoom can overflow properly */
             width: auto;
             height: auto;
             aspect-ratio: 1/1;
             margin: 50px;
-            /* Breathing room for scrolling */
         }
 
         canvas {
@@ -125,11 +108,8 @@
             touch-action: none;
         }
 
-        #rendering-canvas {
-            z-index: 1;
-        }
+        #rendering-canvas { z-index: 1; }
 
-        /* Panels */
         .glass-panel {
             background: var(--bg-panel);
             backdrop-filter: blur(20px);
@@ -163,15 +143,9 @@
             letter-spacing: -0.5px;
         }
 
-        .logo i {
-            color: var(--accent-blue);
-            font-size: 1.2rem;
-        }
+        .logo i { color: var(--accent-blue); font-size: 1.2rem; }
 
-        .top-actions {
-            display: flex;
-            gap: 8px;
-        }
+        .top-actions { display: flex; gap: 8px; }
 
         .btn-ghost {
             background: transparent;
@@ -188,26 +162,10 @@
             transition: all 0.2s;
         }
 
-        .btn-ghost:hover {
-            background: var(--btn-hover);
-        }
-
-        .btn-ghost i {
-            font-size: 1rem;
-            opacity: 0.8;
-        }
-
-        .btn-ghost.active {
-            background: rgba(10, 132, 255, 0.2);
-            color: var(--accent-blue);
-        }
-
-        .btn-ghost.active i,
-        .btn-ghost.active svg {
-            opacity: 1;
-            fill: var(--accent-blue);
-            color: var(--accent-blue);
-        }
+        .btn-ghost:hover { background: var(--btn-hover); }
+        .btn-ghost i { font-size: 1rem; opacity: 0.8; }
+        .btn-ghost.active { background: rgba(10, 132, 255, 0.2); color: var(--accent-blue); }
+        .btn-ghost.active i, .btn-ghost.active svg { opacity: 1; fill: var(--accent-blue); color: var(--accent-blue); }
 
         .btn-primary {
             background: var(--accent-blue);
@@ -222,44 +180,13 @@
             transition: transform 0.1s, background 0.2s;
         }
 
-        .btn-primary:hover {
-            background: var(--accent-hover);
-            transform: translateY(-1px);
-        }
+        .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+        .btn-primary:active { transform: translateY(1px); }
 
-        .btn-primary:active {
-            transform: translateY(1px);
-        }
-
-        .storage-container {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            width: 60px;
-            margin: 0 10px;
-        }
-
-        .storage-label {
-            font-size: 9px;
-            color: var(--text-muted);
-            margin-bottom: 2px;
-            text-align: center;
-        }
-
-        .storage-track {
-            width: 100%;
-            height: 4px;
-            background: var(--input-bg);
-            border-radius: 2px;
-            overflow: hidden;
-        }
-
-        .storage-fill {
-            height: 100%;
-            width: 0%;
-            background: #2ecc71;
-            transition: width 0.5s ease, background 0.3s;
-        }
+        .storage-container { display: flex; flex-direction: column; justify-content: center; width: 60px; margin: 0 10px; }
+        .storage-label { font-size: 9px; color: var(--text-muted); margin-bottom: 2px; text-align: center; }
+        .storage-track { width: 100%; height: 4px; background: var(--input-bg); border-radius: 2px; overflow: hidden; }
+        .storage-fill { height: 100%; width: 0%; background: #2ecc71; transition: width 0.5s ease, background 0.3s; }
 
         .tools-panel {
             position: absolute;
@@ -290,30 +217,12 @@
             position: relative;
         }
 
-        .tool-btn:hover {
-            background: var(--btn-hover);
-            color: var(--text-main);
-        }
+        .tool-btn:hover { background: var(--btn-hover); color: var(--text-main); }
+        .tool-btn.active { background: var(--accent-blue); color: white; box-shadow: 0 4px 12px rgba(10, 132, 255, 0.4); }
 
-        .tool-btn.active {
-            background: var(--accent-blue);
-            color: white;
-            box-shadow: 0 4px 12px rgba(10, 132, 255, 0.4);
-        }
+        .divider { width: 30px; height: 1px; background: var(--border-panel); margin: 5px 0; }
 
-        .divider {
-            width: 30px;
-            height: 1px;
-            background: var(--border-panel);
-            margin: 5px 0;
-        }
-
-        .tool-flyout-wrapper {
-            position: relative;
-            display: flex;
-            justify-content: center;
-            width: 100%;
-        }
+        .tool-flyout-wrapper { position: relative; display: flex; justify-content: center; width: 100%; }
 
         .flyout-menu {
             position: absolute;
@@ -342,20 +251,9 @@
             transform: translateX(0) scale(1);
         }
 
-        .flyout-menu .tool-btn {
-            width: 40px;
-            height: 40px;
-            background: transparent;
-        }
-
-        .flyout-menu .tool-btn:hover {
-            background: var(--btn-hover);
-        }
-
-        .flyout-menu .tool-btn.active {
-            background: var(--accent-blue);
-            color: white;
-        }
+        .flyout-menu .tool-btn { width: 40px; height: 40px; background: transparent; }
+        .flyout-menu .tool-btn:hover { background: var(--btn-hover); }
+        .flyout-menu .tool-btn.active { background: var(--accent-blue); color: white; }
 
         .props-panel {
             position: absolute;
@@ -368,127 +266,27 @@
             gap: 20px;
         }
 
-        .prop-group {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
+        .prop-group { display: flex; flex-direction: column; gap: 10px; }
+        .prop-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 700; }
 
-        .prop-label {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-muted);
-            font-weight: 700;
-        }
+        .layer-switch { display: flex; background: var(--input-bg); border-radius: 8px; padding: 2px; }
+        .layer-option { flex: 1; text-align: center; padding: 6px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; color: var(--text-muted); font-weight: 500; transition: all 0.2s; }
+        .layer-option.active { background: var(--accent-blue); color: white; }
 
-        .layer-switch {
-            display: flex;
-            background: var(--input-bg);
-            border-radius: 8px;
-            padding: 2px;
-        }
+        .slider-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .slider-val { font-size: 0.8rem; color: var(--text-main); font-variant-numeric: tabular-nums; width: 30px; text-align: right; }
 
-        .layer-option {
-            flex: 1;
-            text-align: center;
-            padding: 6px;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            cursor: pointer;
-            color: var(--text-muted);
-            font-weight: 500;
-            transition: all 0.2s;
-        }
+        input[type="range"] { flex: 1; -webkit-appearance: none; height: 4px; background: var(--input-bg); border-radius: 2px; outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: white; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
 
-        .layer-option.active {
-            background: var(--accent-blue);
-            color: white;
-            shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        }
+        .color-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+        .swatch { width: 100%; aspect-ratio: 1; border-radius: 6px; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; }
+        .swatch:hover { transform: scale(1.1); }
+        [data-theme="light"] .swatch.active { border-color: #000; }
+        .swatch.active { border-color: white; }
 
-        .slider-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-        }
-
-        .slider-val {
-            font-size: 0.8rem;
-            color: var(--text-main);
-            font-variant-numeric: tabular-nums;
-            width: 30px;
-            text-align: right;
-        }
-
-        input[type="range"] {
-            flex: 1;
-            -webkit-appearance: none;
-            height: 4px;
-            background: var(--input-bg);
-            border-radius: 2px;
-            outline: none;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 16px;
-            height: 16px;
-            background: white;
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-        }
-
-        .color-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 8px;
-        }
-
-        .swatch {
-            width: 100%;
-            aspect-ratio: 1;
-            border-radius: 6px;
-            cursor: pointer;
-            border: 2px solid transparent;
-            transition: transform 0.1s;
-        }
-
-        .swatch:hover {
-            transform: scale(1.1);
-        }
-
-        [data-theme="light"] .swatch.active {
-            border-color: #000;
-        }
-
-        .swatch.active {
-            border-color: white;
-        }
-
-        .color-input-wrap {
-            width: 100%;
-            height: 36px;
-            border-radius: 8px;
-            border: 1px solid var(--border-panel);
-            overflow: hidden;
-            position: relative;
-            cursor: pointer;
-        }
-
-        input[type="color"] {
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            cursor: pointer;
-            border: none;
-            padding: 0;
-            margin: 0;
-        }
+        .color-input-wrap { width: 100%; height: 36px; border-radius: 8px; border: 1px solid var(--border-panel); overflow: hidden; position: relative; cursor: pointer; }
+        input[type="color"] { position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; cursor: pointer; border: none; padding: 0; margin: 0; }
 
         .timeline-panel {
             position: absolute;
@@ -501,9 +299,7 @@
             padding: 0;
             overflow: hidden;
             border-radius: var(--radius-lg);
-            /* Ensure rounded corners */
             box-shadow: var(--shadow-elevation);
-            /* Ensure shadow for float effect */
         }
 
         .timeline-controls {
@@ -515,19 +311,11 @@
             gap: 15px;
             background: var(--input-bg);
             justify-content: center;
-            /* Align with Workspace (Left 100, Right 280) vs Panel (Left 20, Right 20) */
-            /* Diff: Left 80, Right 260 */
             padding-left: 80px;
             padding-right: 260px;
         }
 
-        .timeline-controls-wrapper {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            width: auto;
-        }
+        .timeline-controls-wrapper { display: flex; align-items: center; justify-content: center; gap: 10px; width: auto; }
 
         .frames-track {
             flex: 1;
@@ -540,24 +328,10 @@
             scrollbar-color: var(--text-muted) transparent;
         }
 
-        .frames-track::-webkit-scrollbar {
-            height: 8px;
-            display: block;
-        }
-
-        .frames-track::-webkit-scrollbar-track {
-            background: transparent;
-            margin: 0 20px;
-        }
-
-        .frames-track::-webkit-scrollbar-thumb {
-            background-color: rgba(128, 128, 128, 0.4);
-            border-radius: 4px;
-        }
-
-        .frames-track::-webkit-scrollbar-thumb:hover {
-            background-color: rgba(128, 128, 128, 0.6);
-        }
+        .frames-track::-webkit-scrollbar { height: 8px; display: block; }
+        .frames-track::-webkit-scrollbar-track { background: transparent; margin: 0 20px; }
+        .frames-track::-webkit-scrollbar-thumb { background-color: rgba(128, 128, 128, 0.4); border-radius: 4px; }
+        .frames-track::-webkit-scrollbar-thumb:hover { background-color: rgba(128, 128, 128, 0.6); }
 
         .frame-card {
             min-width: 90px;
@@ -574,387 +348,131 @@
             cursor: grab;
         }
 
-        .frame-card:active {
-            cursor: grabbing;
-        }
+        .frame-card:active { cursor: grabbing; }
+        .frame-card img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+        .frame-card.active { border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.3); transform: translateY(-2px); }
 
-        .frame-card img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            pointer-events: none;
-        }
-
-        .frame-card.active {
-            border-color: var(--accent-blue);
-            box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.3);
-            transform: translateY(-2px);
-        }
-
-        .frame-num {
-            position: absolute;
-            top: 3px;
-            left: 4px;
-            font-size: 9px;
-            color: #000;
-            font-weight: 800;
-            background: rgba(255, 255, 255, 0.8);
-            padding: 1px 4px;
-            border-radius: 3px;
-            pointer-events: none;
-        }
+        .frame-num { position: absolute; top: 3px; left: 4px; font-size: 9px; color: #000; font-weight: 800; background: rgba(255, 255, 255, 0.8); padding: 1px 4px; border-radius: 3px; pointer-events: none; }
 
         .frame-delete-btn {
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            width: 18px;
-            height: 18px;
-            background: rgba(255, 59, 48, 0.9);
-            color: white;
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 10px;
-            cursor: pointer;
-            transition: transform 0.2s;
-            z-index: 10;
+            position: absolute; top: 2px; right: 2px; width: 18px; height: 18px;
+            background: rgba(255, 59, 48, 0.9); color: white; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center; font-size: 10px;
+            cursor: pointer; transition: transform 0.2s; z-index: 10;
         }
-
-        .frame-delete-btn:hover {
-            transform: scale(1.1);
-            background: #ff3b30;
-        }
+        .frame-delete-btn:hover { transform: scale(1.1); background: #ff3b30; }
 
         .frame-copy-btn {
-            position: absolute;
-            bottom: 2px;
-            right: 2px;
-            width: 18px;
-            height: 18px;
-            background: rgba(10, 132, 255, 0.9);
-            color: white;
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 10px;
-            cursor: pointer;
-            transition: transform 0.2s;
-            z-index: 10;
+            position: absolute; bottom: 2px; right: 2px; width: 18px; height: 18px;
+            background: rgba(10, 132, 255, 0.9); color: white; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center; font-size: 10px;
+            cursor: pointer; transition: transform 0.2s; z-index: 10;
         }
-
-        .frame-copy-btn:hover {
-            transform: scale(1.1);
-            background: var(--accent-hover);
-        }
+        .frame-copy-btn:hover { transform: scale(1.1); background: var(--accent-hover); }
 
         .add-frame-btn {
-            min-width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: var(--input-bg);
-            color: var(--text-main);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            margin-left: 10px;
+            min-width: 50px; height: 50px; border-radius: 50%;
+            background: var(--input-bg); color: var(--text-main);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; cursor: pointer; transition: all 0.2s; margin-left: 10px;
         }
-
-        .add-frame-btn:hover {
-            background: var(--accent-blue);
-            color: white;
-        }
+        .add-frame-btn:hover { background: var(--accent-blue); color: white; }
 
         .play-fab {
-            width: 32px;
-            height: 32px;
-            background: var(--accent-blue);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            cursor: pointer;
-            font-size: 0.8rem;
-            transition: transform 0.2s;
+            width: 32px; height: 32px; background: var(--accent-blue); border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; cursor: pointer; font-size: 0.8rem; transition: transform 0.2s;
         }
-
-        .play-fab:hover {
-            transform: scale(1.1);
-        }
+        .play-fab:hover { transform: scale(1.1); }
 
         #save-indicator {
-            position: fixed;
-            top: 90px;
-            right: 30px;
-            background: rgba(46, 204, 113, 0.9);
-            color: white;
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            opacity: 0;
-            transition: opacity 0.5s;
-            pointer-events: none;
-            z-index: 100;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            position: fixed; top: 90px; right: 30px;
+            background: rgba(46, 204, 113, 0.9); color: white;
+            padding: 6px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+            opacity: 0; transition: opacity 0.5s; pointer-events: none; z-index: 100;
+            backdrop-filter: blur(10px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
         #loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(10px);
-            color: white;
-            display: none;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(10px);
+            color: white; display: none; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 9999;
         }
 
         .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(5px);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 200;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(5px);
+            display: none; justify-content: center; align-items: center; z-index: 200;
         }
 
         .modal-box {
-            background: var(--bg-panel);
-            border: 1px solid var(--border-panel);
-            width: 320px;
-            padding: 24px;
-            border-radius: 16px;
-            text-align: center;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-            color: var(--text-main);
+            background: var(--bg-panel); border: 1px solid var(--border-panel);
+            width: 320px; padding: 24px; border-radius: 16px; text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); color: var(--text-main);
         }
 
-        .modal-title {
-            font-size: 1.2rem;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
+        .modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
+        .modal-desc { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.4; }
+        .modal-btns { display: flex; gap: 10px; justify-content: center; }
+        .modal-input-group { margin-bottom: 20px; display: flex; gap: 10px; justify-content: center; }
+        .modal-input { background: var(--input-bg); border: 1px solid var(--border-panel); color: var(--text-main); padding: 8px; border-radius: 6px; width: 80px; text-align: center; }
+        .modal-label { font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px; }
 
-        .modal-desc {
-            font-size: 0.9rem;
-            color: var(--text-muted);
-            margin-bottom: 24px;
-            line-height: 1.4;
-        }
-
-        .modal-btns {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-        }
-
-        .modal-input-group {
-            margin-bottom: 20px;
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-        }
-
-        .modal-input {
-            background: var(--input-bg);
-            border: 1px solid var(--border-panel);
-            color: var(--text-main);
-            padding: 8px;
-            border-radius: 6px;
-            width: 80px;
-            text-align: center;
-        }
-
-        .modal-label {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            display: block;
-            margin-bottom: 4px;
-        }
-
-
-
-        /* Zoom Controls */
         .zoom-controls {
-            position: fixed;
-            bottom: 200px;
-            right: 300px;
-            background: var(--bg-panel);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--border-panel);
-            border-radius: 20px;
-            padding: 4px 8px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            box-shadow: var(--shadow-elevation);
-            z-index: 15;
-            transition: opacity 0.2s;
+            position: fixed; bottom: 200px; right: 300px;
+            background: var(--bg-panel); backdrop-filter: blur(10px);
+            border: 1px solid var(--border-panel); border-radius: 20px;
+            padding: 4px 8px; display: flex; align-items: center; gap: 8px;
+            box-shadow: var(--shadow-elevation); z-index: 15; transition: opacity 0.2s;
         }
 
         .zoom-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-main);
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 0.9rem;
+            background: transparent; border: none; color: var(--text-main);
+            width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+            display: flex; justify-content: center; align-items: center; font-size: 0.9rem;
         }
+        .zoom-btn:hover { background: var(--btn-hover); }
+        .zoom-val { font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; width: 45px; text-align: center; cursor: pointer; }
 
-        .zoom-btn:hover {
-            background: var(--btn-hover);
-        }
-
-        .zoom-val {
-            font-size: 0.8rem;
-            font-weight: 600;
-            font-variant-numeric: tabular-nums;
-            width: 45px;
-            text-align: center;
-            cursor: pointer;
-        }
-
-        /* Brush Cursor */
         .brush-cursor {
-            position: fixed;
-            pointer-events: none;
+            position: fixed; pointer-events: none;
             border: 1px solid rgba(0, 0, 0, 0.5);
             box-shadow: 0 0 2px rgba(255, 255, 255, 0.8);
-            border-radius: 50%;
-            z-index: 9999;
-            display: none;
+            border-radius: 50%; z-index: 9999; display: none;
             transform: translate(-50%, -50%);
             background-color: rgba(0, 0, 0, 0.1);
             transition: width 0.1s, height 0.1s, background-color 0.1s;
         }
 
         @media (max-width: 900px) {
-            .props-panel {
-                display: none;
-            }
-
-            .workspace {
-                right: 20px;
-                left: 100px;
-            }
-
-            .zoom-controls {
-                right: 20px;
-            }
-
-            .timeline-controls {
-                /* Workspace: Left 100, Right 20 */
-                /* Panel: Left 20, Right 20 */
-                /* Diff: Left 80, Right 0 */
-                padding-left: 80px;
-                padding-right: 0;
-            }
+            .props-panel { display: none; }
+            .workspace { right: 20px; left: 100px; }
+            .zoom-controls { right: 20px; }
+            .timeline-controls { padding-left: 80px; padding-right: 0; }
         }
 
         @media (max-height: 700px) {
-            .canvas-wrapper {}
-
-            .tools-panel {
-                top: 80px;
-                bottom: 180px;
-            }
+            .tools-panel { top: 80px; bottom: 180px; }
         }
 
         @media (max-width: 600px) {
-            .app-header {
-                padding: 0 10px;
-                top: 10px;
-                height: 50px;
-            }
-
-            .logo span {
-                display: none;
-            }
-
-            .workspace {
-                top: 70px;
-                left: 70px;
-                right: 10px;
-                bottom: 140px;
-            }
-
-            .tools-panel {
-                top: 70px;
-                bottom: 160px;
-                left: 10px;
-                width: 50px;
-                padding: 10px 0;
-            }
-
-            .tool-btn {
-                width: 36px;
-                height: 36px;
-                font-size: 1rem;
-            }
-
-            .timeline-panel {
-                left: 10px;
-                right: 10px;
-                bottom: 10px;
-                height: 120px;
-            }
-
-            .frame-card {
-                min-width: 70px;
-                height: 55px;
-            }
-
-            .add-frame-btn {
-                min-width: 40px;
-                height: 40px;
-            }
-
-            .flyout-menu {
-                left: 45px;
-            }
-
-            .zoom-controls {
-                right: 10px;
-                bottom: 140px;
-            }
-
-            .timeline-controls {
-                /* Workspace: Left 70, Right 10 */
-                /* Panel: Left 10, Right 10 */
-                /* Diff: Left 60, Right 0 */
-                padding-left: 60px;
-                padding-right: 0;
-            }
+            .app-header { padding: 0 10px; top: 10px; height: 50px; }
+            .logo span { display: none; }
+            .workspace { top: 70px; left: 70px; right: 10px; bottom: 140px; }
+            .tools-panel { top: 70px; bottom: 160px; left: 10px; width: 50px; padding: 10px 0; }
+            .tool-btn { width: 36px; height: 36px; font-size: 1rem; }
+            .timeline-panel { left: 10px; right: 10px; bottom: 10px; height: 120px; }
+            .frame-card { min-width: 70px; height: 55px; }
+            .add-frame-btn { min-width: 40px; height: 40px; }
+            .flyout-menu { left: 45px; }
+            .zoom-controls { right: 10px; bottom: 140px; }
+            .timeline-controls { padding-left: 60px; padding-right: 0; }
         }
     </style>
 </head>
 
 <body>
-
-
 
     <div id="brush-cursor" class="brush-cursor"></div>
 
@@ -967,30 +485,25 @@
 
     <input type="file" id="file-input" accept=".json" style="display:none" onchange="app.handleFileUpload(this)">
 
-    <!-- Hidden Color Input for Palette Editing -->
     <input type="color" id="palette-editor-input" style="opacity:0; position:fixed; z-index:-1; width:1px; height:1px;"
         onchange="app.confirmPaletteEdit(this.value)">
 
-    <!-- New Modal -->
     <div id="custom-modal" class="modal-overlay">
         <div class="modal-box">
             <div class="modal-title">New Project?</div>
             <div class="modal-desc">Starting a new animation will erase your current unsaved progress.</div>
             <div class="modal-btns">
                 <button class="btn-ghost" onclick="app.closeModal('custom-modal')">Cancel</button>
-                <button class="btn-primary" style="background:#ff3b30" onclick="app.confirmNewAnimation()">Create
-                    New</button>
+                <button class="btn-primary" style="background:#ff3b30" onclick="app.confirmNewAnimation()">Create New</button>
             </div>
         </div>
     </div>
 
-    <!-- Text Input Modal -->
     <div id="text-modal" class="modal-overlay">
         <div class="modal-box">
             <div class="modal-title">Enter Text</div>
             <div class="modal-input-group">
-                <input type="text" id="text-input-value" class="modal-input" style="width: 100%; text-align: left;"
-                    placeholder="Your Text Here">
+                <input type="text" id="text-input-value" class="modal-input" style="width: 100%; text-align: left;" placeholder="Your Text Here">
             </div>
             <div class="modal-btns">
                 <button class="btn-ghost" onclick="app.closeModal('text-modal')">Cancel</button>
@@ -999,12 +512,10 @@
         </div>
     </div>
 
-    <!-- Settings Modal -->
     <div id="settings-modal" class="modal-overlay">
         <div class="modal-box">
             <div class="modal-title">Project Settings</div>
             <div class="modal-desc">Adjust Canvas Size</div>
-
             <div class="modal-input-group">
                 <div>
                     <span class="modal-label">Width</span>
@@ -1016,7 +527,6 @@
                     <input type="number" id="canvas-height" class="modal-input" value="600">
                 </div>
             </div>
-
             <div class="modal-btns">
                 <button class="btn-ghost" onclick="app.closeModal('settings-modal')">Cancel</button>
                 <button class="btn-primary" onclick="app.applySettings()">Apply</button>
@@ -1032,27 +542,21 @@
             <button class="btn-ghost" onclick="app.requestNewAnimation()"><i class="fas fa-plus"></i> New</button>
             <button class="btn-ghost" onclick="app.saveProject()"><i class="fas fa-download"></i> Save</button>
             <button class="btn-ghost" onclick="app.openProject()"><i class="fas fa-folder-open"></i> Open</button>
-
             <div class="storage-container" title="Browser Storage Used">
                 <div class="storage-label">Storage</div>
                 <div class="storage-track">
                     <div class="storage-fill" id="storage-bar"></div>
                 </div>
             </div>
-
             <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
             <button class="btn-ghost" onclick="app.undo()" title="Undo"><i class="fas fa-undo"></i></button>
             <button class="btn-ghost" onclick="app.redo()" title="Redo"><i class="fas fa-redo"></i></button>
             <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
-
             <button class="btn-ghost" onclick="app.toggleTheme()" title="Toggle Theme">
                 <i class="fas fa-moon" id="theme-icon"></i>
             </button>
-
             <button class="btn-primary" onclick="app.exportGIF()">Export GIF</button>
-
-            <button class="btn-ghost" onclick="app.openSettings()" title="Canvas Settings"><i
-                    class="fas fa-sliders-h"></i></button>
+            <button class="btn-ghost" onclick="app.openSettings()" title="Canvas Settings"><i class="fas fa-sliders-h"></i></button>
         </div>
     </header>
 
@@ -1061,40 +565,28 @@
             <i class="fas fa-mouse-pointer"></i>
         </div>
 
-        <!-- BRUSH FLYOUT GROUP -->
         <div class="tool-flyout-wrapper" id="brush-wrapper" onclick="this.classList.toggle('expanded')">
             <div class="tool-btn active" id="tool-brush-anchor" title="Brushes">
                 <i class="fas fa-paint-brush main-icon"></i>
-                <i class="fas fa-caret-right"
-                    style="font-size: 0.6rem; position: absolute; bottom: 4px; right: 4px; color: var(--text-muted);"></i>
+                <i class="fas fa-caret-right" style="font-size: 0.6rem; position: absolute; bottom: 4px; right: 4px; color: var(--text-muted);"></i>
             </div>
             <div class="flyout-menu">
-                <div class="tool-btn" id="tool-brush-standard"
-                    onclick="event.stopPropagation(); app.setBrushType('brush')" title="Standard Brush"><i
-                        class="fas fa-paint-brush"></i></div>
-                <div class="tool-btn" id="tool-pencil" onclick="event.stopPropagation(); app.setBrushType('pencil')"
-                    title="Pencil"><i class="fas fa-pencil-alt"></i></div>
-                <div class="tool-btn" id="tool-marker" onclick="event.stopPropagation(); app.setBrushType('marker')"
-                    title="Marker"><i class="fas fa-pen"></i></div>
-                <div class="tool-btn" id="tool-highlighter"
-                    onclick="event.stopPropagation(); app.setBrushType('highlighter')" title="Highlighter"><i
-                        class="fas fa-highlighter"></i></div>
+                <div class="tool-btn" id="tool-brush-standard" onclick="event.stopPropagation(); app.setBrushType('brush')" title="Standard Brush"><i class="fas fa-paint-brush"></i></div>
+                <div class="tool-btn" id="tool-pencil" onclick="event.stopPropagation(); app.setBrushType('pencil')" title="Pencil"><i class="fas fa-pencil-alt"></i></div>
+                <div class="tool-btn" id="tool-marker" onclick="event.stopPropagation(); app.setBrushType('marker')" title="Marker"><i class="fas fa-pen"></i></div>
+                <div class="tool-btn" id="tool-highlighter" onclick="event.stopPropagation(); app.setBrushType('highlighter')" title="Highlighter"><i class="fas fa-highlighter"></i></div>
             </div>
         </div>
 
         <div class="tool-flyout-wrapper" id="shape-wrapper" onclick="this.classList.toggle('expanded')">
             <div class="tool-btn" id="tool-shape-anchor" title="Shapes">
                 <i class="far fa-square main-icon"></i>
-                <i class="fas fa-caret-right"
-                    style="font-size: 0.6rem; position: absolute; bottom: 4px; right: 4px; color: var(--text-muted);"></i>
+                <i class="fas fa-caret-right" style="font-size: 0.6rem; position: absolute; bottom: 4px; right: 4px; color: var(--text-muted);"></i>
             </div>
             <div class="flyout-menu">
-                <div class="tool-btn" id="tool-rect" onclick="event.stopPropagation(); app.setTool('rect')"
-                    title="Rectangle (R)"><i class="far fa-square"></i></div>
-                <div class="tool-btn" id="tool-circle" onclick="event.stopPropagation(); app.setTool('circle')"
-                    title="Circle (C)"><i class="far fa-circle"></i></div>
-                <div class="tool-btn" id="tool-line" onclick="event.stopPropagation(); app.setTool('line')"
-                    title="Line (L)"><i class="fas fa-slash" style="transform: rotate(-45deg);"></i></div>
+                <div class="tool-btn" id="tool-rect" onclick="event.stopPropagation(); app.setTool('rect')" title="Rectangle (R)"><i class="far fa-square"></i></div>
+                <div class="tool-btn" id="tool-circle" onclick="event.stopPropagation(); app.setTool('circle')" title="Circle (C)"><i class="far fa-circle"></i></div>
+                <div class="tool-btn" id="tool-line" onclick="event.stopPropagation(); app.setTool('line')" title="Line (L)"><i class="fas fa-slash" style="transform: rotate(-45deg);"></i></div>
             </div>
         </div>
 
@@ -1111,15 +603,11 @@
 
         <div class="divider"></div>
 
-
-
         <div class="tool-btn" id="onion-btn" onclick="app.toggleOnion()" title="Onion Skin">
             <i class="fas fa-layer-group"></i>
         </div>
 
         <div style="flex:1"></div>
-
-
     </div>
 
     <div class="glass-panel props-panel">
@@ -1140,8 +628,7 @@
             </div>
             <div class="slider-row">
                 <i class="fas fa-adjust" style="font-size:0.6rem; color:#aaa;"></i>
-                <input type="range" id="brush-opacity" min="1" max="100" value="100"
-                    oninput="app.setOpacity(this.value)">
+                <input type="range" id="brush-opacity" min="1" max="100" value="100" oninput="app.setOpacity(this.value)">
                 <div class="slider-val" id="op-disp">100</div>
             </div>
         </div>
@@ -1151,15 +638,12 @@
             <div class="color-input-wrap">
                 <input type="color" id="html-color-picker" value="#000000" oninput="app.setColor(this.value)">
             </div>
-            <div class="color-grid" id="palette-container">
-                <!-- Palette swatches generated via JS -->
-            </div>
+            <div class="color-grid" id="palette-container"></div>
             <div class="color-picker-btn" id="bg-color-picker" onclick="app.setColorMode('bg')" title="Background Color"
                 style="background:white; margin-top:10px; width:100%; height:36px; border-radius:8px; border:1px solid var(--border-panel); display:flex; align-items:center; justify-content:center; font-size:0.8rem; color:#333; font-weight:bold; position:relative; overflow:hidden; cursor:pointer;">
                 <input type="color" id="bg-color-input" value="#ffffff" oninput="app.updateBgColor(this.value)"
                     style="position:absolute; width:200%; height:200%; top:-50%; left:-50%; cursor:pointer; padding:0; margin:0; border:none;">
-                <span style="pointer-events:none; z-index:1; text-shadow: 0 1px 2px rgba(255,255,255,0.8);">Set
-                    Background Color</span>
+                <span style="pointer-events:none; z-index:1; text-shadow: 0 1px 2px rgba(255,255,255,0.8);">Set Background Color</span>
             </div>
         </div>
     </div>
@@ -1168,8 +652,6 @@
         <div class="canvas-wrapper" id="canvas-wrapper">
             <canvas id="rendering-canvas" width="600" height="600"></canvas>
         </div>
-
-        <!-- Floating Zoom Controls -->
         <div class="zoom-controls">
             <button class="zoom-btn" onclick="app.adjustZoom(-0.1)"><i class="fas fa-minus"></i></button>
             <div class="zoom-val" id="zoom-disp" onclick="app.resetZoom()">100%</div>
@@ -1183,28 +665,19 @@
                 <div class="play-fab" id="play-btn" onclick="app.togglePlay()">
                     <i class="fas fa-play"></i>
                 </div>
-
                 <button class="btn-ghost" onclick="app.rewind()" title="Rewind to Start">
                     <i class="fas fa-fast-backward"></i>
                 </button>
-
                 <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
-
                 <i class="fas fa-tachometer-alt" style="color:var(--text-muted); font-size:0.8rem;"></i>
-                <!-- Force strict width on slider -->
-                <input type="range" min="1" max="24" value="12" style="width:50px; flex: 0 0 50px; margin:0 5px;"
-                    oninput="app.setFps(this.value)">
-                <span id="fps-disp"
-                    style="width: 45px; text-align: left; font-size:0.8rem; font-variant-numeric: tabular-nums; color:var(--text-muted)">12
-                    FPS</span>
+                <input type="range" min="1" max="24" value="12" style="width:50px; flex: 0 0 50px; margin:0 5px;" oninput="app.setFps(this.value)">
+                <span id="fps-disp" style="width: 45px; text-align: left; font-size:0.8rem; font-variant-numeric: tabular-nums; color:var(--text-muted)">12 FPS</span>
             </div>
         </div>
-
         <div class="frames-track" id="frames-list"></div>
     </div>
 
     <script>
-        // IndexedDB Helper Class
         class IDBHelper {
             constructor(dbName, storeName) {
                 this.dbName = dbName;
@@ -1220,10 +693,7 @@
                             db.createObjectStore(this.storeName);
                         }
                     };
-                    request.onsuccess = (e) => {
-                        this.db = e.target.result;
-                        resolve();
-                    };
+                    request.onsuccess = (e) => { this.db = e.target.result; resolve(); };
                     request.onerror = (e) => reject(e);
                 });
             }
@@ -1262,7 +732,7 @@
 
                 this.activeLayer = 'ink';
                 this.tool = 'brush';
-                this.brushType = 'brush'; // brush, pencil, marker, highlighter
+                this.brushType = 'brush';
 
                 this.brushColor = '#000000';
                 this.brushSize = 10;
@@ -1276,7 +746,6 @@
                 this.dragMode = null;
                 this.draggedFrameIndex = null;
 
-                // Multi-select Marquee Logic
                 this.isSelectingBox = false;
                 this.selectionStart = { x: 0, y: 0 };
                 this.selectionCurr = { x: 0, y: 0 };
@@ -1291,14 +760,12 @@
 
                 this.textInputPos = { x: 0, y: 0 };
 
-                // Palette State
                 this.palette = ['#000000', '#ffffff', '#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#8E8E93'];
                 this.paletteEditIndex = -1;
 
                 this.history = [];
                 this.redoStack = [];
 
-                // Unlimited Storage Engine
                 this.db = new IDBHelper('SketchMotionDB', 'projects');
 
                 this.init();
@@ -1307,7 +774,7 @@
             async init() {
                 this.loadTheme();
                 this.setupEvents();
-                this.setupEditableNumbers(); // Enable double-click to edit numbers
+                this.setupEditableNumbers();
                 this.handleResize();
                 window.addEventListener('resize', () => this.handleResize());
                 this.resizeCanvas(this.canvasWidth, this.canvasHeight);
@@ -1321,7 +788,6 @@
                 if (picker) picker.value = this.brushColor;
             }
 
-            /* --- Theme Handling --- */
             loadTheme() {
                 const theme = localStorage.getItem('motionSketchTheme') || 'dark';
                 document.body.setAttribute('data-theme', theme);
@@ -1339,14 +805,9 @@
             updateThemeIcon(theme) {
                 const icon = document.getElementById('theme-icon');
                 if (!icon) return;
-                if (theme === 'light') {
-                    icon.className = 'fas fa-sun';
-                } else {
-                    icon.className = 'fas fa-moon';
-                }
+                icon.className = theme === 'light' ? 'fas fa-sun' : 'fas fa-moon';
             }
 
-            /* --- Zoom Handling --- */
             adjustZoom(delta) {
                 this.zoom = Math.max(0.1, Math.min(5.0, this.zoom + delta));
                 this.applyZoom();
@@ -1396,7 +857,6 @@
                 };
                 const end = (e) => this.onUp();
 
-                // Cursor Tracking
                 window.addEventListener('pointermove', (e) => {
                     this.updateCursorPos(e);
                     if (this.isDrawing || this.selectedObject || this.isSelectingBox) move(e);
@@ -1418,27 +878,18 @@
                 c.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 
                 document.addEventListener('click', (e) => {
-                    // Handle Shape flyout
                     const shapeWrapper = document.getElementById('shape-wrapper');
-                    if (shapeWrapper && !shapeWrapper.contains(e.target)) {
-                        shapeWrapper.classList.remove('expanded');
-                    }
-                    // Handle Brush flyout
+                    if (shapeWrapper && !shapeWrapper.contains(e.target)) shapeWrapper.classList.remove('expanded');
                     const brushWrapper = document.getElementById('brush-wrapper');
-                    if (brushWrapper && !brushWrapper.contains(e.target)) {
-                        brushWrapper.classList.remove('expanded');
-                    }
+                    if (brushWrapper && !brushWrapper.contains(e.target)) brushWrapper.classList.remove('expanded');
                 });
 
                 document.addEventListener('keydown', (e) => {
                     if (e.target.tagName === 'INPUT') return;
 
                     if (e.key === 'Delete' || e.key === 'Backspace') {
-                        if (this.selectedObject) {
-                            this.deleteSelected();
-                        } else {
-                            this.deleteFrame();
-                        }
+                        if (this.selectedObject) this.deleteSelected();
+                        else this.deleteFrame();
                     }
 
                     if (e.key === 'd' || e.key === 'D') this.duplicateFrame();
@@ -1459,7 +910,7 @@
                     if (e.key === 'ArrowLeft') {
                         if (this.frameIndex > 0) {
                             this.frameIndex--;
-                            this.selectedObject = null; // FIX: Clear selection when changing frame
+                            this.selectedObject = null;
                             this.renderCanvas();
                             this.renderUI(true);
                         }
@@ -1467,7 +918,7 @@
                     if (e.key === 'ArrowRight') {
                         if (this.frameIndex < this.frames.length - 1) {
                             this.frameIndex++;
-                            this.selectedObject = null; // FIX: Clear selection when changing frame
+                            this.selectedObject = null;
                             this.renderCanvas();
                             this.renderUI(true);
                         }
@@ -1475,24 +926,18 @@
                 });
             }
 
-
             setupEditableNumbers() {
-                // Helper function to make a number display editable
                 const makeEditable = (displayId, sliderId, setterMethod, min, max) => {
                     const display = document.getElementById(displayId);
                     const slider = document.getElementById(sliderId);
-
                     if (!display || !slider) return;
 
                     display.style.cursor = 'pointer';
                     display.title = 'Double-click to edit';
 
                     display.addEventListener('dblclick', () => {
-                        const currentValue = display.innerText;
                         display.contentEditable = 'true';
                         display.focus();
-
-                        // Select all text
                         const range = document.createRange();
                         range.selectNodeContents(display);
                         const sel = window.getSelection();
@@ -1503,31 +948,19 @@
                     display.addEventListener('blur', () => {
                         display.contentEditable = 'false';
                         let value = parseInt(display.innerText);
-
-                        // Validate and clamp
                         if (isNaN(value)) value = parseInt(slider.value);
                         value = Math.max(min, Math.min(max, value));
-
-                        // Update slider and call setter
                         slider.value = value;
                         setterMethod.call(this, value);
                     });
 
                     display.addEventListener('keydown', (e) => {
-                        if (e.key === 'Enter') {
-                            e.preventDefault();
-                            display.blur();
-                        } else if (e.key === 'Escape') {
-                            display.innerText = slider.value;
-                            display.blur();
-                        }
+                        if (e.key === 'Enter') { e.preventDefault(); display.blur(); }
+                        else if (e.key === 'Escape') { display.innerText = slider.value; display.blur(); }
                     });
                 };
 
-                // Setup brush size
                 makeEditable('size-disp', 'brush-size', this.setSize, 1, 200);
-
-                // Setup opacity
                 makeEditable('op-disp', 'brush-opacity', this.setOpacity, 1, 100);
             }
 
@@ -1548,22 +981,16 @@
                     return;
                 }
 
-                // Account for canvas scaling: canvas resolution vs displayed size
                 const rect = this.canvas.getBoundingClientRect();
                 const displayScale = rect.width / this.canvasWidth;
-                const size = this.brushSize * 0.5 * displayScale // 0.5 for default pressure;
+                const size = this.brushSize * 0.5 * displayScale;
 
-                // Special Sizing for different brush types to match actual rendering
-                let visualSize = size;  // Default: pressure-sensitive (0.5 * brushSize * displayScale)
-
+                let visualSize = size;
                 if (this.tool === 'brush' && this.brushType === 'highlighter') {
-                    // Highlighter draws at size * 2 (line 2177)
                     visualSize = this.brushSize * 2 * displayScale;
                 } else if (this.tool === 'brush' && this.brushType === 'pencil') {
-                    // Pencil draws with fixed lineWidth = 2 (line 2168)
                     visualSize = 2 * displayScale;
                 } else if (this.tool === 'brush' && this.brushType === 'marker') {
-                    // Marker draws at full brush size without pressure (line 2172)
                     visualSize = this.brushSize * displayScale;
                 }
 
@@ -1594,7 +1021,6 @@
                 this.canvasHeight = h;
                 this.canvas.width = w;
                 this.canvas.height = h;
-
                 this.canvasWrapper.style.aspectRatio = `${w}/${h}`;
                 this.canvasWrapper.style.width = 'auto';
                 this.canvasWrapper.style.height = 'auto';
@@ -1642,12 +1068,11 @@
                         color: this.brushColor,
                         size: h,
                         opacity: this.opacity,
-                        angle: 0, // Initialize Angle
+                        angle: 0,
                         points: []
                     };
                     const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
                     list.push(textObj);
-
                     this.renderCanvas();
                     this.saveStorage();
                 }
@@ -1729,10 +1154,7 @@
                 this.paperStrokes = prevState.paperStrokes;
                 this.frameIndex = prevState.frameIndex;
                 this.selectedBgColor = prevState.bgColor;
-                if (prevState.palette) {
-                    this.palette = prevState.palette;
-                    this.renderPalette();
-                }
+                if (prevState.palette) { this.palette = prevState.palette; this.renderPalette(); }
                 if (prevState.width && prevState.height) this.resizeCanvas(prevState.width, prevState.height);
                 this.selectedObject = null;
                 this.updateThumbnails();
@@ -1757,10 +1179,7 @@
                 this.paperStrokes = nextState.paperStrokes;
                 this.frameIndex = nextState.frameIndex;
                 this.selectedBgColor = nextState.bgColor;
-                if (nextState.palette) {
-                    this.palette = nextState.palette;
-                    this.renderPalette();
-                }
+                if (nextState.palette) { this.palette = nextState.palette; this.renderPalette(); }
                 if (nextState.width && nextState.height) this.resizeCanvas(nextState.width, nextState.height);
                 this.selectedObject = null;
                 this.updateThumbnails();
@@ -1802,21 +1221,17 @@
                             this.dragStart = pos;
 
                             if (this.selectedObject.isGroup) {
-                                // Prepare Group Drag
                                 this.dragOriginalBounds = { ...this.selectedObject.bounds };
-                                this.dragOriginalAngle = this.selectedObject.angle || 0; // FIX: Capture group angle
-
+                                this.dragOriginalAngle = this.selectedObject.angle || 0;
                                 this.dragCenter = {
                                     x: this.selectedObject.bounds.x + this.selectedObject.bounds.w / 2,
                                     y: this.selectedObject.bounds.y + this.selectedObject.bounds.h / 2
                                 };
-                                // Store original positions for all items in group
                                 this.dragOriginalItems = this.selectedObject.items.map(item => {
                                     if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height, angle: item.stroke.angle || 0 };
                                     return { points: item.stroke.points.map(p => ({ ...p })), angle: item.stroke.angle || 0 };
                                 });
-                            }
-                            else if (this.selectedObject.stroke.type === 'text') {
+                            } else if (this.selectedObject.stroke.type === 'text') {
                                 this.dragOriginalProps = {
                                     x: this.selectedObject.stroke.x,
                                     y: this.selectedObject.stroke.y,
@@ -1824,13 +1239,12 @@
                                     h: this.selectedObject.stroke.height,
                                     sx: this.selectedObject.stroke.sx,
                                     sy: this.selectedObject.stroke.sy,
-                                    angle: this.selectedObject.stroke.angle || 0 // Capture Angle
+                                    angle: this.selectedObject.stroke.angle || 0
                                 };
                                 this.dragOriginalBounds = { ...this.selectedObject.bounds };
                                 this.dragCenter = { x: this.selectedObject.bounds.x + this.selectedObject.bounds.w / 2, y: this.selectedObject.bounds.y + this.selectedObject.bounds.h / 2 };
                             } else {
                                 this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({ ...p }));
-                                // FIX: Capture angle for Drawings too
                                 this.dragOriginalAngle = this.selectedObject.stroke.angle || 0;
                                 this.dragOriginalBounds = { ...this.selectedObject.bounds };
                                 this.dragCenter = { x: this.selectedObject.bounds.x + this.selectedObject.bounds.w / 2, y: this.selectedObject.bounds.y + this.selectedObject.bounds.h / 2 };
@@ -1842,8 +1256,6 @@
                             this.saveState();
                             this.dragMode = 'move';
                             this.dragStart = pos;
-
-                            // FIX 1: Initialize bounds here to prevent "undefined reading x" errors
                             this.dragOriginalBounds = { ...this.selectedObject.bounds };
 
                             if (this.selectedObject.isGroup) {
@@ -1851,8 +1263,7 @@
                                     if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y };
                                     return { points: item.stroke.points.map(p => ({ ...p })) };
                                 });
-                            }
-                            else if (this.selectedObject.stroke.type === 'text') {
+                            } else if (this.selectedObject.stroke.type === 'text') {
                                 this.dragOriginalProps = { x: this.selectedObject.stroke.x, y: this.selectedObject.stroke.y };
                             } else {
                                 this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({ ...p }));
@@ -1868,8 +1279,6 @@
                         this.calcBounds(found.stroke);
                         this.dragMode = 'move';
                         this.dragStart = pos;
-
-                        // Safely init bounds here too just in case
                         this.dragOriginalBounds = { ...this.selectedObject.bounds };
 
                         if (found.stroke.type === 'text') {
@@ -1878,7 +1287,6 @@
                             this.dragOriginalPoints = found.stroke.points.map(p => ({ ...p }));
                         }
                     } else {
-                        // START BOX SELECTION
                         this.isSelectingBox = true;
                         this.selectionStart = pos;
                         this.selectionCurr = pos;
@@ -1894,7 +1302,6 @@
                 this.dragStart = pos;
 
                 const p = (typeof pressure === 'number') ? pressure : 0.5;
-                if (p <= 0) p = 0.5;
 
                 this.currentStroke = {
                     type: this.tool,
@@ -1905,7 +1312,7 @@
                     points: [{ x: pos.x, y: pos.y, p: p }],
                     fillColor: null,
                     sx: 1, sy: 1,
-                    angle: 0 // FIX: Initialize angle for drawings
+                    angle: 0
                 };
 
                 const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
@@ -1924,23 +1331,19 @@
                     }
 
                     if (this.dragMode && this.selectedObject) {
-                        // --- FIX: Safety Check ---
                         if (!this.dragStart) return;
 
-                        // --- HANDLING GROUPS ---
                         if (this.selectedObject.isGroup) {
                             const bounds = this.dragOriginalBounds;
-                            // FIX 2: Safety check for bounds
                             if (!bounds) return;
 
                             const dx = pos.x - this.dragStart.x;
                             const dy = pos.y - this.dragStart.y;
 
                             if (this.dragMode === 'move') {
-                                // Move all items
                                 this.selectedObject.items.forEach((item, i) => {
                                     const orig = this.dragOriginalItems[i];
-                                    if (!orig) return; // FIX 3: Safety check for items
+                                    if (!orig) return;
                                     if (item.stroke.type === 'text') {
                                         item.stroke.x = orig.x + dx;
                                         item.stroke.y = orig.y + dy;
@@ -1956,35 +1359,27 @@
                                 });
                                 this.selectedObject.bounds.x = bounds.x + dx;
                                 this.selectedObject.bounds.y = bounds.y + dy;
-                            }
-                            else if (this.dragMode === 'rotate') {
+                            } else if (this.dragMode === 'rotate') {
                                 const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
                                 const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
                                 const angleDiff = currAngle - startAngle;
-
                                 const cos = Math.cos(angleDiff);
                                 const sin = Math.sin(angleDiff);
                                 const cx = this.dragCenter.x;
                                 const cy = this.dragCenter.y;
 
-                                // Update Group Angle
                                 this.selectedObject.angle = (this.dragOriginalAngle || 0) + angleDiff;
 
                                 this.selectedObject.items.forEach((item, i) => {
                                     const orig = this.dragOriginalItems[i];
                                     if (!orig) return;
-
                                     if (item.stroke.type === 'text') {
-                                        // Rotate Position around Group Center
                                         const nx = orig.x - cx;
                                         const ny = orig.y - cy;
                                         item.stroke.x = (nx * cos - ny * sin) + cx;
                                         item.stroke.y = (nx * sin + ny * cos) + cy;
-                                        // Rotate Item Angle
                                         item.stroke.angle = (orig.angle || 0) + angleDiff;
                                     } else {
-                                        // Rotate Position of every point around Group Center
-
                                         const pts = item.stroke.points;
                                         for (let k = 0; k < pts.length; k++) {
                                             if (orig.points[k]) {
@@ -1994,16 +1389,12 @@
                                                 pts[k].y = (px * sin + py * cos) + cy;
                                             }
                                         }
-                                        // FIX: DO NOT update item.stroke.angle for strokes as points are moved physically
-                                        // item.stroke.angle = (orig.angle || 0) + angleDiff; <-- REMOVED
                                     }
                                 });
-                                // Don't recalculate bounds here. We want the box to rotate with the group.
-                                // this.selectedObject.bounds = this.getGroupBounds(this.selectedObject.items);
-                            }
-                            else if (this.dragMode.startsWith('resize')) {
-                                // Simple resize logic for groups
+                            } else if (this.dragMode.startsWith('resize')) {
                                 let newW = bounds.w, newH = bounds.h, newX = bounds.x, newY = bounds.y;
+                                const dx = pos.x - this.dragStart.x;
+                                const dy = pos.y - this.dragStart.y;
                                 const dir = this.dragMode.split('-')[1] || '';
 
                                 if (dir.includes('r')) newW += dx;
@@ -2017,9 +1408,8 @@
 
                                 this.selectedObject.items.forEach((item, i) => {
                                     const orig = this.dragOriginalItems[i];
-                                    if (!orig) return; // FIX: Safety check for items
+                                    if (!orig) return;
                                     if (item.stroke.type === 'text') {
-                                        // Scale relative to group bounds
                                         const relX = orig.x - bounds.x;
                                         const relY = orig.y - bounds.y;
                                         item.stroke.x = newX + relX * scaleX;
@@ -2042,7 +1432,6 @@
                             return;
                         }
 
-                        // --- HANDLING SINGLE OBJECTS ---
                         const stroke = this.selectedObject.stroke;
                         const bounds = this.dragOriginalBounds;
 
@@ -2063,23 +1452,17 @@
                                     }
                                 }
                             }
-                        }
-                        else if (this.dragMode === 'rotate') {
+                        } else if (this.dragMode === 'rotate') {
                             const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
                             const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
                             const angleDiff = currAngle - startAngle;
 
                             if (stroke.type === 'text') {
                                 stroke.angle = (this.dragOriginalProps.angle || 0) + angleDiff;
-                            }
-                            else {
-                                // FIX: Use angle property for drawings instead of moving points
+                            } else {
                                 stroke.angle = (this.dragOriginalAngle || 0) + angleDiff;
                             }
-                        }
-                        else {
-                            // Resize
-                            // FIX 4: Check bounds exists before accessing bounds.w
+                        } else {
                             if (!bounds) return;
 
                             const dx = pos.x - this.dragStart.x;
@@ -2099,14 +1482,12 @@
                                 stroke.sy = newH / this.dragOriginalProps.h;
                                 stroke.x = this.dragOriginalProps.x + (newX - bounds.x);
                                 stroke.y = this.dragOriginalProps.y + (newY - bounds.y);
-                            }
-                            else if (stroke.points.length === 1) {
+                            } else if (stroke.points.length === 1) {
                                 stroke.sx = newW / this.dragOriginalBounds.w;
                                 stroke.sy = newH / this.dragOriginalBounds.h;
                                 stroke.points[0].x = newX + newW / 2;
                                 stroke.points[0].y = newY + newH / 2;
-                            }
-                            else {
+                            } else {
                                 const pts = stroke.points;
                                 const origPts = this.dragOriginalPoints;
                                 for (let i = 0; i < pts.length; i++) {
@@ -2129,24 +1510,20 @@
                     if (this.tool === 'brush' || this.tool === 'eraser') {
                         const p = (typeof pressure === 'number') ? pressure : 0.5;
                         this.currentStroke.points.push({ x: pos.x, y: pos.y, p: p });
-                    }
-                    else {
+                    } else {
                         const start = this.dragStart;
-                        // --- FIX: Safety Check for Shapes ---
                         if (!start) return;
 
                         const end = pos;
                         if (this.tool === 'line') {
                             this.currentStroke.points = [{ x: start.x, y: start.y, p: 0.5 }, { x: end.x, y: end.y, p: 0.5 }];
-                        }
-                        else if (this.tool === 'rect') {
+                        } else if (this.tool === 'rect') {
                             this.currentStroke.points = [
                                 { x: start.x, y: start.y, p: 0.5 }, { x: end.x, y: start.y, p: 0.5 },
                                 { x: end.x, y: end.y, p: 0.5 }, { x: start.x, y: end.y, p: 0.5 },
                                 { x: start.x, y: start.y, p: 0.5 }
                             ];
-                        }
-                        else if (this.tool === 'circle') {
+                        } else if (this.tool === 'circle') {
                             const rx = (end.x - start.x) / 2;
                             const ry = (end.y - start.y) / 2;
                             const cx = start.x + rx;
@@ -2155,11 +1532,7 @@
                             const pts = [];
                             for (let i = 0; i <= segments; i++) {
                                 const theta = (i / segments) * Math.PI * 2;
-                                pts.push({
-                                    x: cx + rx * Math.cos(theta),
-                                    y: cy + ry * Math.sin(theta),
-                                    p: 0.5
-                                });
+                                pts.push({ x: cx + rx * Math.cos(theta), y: cy + ry * Math.sin(theta), p: 0.5 });
                             }
                             this.currentStroke.points = pts;
                         }
@@ -2170,23 +1543,19 @@
 
             onUp() {
                 if (this.isSelectingBox) {
-                    // FINALIZE BOX SELECTION
                     this.isSelectingBox = false;
 
-                    // Calculate Box
                     const x1 = Math.min(this.selectionStart.x, this.selectionCurr.x);
                     const y1 = Math.min(this.selectionStart.y, this.selectionCurr.y);
                     const x2 = Math.max(this.selectionStart.x, this.selectionCurr.x);
                     const y2 = Math.max(this.selectionStart.y, this.selectionCurr.y);
                     const selBox = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 
-                    // Only select if box has some size, else it was a click (handled in OnDown)
                     if (selBox.w > 2 || selBox.h > 2) {
                         const items = [];
                         const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
 
                         list.forEach((stroke, i) => {
-                            // Check intersection
                             const b = this.getStrokeBounds(stroke);
                             if (this.rectIntersect(selBox, b)) {
                                 items.push({ stroke, layer: this.activeLayer, index: i });
@@ -2201,7 +1570,7 @@
                                 isGroup: true,
                                 items: items,
                                 bounds: this.getGroupBounds(items),
-                                angle: 0 // Initialize Group Angle
+                                angle: 0
                             };
                         }
                     }
@@ -2241,7 +1610,6 @@
                 return newPoints;
             }
 
-            /* --- Vector Math & Hit Testing --- */
             hitTest(pos) {
                 const checkList = (list, layerName) => {
                     for (let i = list.length - 1; i >= 0; i--) {
@@ -2251,8 +1619,6 @@
                             const h = obj.height * obj.sy;
                             const bx = obj.x;
                             const by = obj.y - h;
-                            // Simple bounding box check for hit test
-                            // For rotated text, we use a simplified check: unrotate the mouse pos
                             if (obj.angle) {
                                 const cx = bx + w / 2;
                                 const cy = by + h / 2;
@@ -2281,7 +1647,6 @@
                 if (!stroke.points || stroke.points.length === 0) return false;
                 const hitThresh = Math.max(10, stroke.size);
 
-                // FIX: Inverse-transform mouse pos if stroke is rotated
                 let checkPos = pos;
                 if (stroke.angle) {
                     const b = this.getStrokeBounds(stroke);
@@ -2336,8 +1701,6 @@
 
                 let p = { x: pos.x, y: pos.y };
 
-                // If rotated object, un-rotate the mouse position relative to the box center
-                // Handles SINGLE OBJECT rotation
                 if (this.selectedObject.stroke && this.selectedObject.stroke.angle) {
                     const cx = b.x + b.w / 2;
                     const cy = b.y + b.h / 2;
@@ -2346,9 +1709,7 @@
                     const ang = -this.selectedObject.stroke.angle;
                     p.x = cx + dx * Math.cos(ang) - dy * Math.sin(ang);
                     p.y = cy + dx * Math.sin(ang) + dy * Math.cos(ang);
-                }
-                // Handles GROUP rotation
-                else if (this.selectedObject.isGroup && this.selectedObject.angle) {
+                } else if (this.selectedObject.isGroup && this.selectedObject.angle) {
                     const cx = b.x + b.w / 2;
                     const cy = b.y + b.h / 2;
                     const dx = pos.x - cx;
@@ -2360,14 +1721,11 @@
 
                 const hit = (x, y) => Math.abs(p.x - x) < s && Math.abs(p.y - y) < s;
 
-                // UPDATED: Allow rotate handle for both Single and Group
                 if (hit(b.x + b.w / 2, b.y - 25)) return 'rotate';
-
                 if (hit(b.x, b.y)) return 'resize-tl';
                 if (hit(b.x + b.w, b.y)) return 'resize-tr';
                 if (hit(b.x, b.y + b.h)) return 'resize-bl';
                 if (hit(b.x + b.w, b.y + b.h)) return 'resize-br';
-
                 if (hit(b.x + b.w / 2, b.y)) return 'resize-t';
                 if (hit(b.x + b.w / 2, b.y + b.h)) return 'resize-b';
                 if (hit(b.x, b.y + b.h / 2)) return 'resize-l';
@@ -2384,22 +1742,14 @@
                 return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
             }
 
-            calcBounds(stroke) {
-                this.selectedObject.bounds = this.getStrokeBounds(stroke);
-            }
+            calcBounds(stroke) { this.selectedObject.bounds = this.getStrokeBounds(stroke); }
 
             getStrokeBounds(stroke) {
                 if (stroke.type === 'text') {
                     const w = stroke.width * stroke.sx;
                     const h = stroke.height * stroke.sy;
-                    return {
-                        x: stroke.x - 5,
-                        y: stroke.y - h - 5,
-                        w: w + 10,
-                        h: h + 15
-                    };
-                }
-                else if (stroke.points.length === 1) {
+                    return { x: stroke.x - 5, y: stroke.y - h - 5, w: w + 10, h: h + 15 };
+                } else if (stroke.points.length === 1) {
                     const s = stroke.size;
                     const sx = stroke.sx || 1;
                     const sy = stroke.sy || 1;
@@ -2407,8 +1757,7 @@
                     const w = s * sx;
                     const h = s * sy;
                     return { x: p.x - w / 2, y: p.y - h / 2, w: w, h: h };
-                }
-                else {
+                } else {
                     if (stroke.points.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
                     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
                     stroke.points.forEach(p => {
@@ -2435,14 +1784,10 @@
             }
 
             rectIntersect(r1, r2) {
-                return !(r2.x > r1.x + r1.w ||
-                    r2.x + r2.w < r1.x ||
-                    r2.y > r1.y + r1.h ||
-                    r2.y + r2.h < r1.y);
+                return !(r2.x > r1.x + r1.w || r2.x + r2.w < r1.x || r2.y > r1.y + r1.h || r2.y + r2.h < r1.y);
             }
 
             isInBounds(pos, rect) {
-                // FIX: If rotated object, unrotate pos for checking
                 if (this.selectedObject) {
                     let angle = 0;
                     if (this.selectedObject.isGroup) angle = this.selectedObject.angle;
@@ -2462,18 +1807,17 @@
                 return pos.x >= rect.x && pos.x <= rect.x + rect.w && pos.y >= rect.y && pos.y <= rect.y + rect.h;
             }
 
-            /* --- Rendering --- */
             renderCanvas() {
                 const ctx = this.ctx;
                 ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
 
-                ctx.fillStyle = this.selectedBgColor;
+                // FIX 1: Use per-frame background colour if set, falling back to global selectedBgColor
+                ctx.fillStyle = this.frames[this.frameIndex].frameBgColor || this.selectedBgColor;
                 ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
 
                 this.paperStrokes.forEach(s => this.drawObject(ctx, s));
                 this.frames[this.frameIndex].strokes.forEach(s => this.drawObject(ctx, s));
 
-                // Draw Onion Skin LAST (On Top)
                 if (this.isOnion && this.frameIndex > 0 && !this.isPlaying) {
                     ctx.globalAlpha = 0.3;
                     this.frames[this.frameIndex - 1].strokes.forEach(s => this.drawObject(ctx, s, true));
@@ -2483,12 +1827,9 @@
                 if (this.selectedObject && !this.isPlaying) {
                     const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
 
-                    // Check validity (single object must still exist, group handled differently)
                     if (this.selectedObject.isGroup) {
-                        // For MVP, assume group valid until deselected
                         this.drawSelectionUI(ctx);
-                    }
-                    else if (list.includes(this.selectedObject.stroke)) {
+                    } else if (list.includes(this.selectedObject.stroke)) {
                         this.drawSelectionUI(ctx);
                     } else {
                         this.selectedObject = null;
@@ -2512,10 +1853,8 @@
             }
 
             drawObject(ctx, obj, simpleMode = false) {
-                // Unified Rotation Logic for both Text and Strokes
                 if (obj.type === 'text') {
                     ctx.save();
-
                     const w = obj.width * (obj.sx || 1);
                     const h = obj.height * (obj.sy || 1);
                     const cx = obj.x + w / 2;
@@ -2537,16 +1876,12 @@
                     ctx.fillText(obj.text, 0, 0);
                     ctx.restore();
                 } else {
-                    // FIX: Apply rotation for drawing strokes too
                     if (obj.angle) {
                         ctx.save();
-                        // Calculate center from bounds (expensive but necessary for un-baked rotation)
-                        // Optimization: In a real app, cache this center.
                         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
                         obj.points.forEach(p => { if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x; if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; });
                         const cx = (minX + maxX) / 2;
                         const cy = (minY + maxY) / 2;
-
                         ctx.translate(cx, cy);
                         ctx.rotate(obj.angle);
                         ctx.translate(-cx, -cy);
@@ -2562,7 +1897,6 @@
                 const b = this.selectedObject.bounds;
                 ctx.save();
 
-                // Rotate Selection Box if needed (Unified for Stroke and Text)
                 let angle = 0;
                 if (this.selectedObject.isGroup) angle = this.selectedObject.angle;
                 else if (this.selectedObject.stroke) angle = this.selectedObject.stroke.angle;
@@ -2578,7 +1912,6 @@
                 ctx.strokeStyle = '#0A84FF';
                 ctx.lineWidth = 1;
 
-                // Draw Rotate Handle (Now enabled for both Single and Group)
                 ctx.beginPath();
                 ctx.moveTo(b.x + b.w / 2, b.y);
                 ctx.lineTo(b.x + b.w / 2, b.y - 25);
@@ -2605,7 +1938,6 @@
                 drawHandle(b.x + b.w, b.y);
                 drawHandle(b.x, b.y + b.h);
                 drawHandle(b.x + b.w, b.y + b.h);
-
                 drawHandle(b.x + b.w / 2, b.y);
                 drawHandle(b.x + b.w / 2, b.y + b.h);
                 drawHandle(b.x, b.y + b.h / 2);
@@ -2627,18 +1959,13 @@
                 const type = stroke.brushType || 'brush';
 
                 if (simpleMode || ['rect', 'circle', 'line'].includes(stroke.type) || ['pencil', 'marker', 'highlighter'].includes(type)) {
-                    // FIX: Handle Dot in Simple Mode (Onion Skinning)
                     if (stroke.points.length === 1 && stroke.type !== 'rect' && stroke.type !== 'circle' && stroke.type !== 'line') {
                         const p = stroke.points[0];
                         let renderWidth = stroke.size;
                         if (simpleMode && (type === 'brush' || stroke.type === 'brush')) renderWidth *= 0.5;
 
-                        // Special handling for pencil: use 2px dot to match 2px line
-                        if (type === 'pencil') {
-                            renderWidth = 2;
-                        }
+                        if (type === 'pencil') renderWidth = 2;
 
-                        // Special handling for highlighter: use 2x size and translucent fill
                         if (type === 'highlighter') {
                             renderWidth = stroke.size * 2;
                             if (!simpleMode) ctx.fillStyle = this.hexToRgba(hex, alpha * 0.4);
@@ -2657,18 +1984,15 @@
                     if (type === 'pencil') {
                         ctx.lineWidth = 2;
                         if (!simpleMode) ctx.strokeStyle = this.hexToRgba(hex, alpha * 0.7);
-                    }
-                    else if (type === 'marker') {
+                    } else if (type === 'marker') {
                         ctx.lineWidth = stroke.size;
                         ctx.lineCap = 'round';
                         ctx.lineJoin = 'round';
-                    }
-                    else if (type === 'highlighter') {
+                    } else if (type === 'highlighter') {
                         ctx.lineWidth = stroke.size * 2;
                         ctx.lineCap = 'butt';
                         if (!simpleMode) ctx.strokeStyle = this.hexToRgba(hex, alpha * 0.4);
-                    }
-                    else {
+                    } else {
                         ctx.lineWidth = renderWidth;
                         ctx.lineCap = 'round';
                         ctx.lineJoin = 'round';
@@ -2678,7 +2002,10 @@
                     for (let i = 1; i < stroke.points.length; i++) {
                         ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
                     }
+
+                    // FIX 2: closePath before fill so rect/circle shapes render their fill correctly
                     if (stroke.fillColor) {
+                        ctx.closePath();
                         ctx.fillStyle = this.hexToRgba(stroke.fillColor, alpha);
                         ctx.fill();
                         if (type === 'highlighter') ctx.fillStyle = this.hexToRgba(hex, alpha * 0.4);
@@ -2699,6 +2026,20 @@
                     ctx.fill();
                     ctx.restore();
                     return;
+                }
+
+                // FIX 3: Draw filled polygon for freehand brush strokes when fillColor is set
+                if (stroke.fillColor && stroke.points.length >= 3) {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+                    for (let i = 1; i < stroke.points.length; i++) {
+                        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+                    }
+                    ctx.closePath();
+                    ctx.fillStyle = this.hexToRgba(stroke.fillColor, alpha);
+                    ctx.fill();
+                    ctx.restore();
                 }
 
                 for (let i = 0; i < stroke.points.length - 1; i++) {
@@ -2764,13 +2105,13 @@
                 }
                 this.selectedObject = null;
                 this.renderCanvas();
-                this.updateCursorStyle(); // Add this
+                this.updateCursorStyle();
             }
 
             setBrushType(type) {
                 this.brushType = type;
                 this.setTool('brush');
-                this.updateCursorStyle(); // Add this
+                this.updateCursorStyle();
             }
 
             setLayer(l) {
@@ -2798,7 +2139,7 @@
                     this.renderCanvas();
                     this.saveStorage();
                 }
-                this.updateCursorStyle(); // Add this
+                this.updateCursorStyle();
             }
 
             updateBgColor(color) {
@@ -2817,9 +2158,7 @@
                 if (this.selectedObject) {
                     this.saveState();
                     if (this.selectedObject.isGroup) {
-                        this.selectedObject.items.forEach(item => {
-                            item.stroke.size = this.brushSize;
-                        });
+                        this.selectedObject.items.forEach(item => { item.stroke.size = this.brushSize; });
                         this.selectedObject.bounds = this.getGroupBounds(this.selectedObject.items);
                     } else {
                         this.selectedObject.stroke.size = this.brushSize;
@@ -2828,7 +2167,7 @@
                     this.renderCanvas();
                     this.saveStorage();
                 }
-                this.updateCursorStyle(); // Add this
+                this.updateCursorStyle();
             }
 
             setOpacity(v) {
@@ -2837,16 +2176,14 @@
                 if (this.selectedObject) {
                     this.saveState();
                     if (this.selectedObject.isGroup) {
-                        this.selectedObject.items.forEach(item => {
-                            item.stroke.opacity = this.opacity;
-                        });
+                        this.selectedObject.items.forEach(item => { item.stroke.opacity = this.opacity; });
                     } else {
                         this.selectedObject.stroke.opacity = this.opacity;
                     }
                     this.renderCanvas();
                     this.saveStorage();
                 }
-                this.updateCursorStyle(); // Add this
+                this.updateCursorStyle();
             }
 
             toggleOnion() {
@@ -2855,12 +2192,9 @@
                 this.renderCanvas();
             }
 
-
-
-            // Added Rewind Method
             rewind() {
                 this.frameIndex = 0;
-                this.selectedObject = null; // Clear selection to prevent potential glitches
+                this.selectedObject = null;
                 this.renderCanvas();
                 this.renderUI(true);
             }
@@ -2943,7 +2277,6 @@
                     this.frames.forEach((f, i) => {
                         const el = document.createElement('div');
                         el.className = `frame-card ${i === this.frameIndex ? 'active' : ''}`;
-                        // FIX: Clear selection when switching frames via UI click
                         el.onclick = () => {
                             this.frameIndex = i;
                             this.selectedObject = null;
@@ -2986,11 +2319,7 @@
                 }
             }
 
-            handleDragStart(e, index) {
-                this.draggedFrameIndex = index;
-                e.dataTransfer.effectAllowed = 'move';
-                e.currentTarget.style.opacity = '0.5';
-            }
+            handleDragStart(e, index) { this.draggedFrameIndex = index; e.dataTransfer.effectAllowed = 'move'; e.currentTarget.style.opacity = '0.5'; }
             handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
             handleDragEnter(e) { e.currentTarget.classList.add('drag-over'); }
             handleDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
@@ -3009,11 +2338,8 @@
                 if (this.frameIndex === this.draggedFrameIndex) {
                     this.frameIndex = targetIndex;
                 } else {
-                    if (this.draggedFrameIndex < this.frameIndex && targetIndex >= this.frameIndex) {
-                        this.frameIndex--;
-                    } else if (this.draggedFrameIndex > this.frameIndex && targetIndex <= this.frameIndex) {
-                        this.frameIndex++;
-                    }
+                    if (this.draggedFrameIndex < this.frameIndex && targetIndex >= this.frameIndex) this.frameIndex--;
+                    else if (this.draggedFrameIndex > this.frameIndex && targetIndex <= this.frameIndex) this.frameIndex++;
                 }
                 this.renderUI();
                 this.renderCanvas();
@@ -3035,7 +2361,7 @@
 
                 this.frames.forEach((f, i) => {
                     tCtx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
-                    tCtx.fillStyle = this.selectedBgColor;
+                    tCtx.fillStyle = f.frameBgColor || this.selectedBgColor;
                     tCtx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
                     this.paperStrokes.forEach(s => this.drawObject(tCtx, s));
                     f.strokes.forEach(s => this.drawObject(tCtx, s));
@@ -3043,9 +2369,7 @@
                 });
 
                 const imgs = this.framesList.querySelectorAll('.frame-card img');
-                imgs.forEach((img, i) => {
-                    if (this.frames[i]) img.src = this.frames[i].thumb;
-                });
+                imgs.forEach((img, i) => { if (this.frames[i]) img.src = this.frames[i].thumb; });
             }
 
             saveStorage() {
@@ -3065,7 +2389,7 @@
                         const jsonStr = JSON.stringify({ ...data, frames: cleanFrames });
 
                         const size = jsonStr.length;
-                        const limit = 100 * 1024 * 1024; // Visual reference bumped to 100MB since we are using IDB
+                        const limit = 100 * 1024 * 1024;
                         const pct = Math.min(100, (size / limit) * 100);
 
                         const bar = document.getElementById('storage-bar');
@@ -3095,10 +2419,7 @@
                             this.fps = data.fps || 12;
                             this.frameIndex = 0;
                             if (data.width && data.height) this.resizeCanvas(data.width, data.height);
-                            if (data.palette) {
-                                this.palette = data.palette;
-                                this.renderPalette();
-                            }
+                            if (data.palette) { this.palette = data.palette; this.renderPalette(); }
                             this.renderUI();
                             this.renderCanvas();
                         }
@@ -3116,7 +2437,7 @@
                 setTimeout(() => {
                     this.frames.forEach(f => {
                         tCtx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
-                        tCtx.fillStyle = this.selectedBgColor;
+                        tCtx.fillStyle = f.frameBgColor || this.selectedBgColor;
                         tCtx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
                         this.paperStrokes.forEach(s => this.drawObject(tCtx, s));
                         f.strokes.forEach(s => this.drawObject(tCtx, s));
@@ -3144,7 +2465,7 @@
             saveProject() {
                 const data = {
                     version: 3,
-                    frames: this.frames.map(f => ({ strokes: f.strokes })),
+                    frames: this.frames.map(f => ({ strokes: f.strokes, frameBgColor: f.frameBgColor })),
                     paperStrokes: this.paperStrokes,
                     fps: this.fps,
                     width: this.canvasWidth,
@@ -3173,10 +2494,7 @@
                             this.fps = data.fps;
                             this.frameIndex = 0;
                             if (data.width && data.height) this.resizeCanvas(data.width, data.height);
-                            if (data.palette) {
-                                this.palette = data.palette;
-                                this.renderPalette();
-                            }
+                            if (data.palette) { this.palette = data.palette; this.renderPalette(); }
                             this.renderUI();
                             this.renderCanvas();
                         }
@@ -3201,7 +2519,6 @@
                 this.dragMode = null;
                 this.history = [];
                 this.redoStack = [];
-
                 this.renderUI();
                 this.renderCanvas();
                 this.saveStorage();
@@ -3212,10 +2529,7 @@
                 this.saveState();
                 const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
 
-                // Handle Group Delete
                 if (this.selectedObject.isGroup) {
-                    // Delete items in reverse order to preserve indices for the current pass (if indices were stored differently)
-                    // Since we are referencing object equality, we just filter
                     const itemsToRemove = new Set(this.selectedObject.items.map(i => i.stroke));
                     if (this.activeLayer === 'ink') {
                         this.frames[this.frameIndex].strokes = this.frames[this.frameIndex].strokes.filter(s => !itemsToRemove.has(s));
@@ -3229,7 +2543,6 @@
 
                 this.selectedObject = null;
                 this.dragMode = null;
-
                 this.renderCanvas();
                 this.saveStorage();
                 this.updateThumbnails();
@@ -3238,7 +2551,6 @@
             copySelection() {
                 if (this.selectedObject) {
                     if (this.selectedObject.isGroup) {
-                        // Clipboard gets array of strokes
                         this.clipboard = { isGroup: true, items: JSON.parse(JSON.stringify(this.selectedObject.items)) };
                     } else {
                         this.clipboard = JSON.parse(JSON.stringify(this.selectedObject.stroke));
@@ -3254,7 +2566,7 @@
                     if (this.clipboard.isGroup) {
                         const newItems = [];
                         this.clipboard.items.forEach(item => {
-                            const newStroke = item.stroke; // it's already a copy from JSON.parse above
+                            const newStroke = item.stroke;
                             if (newStroke.type !== 'text') {
                                 newStroke.points.forEach(p => { p.x += 20; p.y += 20; });
                             } else {
@@ -3289,10 +2601,7 @@
 
         function initApp() {
             const c = document.getElementById('rendering-canvas');
-            if (!c) {
-                setTimeout(initApp, 50);
-                return;
-            }
+            if (!c) { setTimeout(initApp, 50); return; }
             window.app = new MotionSketchVector();
         }
 
@@ -3303,5 +2612,4 @@
         }
     </script>
 </body>
-
 </html>
