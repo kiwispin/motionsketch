@@ -1379,6 +1379,8 @@
                             if (this.selectedObject.isGroup) {
                                 this.dragOriginalBounds = { ...this.selectedObject.bounds };
                                 this.dragOriginalAngle = this.selectedObject.angle || 0;
+                                // Always rotate around the center of the unrotated bounding box
+                                // (same center drawObject uses for ctx.rotate on persistent groups)
                                 this.dragCenter = {
                                     x: this.selectedObject.bounds.x + this.selectedObject.bounds.w / 2,
                                     y: this.selectedObject.bounds.y + this.selectedObject.bounds.h / 2
@@ -1435,8 +1437,13 @@
                         if (found.isPersistentGroup) {
                             // Persistent group — wrap as isGroup selection so existing move/resize/rotate logic works
                             const grp = found.stroke;
+                            // Compute bounds from raw item positions (ignoring angle) for the selection box
                             const bounds = this.getStrokeBounds(grp);
                             const items = grp.items.map((item, i) => ({ stroke: item, layer: found.layer, index: i }));
+                            // The visual center is always the center of the unrotated bounding box —
+                            // rotation is applied around this center by drawObject, so it stays stable.
+                            const cx = bounds.x + bounds.w / 2;
+                            const cy = bounds.y + bounds.h / 2;
                             this.selectedObject = {
                                 isGroup: true,
                                 isPersistentGroup: true,
@@ -1447,7 +1454,7 @@
                             };
                             this.dragOriginalBounds = { ...bounds };
                             this.dragOriginalAngle = grp.angle || 0;
-                            this.dragCenter = { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 };
+                            this.dragCenter = { x: cx, y: cy };
                             this.dragOriginalItems = items.map(item => {
                                 if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height, angle: item.stroke.angle || 0 };
                                 return { points: item.stroke.points.map(p => ({ ...p })), angle: item.stroke.angle || 0 };
@@ -1541,34 +1548,44 @@
                                 const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
                                 const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
                                 const angleDiff = currAngle - startAngle;
-                                const cos = Math.cos(angleDiff);
-                                const sin = Math.sin(angleDiff);
-                                const cx = this.dragCenter.x;
-                                const cy = this.dragCenter.y;
+                                const newAngle = (this.dragOriginalAngle || 0) + angleDiff;
 
-                                this.selectedObject.angle = (this.dragOriginalAngle || 0) + angleDiff;
+                                this.selectedObject.angle = newAngle;
 
-                                this.selectedObject.items.forEach((item, i) => {
-                                    const orig = this.dragOriginalItems[i];
-                                    if (!orig) return;
-                                    if (item.stroke.type === 'text') {
-                                        const nx = orig.x - cx;
-                                        const ny = orig.y - cy;
-                                        item.stroke.x = (nx * cos - ny * sin) + cx;
-                                        item.stroke.y = (nx * sin + ny * cos) + cy;
-                                        item.stroke.angle = (orig.angle || 0) + angleDiff;
-                                    } else {
-                                        const pts = item.stroke.points;
-                                        for (let k = 0; k < pts.length; k++) {
-                                            if (orig.points[k]) {
-                                                const px = orig.points[k].x - cx;
-                                                const py = orig.points[k].y - cy;
-                                                pts[k].x = (px * cos - py * sin) + cx;
-                                                pts[k].y = (px * sin + py * cos) + cy;
+                                if (this.selectedObject.isPersistentGroup) {
+                                    // Persistent group: rotation is purely a canvas transform on the group stroke.
+                                    // Do NOT physically move item points — drawObject handles it via ctx.rotate.
+                                    this.selectedObject.persistentGroupStroke.angle = newAngle;
+                                } else {
+                                    // Temporary multi-select: physically rotate each item's points
+                                    // (no canvas-level rotation available for these)
+                                    const cos = Math.cos(angleDiff);
+                                    const sin = Math.sin(angleDiff);
+                                    const cx = this.dragCenter.x;
+                                    const cy = this.dragCenter.y;
+
+                                    this.selectedObject.items.forEach((item, i) => {
+                                        const orig = this.dragOriginalItems[i];
+                                        if (!orig) return;
+                                        if (item.stroke.type === 'text') {
+                                            const nx = orig.x - cx;
+                                            const ny = orig.y - cy;
+                                            item.stroke.x = (nx * cos - ny * sin) + cx;
+                                            item.stroke.y = (nx * sin + ny * cos) + cy;
+                                            item.stroke.angle = (orig.angle || 0) + angleDiff;
+                                        } else {
+                                            const pts = item.stroke.points;
+                                            for (let k = 0; k < pts.length; k++) {
+                                                if (orig.points[k]) {
+                                                    const px = orig.points[k].x - cx;
+                                                    const py = orig.points[k].y - cy;
+                                                    pts[k].x = (px * cos - py * sin) + cx;
+                                                    pts[k].y = (px * sin + py * cos) + cy;
+                                                }
                                             }
                                         }
-                                    }
-                                });
+                                    });
+                                }
                             } else if (this.dragMode.startsWith('resize')) {
                                 let newW = bounds.w, newH = bounds.h, newX = bounds.x, newY = bounds.y;
                                 const dx = pos.x - this.dragStart.x;
@@ -1607,10 +1624,6 @@
                                 this.selectedObject.bounds = { x: newX, y: newY, w: newW, h: newH };
                             }
                             this.renderCanvas();
-                            // Sync angle back to persistent group stroke if applicable
-                            if (this.selectedObject.isPersistentGroup && this.selectedObject.persistentGroupStroke) {
-                                this.selectedObject.persistentGroupStroke.angle = this.selectedObject.angle;
-                            }
                             return;
                         }
 
