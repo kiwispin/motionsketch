@@ -1587,16 +1587,11 @@
                                     });
                                 }
                             } else if (this.dragMode.startsWith('resize')) {
-                                let newW = bounds.w, newH = bounds.h, newX = bounds.x, newY = bounds.y;
-                                const dx = pos.x - this.dragStart.x;
-                                const dy = pos.y - this.dragStart.y;
-                                const dir = this.dragMode.split('-')[1] || '';
-
-                                if (dir.includes('r')) newW += dx;
-                                if (dir.includes('l')) { newX += dx; newW -= dx; }
-                                if (dir.includes('b')) newH += dy;
-                                if (dir.includes('t')) { newY += dy; newH -= dy; }
-                                if (newW < 5) newW = 5; if (newH < 5) newH = 5;
+                                const resized = this.getResizeBounds(bounds, this.dragMode, pos);
+                                const newX = resized.x;
+                                const newY = resized.y;
+                                const newW = resized.w;
+                                const newH = resized.h;
 
                                 const scaleX = newW / bounds.w;
                                 const scaleY = newH / bounds.h;
@@ -1660,17 +1655,11 @@
                         } else {
                             if (!bounds) return;
 
-                            const dx = pos.x - this.dragStart.x;
-                            const dy = pos.y - this.dragStart.y;
-                            let newW = bounds.w, newH = bounds.h, newX = bounds.x, newY = bounds.y;
-                            const dir = this.dragMode.split('-')[1] || '';
-
-                            if (dir.includes('r')) newW += dx;
-                            if (dir.includes('l')) { newX += dx; newW -= dx; }
-                            if (dir.includes('b')) newH += dy;
-                            if (dir.includes('t')) { newY += dy; newH -= dy; }
-
-                            if (newW < 5) newW = 5; if (newH < 5) newH = 5;
+                            const resized = this.getResizeBounds(bounds, this.dragMode, pos);
+                            const newX = resized.x;
+                            const newY = resized.y;
+                            const newW = resized.w;
+                            const newH = resized.h;
 
                             if (stroke.type === 'text') {
                                 stroke.sx = newW / this.dragOriginalProps.w;
@@ -1884,7 +1873,7 @@
                     const dist = Math.hypot(checkPos.x - p.x, checkPos.y - p.y);
                     const sx = stroke.sx || 1;
                     const sy = stroke.sy || 1;
-                    const maxDim = Math.max(sx, sy) * (stroke.size / 2);
+                    const maxDim = Math.max(sx, sy) * (this.getSinglePointDiameter(stroke) / 2);
                     return dist < maxDim + 10;
                 }
 
@@ -1962,6 +1951,51 @@
 
             calcBounds(stroke) { this.selectedObject.bounds = this.getStrokeBounds(stroke); }
 
+            getResizeBounds(bounds, dragMode, pos) {
+                const minSize = 5;
+                const dx = pos.x - this.dragStart.x;
+                const dy = pos.y - this.dragStart.y;
+                const dir = dragMode.split('-')[1] || '';
+                const isCorner = (dir.includes('l') || dir.includes('r')) && (dir.includes('t') || dir.includes('b'));
+
+                let newW = bounds.w;
+                let newH = bounds.h;
+                let newX = bounds.x;
+                let newY = bounds.y;
+
+                if (dir.includes('r')) newW += dx;
+                if (dir.includes('l')) { newX += dx; newW -= dx; }
+                if (dir.includes('b')) newH += dy;
+                if (dir.includes('t')) { newY += dy; newH -= dy; }
+
+                newW = Math.max(minSize, newW);
+                newH = Math.max(minSize, newH);
+
+                if (isCorner && bounds.w > 0 && bounds.h > 0) {
+                    const horizontalScale = newW / bounds.w;
+                    const verticalScale = newH / bounds.h;
+                    const scale = Math.abs(horizontalScale - 1) >= Math.abs(verticalScale - 1)
+                        ? horizontalScale
+                        : verticalScale;
+
+                    newW = Math.max(minSize, bounds.w * scale);
+                    newH = Math.max(minSize, bounds.h * scale);
+                    newX = dir.includes('l') ? bounds.x + bounds.w - newW : bounds.x;
+                    newY = dir.includes('t') ? bounds.y + bounds.h - newH : bounds.y;
+                }
+
+                return { x: newX, y: newY, w: newW, h: newH };
+            }
+
+            getSinglePointDiameter(stroke) {
+                const type = stroke.brushType || 'brush';
+                if (type === 'pencil') return 2;
+                if (type === 'highlighter') return stroke.size * 2;
+                if (type === 'marker') return stroke.size;
+                const p = stroke.points && stroke.points[0] ? stroke.points[0] : {};
+                return stroke.size * (p.p !== undefined ? p.p : 0.5);
+            }
+
             getStrokeBounds(stroke) {
                 // Handle persistent group
                 if (stroke.type === 'group') {
@@ -1980,7 +2014,7 @@
                     const h = stroke.height * stroke.sy;
                     return { x: stroke.x - 5, y: stroke.y - h - 5, w: w + 10, h: h + 15 };
                 } else if (stroke.points.length === 1) {
-                    const s = stroke.size;
+                    const s = this.getSinglePointDiameter(stroke);
                     const sx = stroke.sx || 1;
                     const sy = stroke.sy || 1;
                     const p = stroke.points[0];
@@ -2223,19 +2257,21 @@
                 if (simpleMode || ['rect', 'circle', 'line'].includes(stroke.type) || ['pencil', 'marker', 'highlighter'].includes(type)) {
                     if (stroke.points.length === 1 && stroke.type !== 'rect' && stroke.type !== 'circle' && stroke.type !== 'line') {
                         const p = stroke.points[0];
-                        let renderWidth = stroke.size;
+                        let renderWidth = this.getSinglePointDiameter(stroke);
                         if (simpleMode && (type === 'brush' || stroke.type === 'brush')) renderWidth *= 0.5;
 
-                        if (type === 'pencil') renderWidth = 2;
-
                         if (type === 'highlighter') {
-                            renderWidth = stroke.size * 2;
                             if (!simpleMode) ctx.fillStyle = this.hexToRgba(hex, alpha * 0.4);
                         }
 
+                        ctx.save();
+                        ctx.translate(p.x, p.y);
+                        if (stroke.angle) ctx.rotate(stroke.angle);
+                        ctx.scale(stroke.sx || 1, stroke.sy || 1);
                         ctx.beginPath();
-                        ctx.arc(p.x, p.y, renderWidth / 2, 0, Math.PI * 2);
+                        ctx.arc(0, 0, renderWidth / 2, 0, Math.PI * 2);
                         ctx.fill();
+                        ctx.restore();
                         return;
                     }
 
@@ -2279,9 +2315,10 @@
 
                 if (stroke.points.length < 2) {
                     const p = stroke.points[0];
-                    const w = stroke.size * (p.p !== undefined ? p.p : 0.5);
+                    const w = this.getSinglePointDiameter(stroke);
                     ctx.save();
                     ctx.translate(p.x, p.y);
+                    if (stroke.angle) ctx.rotate(stroke.angle);
                     ctx.scale(stroke.sx || 1, stroke.sy || 1);
                     ctx.beginPath();
                     ctx.arc(0, 0, w / 2, 0, Math.PI * 2);
