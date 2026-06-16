@@ -603,6 +603,7 @@
             <button class="btn-ghost" onclick="app.toggleTheme()" title="Toggle Theme">
                 <i class="fas fa-moon" id="theme-icon"></i>
             </button>
+            <button class="btn-ghost" onclick="app.exportFrame()" title="Export Current Frame"><i class="fas fa-image"></i> Export Frame</button>
             <button class="btn-primary" onclick="app.exportGIF()">Export GIF</button>
             <button class="btn-ghost" onclick="app.openSettings()" title="Canvas Settings"><i class="fas fa-sliders-h"></i></button>
         </div>
@@ -2778,6 +2779,21 @@
                         }
                     }
                 } catch (e) { console.log('Error loading', e); }
+            }
+
+            exportFrame() {
+                const tempC = document.createElement('canvas');
+                tempC.width = this.canvasWidth;
+                tempC.height = this.canvasHeight;
+                const tCtx = tempC.getContext('2d');
+                const frame = this.frames[this.frameIndex];
+                this.renderFrameToContext(tCtx, frame);
+
+                const a = document.createElement('a');
+                const frameNumber = String(this.frameIndex + 1).padStart(3, '0');
+                a.href = tempC.toDataURL('image/png');
+                a.download = `sketchmotion-frame-${frameNumber}.png`;
+                a.click();
             }
 
             exportGIF() {
