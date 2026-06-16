@@ -108,6 +108,7 @@
             touch-action: none;
         }
 
+        #background-canvas { z-index: 0; pointer-events: none; }
         #rendering-canvas { z-index: 1; }
 
         .glass-panel {
@@ -709,6 +710,7 @@
 
     <div class="workspace">
         <div class="canvas-wrapper" id="canvas-wrapper">
+            <canvas id="background-canvas" width="600" height="600"></canvas>
             <canvas id="rendering-canvas" width="600" height="600"></canvas>
         </div>
         <div class="zoom-controls">
@@ -781,9 +783,11 @@
         class MotionSketchVector {
             constructor() {
                 this.canvas = document.getElementById('rendering-canvas');
+                this.bgCanvas = document.getElementById('background-canvas');
                 this.canvasWrapper = document.getElementById('canvas-wrapper');
                 this.cursorEl = document.getElementById('brush-cursor');
                 this.ctx = this.canvas.getContext('2d');
+                this.bgCtx = this.bgCanvas.getContext('2d');
                 this.framesList = document.getElementById('frames-list');
                 this.frames = [{ strokes: [] }];
                 this.paperStrokes = [];
@@ -1080,6 +1084,8 @@
             resizeCanvas(w, h) {
                 this.canvasWidth = w;
                 this.canvasHeight = h;
+                this.bgCanvas.width = w;
+                this.bgCanvas.height = h;
                 this.canvas.width = w;
                 this.canvas.height = h;
                 this.canvasWrapper.style.aspectRatio = `${w}/${h}`;
@@ -2073,18 +2079,28 @@
 
             renderCanvas() {
                 const ctx = this.ctx;
-                ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+                const bgCtx = this.bgCtx;
+
+                bgCtx.globalCompositeOperation = 'source-over';
+                bgCtx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
 
                 // FIX 1: Use per-frame background colour if set, falling back to global selectedBgColor
-                ctx.fillStyle = this.frames[this.frameIndex].frameBgColor || this.selectedBgColor;
-                ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
+                const bgColor = this.frames[this.frameIndex].frameBgColor || this.selectedBgColor;
+                this.currentRenderBgColor = bgColor;
+                bgCtx.fillStyle = bgColor;
+                bgCtx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
+                bgCtx.globalAlpha = 1.0;
+                this.paperStrokes.forEach(s => this.drawObject(bgCtx, s, false, 'paper'));
+                this.currentRenderBgColor = null;
 
-                this.paperStrokes.forEach(s => this.drawObject(ctx, s));
-                this.frames[this.frameIndex].strokes.forEach(s => this.drawObject(ctx, s));
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+                ctx.globalAlpha = 1.0;
+                this.frames[this.frameIndex].strokes.forEach(s => this.drawObject(ctx, s, false, 'ink'));
 
                 if (this.isOnion && this.frameIndex > 0 && !this.isPlaying) {
                     ctx.globalAlpha = 0.3;
-                    this.frames[this.frameIndex - 1].strokes.forEach(s => this.drawObject(ctx, s, true));
+                    this.frames[this.frameIndex - 1].strokes.forEach(s => this.drawObject(ctx, s, true, 'ink'));
                     ctx.globalAlpha = 1.0;
                 }
 
@@ -2119,7 +2135,7 @@
                 this.updateGroupToolbar();
             }
 
-            drawObject(ctx, obj, simpleMode = false) {
+            drawObject(ctx, obj, simpleMode = false, layerName = 'ink') {
                 // Handle persistent group objects
                 if (obj.type === 'group') {
                     ctx.save();
@@ -2131,7 +2147,7 @@
                         ctx.rotate(obj.angle);
                         ctx.translate(-cx, -cy);
                     }
-                    obj.items.forEach(item => this.drawObject(ctx, item, simpleMode));
+                    obj.items.forEach(item => this.drawObject(ctx, item, simpleMode, layerName));
                     ctx.restore();
                     return;
                 }
@@ -2167,10 +2183,12 @@
                         ctx.translate(cx, cy);
                         ctx.rotate(obj.angle);
                         ctx.translate(-cx, -cy);
-                        this.drawStroke(ctx, obj, simpleMode);
+                        this.drawStroke(ctx, obj, simpleMode, layerName);
                         ctx.restore();
                     } else {
-                        this.drawStroke(ctx, obj, simpleMode);
+                        ctx.save();
+                        this.drawStroke(ctx, obj, simpleMode, layerName);
+                        ctx.restore();
                     }
                 }
             }
@@ -2242,12 +2260,18 @@
                 ctx.restore();
             }
 
-            drawStroke(ctx, stroke, simpleMode = false) {
+            drawStroke(ctx, stroke, simpleMode = false, layerName = 'ink') {
                 if (!stroke.points || stroke.points.length === 0) return;
 
-                const hex = stroke.color;
+                const isEraser = stroke.type === 'eraser';
+                const bgColor = this.currentRenderBgColor || this.frames[this.frameIndex].frameBgColor || this.selectedBgColor;
+                const hex = isEraser && layerName === 'paper' ? bgColor : stroke.color;
                 const alpha = stroke.opacity !== undefined ? stroke.opacity : 1.0;
                 const rgba = this.hexToRgba(hex, alpha);
+
+                if (isEraser && layerName === 'ink') {
+                    ctx.globalCompositeOperation = 'destination-out';
+                }
 
                 ctx.fillStyle = rgba;
                 ctx.strokeStyle = rgba;
@@ -2651,6 +2675,40 @@
                 cards.forEach((c, i) => c.classList.toggle('active', i === this.frameIndex));
             }
 
+            renderFrameToContext(targetCtx, frame) {
+                if (!this.exportForegroundCanvas) {
+                    this.exportForegroundCanvas = document.createElement('canvas');
+                    this.exportForegroundCtx = this.exportForegroundCanvas.getContext('2d');
+                }
+                if (this.exportForegroundCanvas.width !== this.canvasWidth || this.exportForegroundCanvas.height !== this.canvasHeight) {
+                    this.exportForegroundCanvas.width = this.canvasWidth;
+                    this.exportForegroundCanvas.height = this.canvasHeight;
+                }
+
+                const fgCtx = this.exportForegroundCtx;
+                const bgColor = frame.frameBgColor || this.selectedBgColor;
+                this.currentRenderBgColor = bgColor;
+
+                targetCtx.save();
+                targetCtx.globalCompositeOperation = 'source-over';
+                targetCtx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+                targetCtx.fillStyle = bgColor;
+                targetCtx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
+                targetCtx.globalAlpha = 1.0;
+                this.paperStrokes.forEach(s => this.drawObject(targetCtx, s, false, 'paper'));
+                targetCtx.restore();
+
+                fgCtx.globalCompositeOperation = 'source-over';
+                fgCtx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+                fgCtx.globalAlpha = 1.0;
+                frame.strokes.forEach(s => this.drawObject(fgCtx, s, false, 'ink'));
+
+                targetCtx.globalCompositeOperation = 'source-over';
+                targetCtx.globalAlpha = 1.0;
+                targetCtx.drawImage(this.exportForegroundCanvas, 0, 0);
+                this.currentRenderBgColor = null;
+            }
+
             updateThumbnails() {
                 const tCanvas = document.createElement('canvas');
                 tCanvas.width = 120; tCanvas.height = 120;
@@ -2659,11 +2717,7 @@
                 tCtx.scale(scale, scale);
 
                 this.frames.forEach((f, i) => {
-                    tCtx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
-                    tCtx.fillStyle = f.frameBgColor || this.selectedBgColor;
-                    tCtx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
-                    this.paperStrokes.forEach(s => this.drawObject(tCtx, s));
-                    f.strokes.forEach(s => this.drawObject(tCtx, s));
+                    this.renderFrameToContext(tCtx, f);
                     f.thumb = tCanvas.toDataURL();
                 });
 
@@ -2735,11 +2789,7 @@
 
                 setTimeout(() => {
                     this.frames.forEach(f => {
-                        tCtx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
-                        tCtx.fillStyle = f.frameBgColor || this.selectedBgColor;
-                        tCtx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
-                        this.paperStrokes.forEach(s => this.drawObject(tCtx, s));
-                        f.strokes.forEach(s => this.drawObject(tCtx, s));
+                        this.renderFrameToContext(tCtx, f);
                         framesData.push(tempC.toDataURL());
                     });
 
