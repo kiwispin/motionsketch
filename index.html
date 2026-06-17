@@ -280,6 +280,36 @@
         input[type="range"] { flex: 1; -webkit-appearance: none; height: 4px; background: var(--input-bg); border-radius: 2px; outline: none; }
         input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: white; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
 
+        .brush-preview {
+            height: 200px;
+            border-radius: 8px;
+            border: 1px solid var(--border-panel);
+            background:
+                linear-gradient(45deg, rgba(128, 128, 128, 0.14) 25%, transparent 25%),
+                linear-gradient(-45deg, rgba(128, 128, 128, 0.14) 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, rgba(128, 128, 128, 0.14) 75%),
+                linear-gradient(-45deg, transparent 75%, rgba(128, 128, 128, 0.14) 75%),
+                var(--input-bg);
+            background-size: 16px 16px;
+            background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+            display: grid;
+            place-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .brush-preview-mark {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45), 0 0 0 2px rgba(0, 0, 0, 0.25);
+            transition: width 0.12s ease, height 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+        }
+
         .color-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
         .swatch { width: 100%; aspect-ratio: 1; border-radius: 6px; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; }
         .swatch:hover { transform: scale(1.1); }
@@ -670,6 +700,9 @@
 
         <div class="prop-group">
             <div class="prop-label">Brush Settings</div>
+            <div class="brush-preview" title="Brush size preview">
+                <div class="brush-preview-mark" id="brush-preview-mark"></div>
+            </div>
             <div class="slider-row">
                 <i class="fas fa-circle" style="font-size:0.6rem; color:#aaa;"></i>
                 <input type="range" id="brush-size" min="1" max="200" value="10" oninput="app.setSize(this.value)">
@@ -847,6 +880,7 @@
                 this.renderUI();
                 this.renderPalette();
                 this.updateCursorStyle();
+                this.updateBrushPreview();
 
                 const picker = document.getElementById('html-color-picker');
                 if (picker) picker.value = this.brushColor;
@@ -908,6 +942,7 @@
 
                 this.canvasWrapper.style.width = `${w}px`;
                 this.canvasWrapper.style.height = `${h}px`;
+                this.updateBrushPreview();
             }
 
             setupEvents() {
@@ -1042,26 +1077,17 @@
             }
 
             updateCursorStyle() {
+                this.updateBrushPreview();
+
                 if (!this.isDrawingTool()) {
                     this.cursorEl.style.display = 'none';
                     return;
                 }
 
-                const rect = this.canvas.getBoundingClientRect();
-                const displayScale = rect.width / this.canvasWidth;
-                const size = this.brushSize * displayScale;
+                const preview = this.getBrushScreenPreview();
 
-                let visualSize = size;
-                if (this.tool === 'brush' && this.brushType === 'highlighter') {
-                    visualSize = this.brushSize * 2 * displayScale;
-                } else if (this.tool === 'brush' && this.brushType === 'pencil') {
-                    visualSize = 2 * displayScale;
-                } else if (this.tool === 'brush' && this.brushType === 'marker') {
-                    visualSize = this.brushSize * displayScale;
-                }
-
-                this.cursorEl.style.width = visualSize + 'px';
-                this.cursorEl.style.height = visualSize + 'px';
+                this.cursorEl.style.width = preview.cursorWidth + 'px';
+                this.cursorEl.style.height = preview.cursorHeight + 'px';
 
                 if (this.tool === 'eraser') {
                     this.cursorEl.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
@@ -1069,6 +1095,72 @@
                 } else {
                     this.cursorEl.style.backgroundColor = this.hexToRgba(this.brushColor, 0.08);
                     this.cursorEl.style.borderColor = this.hexToRgba(this.brushColor, 0.55);
+                }
+            }
+
+            getBrushScreenPreview() {
+                const rect = this.canvas.getBoundingClientRect();
+                const displayScale = rect.width / this.canvasWidth;
+                const type = this.tool === 'eraser' ? 'eraser' : this.brushType;
+                const baseSize = type === 'pencil' ? 2 : type === 'highlighter' ? this.brushSize * 2 : this.brushSize;
+                const screenSize = Math.max(1, baseSize * displayScale);
+
+                if (type === 'highlighter') {
+                    return {
+                        type,
+                        cursorWidth: screenSize,
+                        cursorHeight: screenSize,
+                        previewWidth: Math.min(screenSize * 1.6, 200),
+                        previewHeight: screenSize
+                    };
+                }
+
+                if (type === 'pencil') {
+                    return {
+                        type,
+                        cursorWidth: Math.max(2, screenSize),
+                        cursorHeight: Math.max(2, screenSize),
+                        previewWidth: 48,
+                        previewHeight: Math.max(2, screenSize)
+                    };
+                }
+
+                return {
+                    type,
+                    cursorWidth: screenSize,
+                    cursorHeight: screenSize,
+                    previewWidth: screenSize,
+                    previewHeight: screenSize
+                };
+            }
+
+            updateBrushPreview() {
+                const mark = document.getElementById('brush-preview-mark');
+                if (!mark) return;
+
+                const brushPreview = this.getBrushScreenPreview();
+                const type = brushPreview.type;
+                const alpha = type === 'highlighter' ? Math.min(1, this.opacity * 0.4) : this.opacity;
+                const color = type === 'eraser' ? 'rgba(255, 255, 255, 0.55)' : this.hexToRgba(this.brushColor, alpha);
+
+                mark.style.backgroundColor = color;
+                mark.style.border = type === 'eraser' ? '1px solid rgba(0, 0, 0, 0.65)' : 'none';
+                mark.style.boxShadow = type === 'pencil'
+                    ? `0 0 0 1px ${this.hexToRgba(this.brushColor, Math.max(0.45, alpha))}`
+                    : '0 0 0 1px rgba(255, 255, 255, 0.45), 0 0 0 2px rgba(0, 0, 0, 0.25)';
+
+                if (type === 'highlighter') {
+                    mark.style.width = brushPreview.previewWidth + 'px';
+                    mark.style.height = brushPreview.previewHeight + 'px';
+                    mark.style.borderRadius = '4px';
+                } else if (type === 'pencil') {
+                    mark.style.width = brushPreview.previewWidth + 'px';
+                    mark.style.height = brushPreview.previewHeight + 'px';
+                    mark.style.borderRadius = '2px';
+                } else {
+                    mark.style.width = brushPreview.previewWidth + 'px';
+                    mark.style.height = brushPreview.previewHeight + 'px';
+                    mark.style.borderRadius = '999px';
                 }
             }
 
