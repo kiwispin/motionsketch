@@ -837,6 +837,10 @@
 
                 this.isDrawing = false;
                 this.currentStroke = null;
+                this.quickLineTimer = null;
+                this.quickLineActive = false;
+                this.quickLineDelay = 550;
+                this.quickLineMinDistance = 12;
 
                 this.selectedObject = null;
                 this.selectedBgColor = '#ffffff';
@@ -1608,6 +1612,8 @@
 
                 this.saveState();
                 this.isDrawing = true;
+                this.quickLineActive = false;
+                this.clearQuickLineTimer();
                 this.selectedObject = null;
                 this.dragStart = pos;
 
@@ -1628,6 +1634,7 @@
                 const list = this.getActiveStrokeList();
                 list.push(this.currentStroke);
                 this.renderCanvas();
+                this.queueQuickLine(pos, p);
             }
 
             onMove(pos, pressure = 0.5) {
@@ -1818,7 +1825,12 @@
                 if (this.isDrawing && this.currentStroke) {
                     if (this.tool === 'brush' || this.tool === 'eraser') {
                         const p = (typeof pressure === 'number') ? pressure : 0.5;
-                        this.currentStroke.points.push({ x: pos.x, y: pos.y, p: p });
+                        if (this.quickLineActive) {
+                            this.setQuickLineEnd(pos, p);
+                        } else {
+                            this.currentStroke.points.push({ x: pos.x, y: pos.y, p: p });
+                            this.queueQuickLine(pos, p);
+                        }
                     } else {
                         const start = this.dragStart;
                         if (!start) return;
@@ -1887,10 +1899,12 @@
                 }
 
                 if (this.isDrawing) {
-                    if ((this.tool === 'brush' || this.tool === 'eraser') && this.currentStroke.points.length > 5) {
+                    this.clearQuickLineTimer();
+                    if (!this.quickLineActive && (this.tool === 'brush' || this.tool === 'eraser') && this.currentStroke.points.length > 5) {
                         this.currentStroke.points = this.simplifyPoints(this.currentStroke.points, 1.5);
                     }
                     this.isDrawing = false;
+                    this.quickLineActive = false;
                     this.currentStroke = null;
                     this.renderCanvas();
                     this.updateThumbnails();
@@ -1905,6 +1919,44 @@
                     this.draggedFrameIndex = null;
                     document.querySelectorAll('.frame-card').forEach(el => el.classList.remove('drag-over'));
                 }
+            }
+
+            clearQuickLineTimer() {
+                if (this.quickLineTimer) {
+                    clearTimeout(this.quickLineTimer);
+                    this.quickLineTimer = null;
+                }
+            }
+
+            queueQuickLine(pos, pressure = 0.5) {
+                if (!this.currentStroke || !['brush', 'eraser'].includes(this.tool)) return;
+                this.clearQuickLineTimer();
+                this.quickLineEnd = { x: pos.x, y: pos.y, p: pressure };
+                this.quickLineTimer = setTimeout(() => this.activateQuickLine(), this.quickLineDelay);
+            }
+
+            activateQuickLine() {
+                if (!this.isDrawing || !this.currentStroke || this.quickLineActive) return;
+                const start = this.currentStroke.points[0];
+                const end = this.quickLineEnd || this.currentStroke.points[this.currentStroke.points.length - 1];
+                if (!start || !end) return;
+
+                const dist = Math.hypot(end.x - start.x, end.y - start.y);
+                if (dist < this.quickLineMinDistance) return;
+
+                this.quickLineActive = true;
+                this.setQuickLineEnd(end, end.p);
+                this.renderCanvas();
+            }
+
+            setQuickLineEnd(pos, pressure = 0.5) {
+                if (!this.currentStroke || !this.currentStroke.points.length) return;
+                const start = this.currentStroke.points[0];
+                this.currentStroke.points = [
+                    { x: start.x, y: start.y, p: start.p !== undefined ? start.p : 0.5 },
+                    { x: pos.x, y: pos.y, p: pressure !== undefined ? pressure : 0.5 }
+                ];
+                this.quickLineEnd = { x: pos.x, y: pos.y, p: pressure };
             }
 
             simplifyPoints(points, tolerance) {
@@ -2525,6 +2577,8 @@
             }
 
             setTool(t) {
+                this.clearQuickLineTimer();
+                this.quickLineActive = false;
                 this.tool = t;
                 document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
                 const btn = document.getElementById('tool-' + t);
