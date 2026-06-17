@@ -947,6 +947,7 @@
 
             setupEvents() {
                 const c = this.canvas;
+                c.tabIndex = 0;
 
                 const start = (e) => this.onDown(this.getPos(e), e.pressure, e.ctrlKey || e.metaKey);
                 const move = (e) => {
@@ -965,6 +966,7 @@
                 c.addEventListener('pointerleave', () => { this.cursorEl.style.display = 'none'; });
 
                 c.addEventListener('pointerdown', (e) => {
+                    c.focus({ preventScroll: true });
                     c.setPointerCapture(e.pointerId);
                     start(e);
                 });
@@ -984,7 +986,13 @@
                 });
 
                 document.addEventListener('keydown', (e) => {
-                    if (e.target.tagName === 'INPUT') return;
+                    const target = e.target;
+                    const isTypingTarget = target && (
+                        target.isContentEditable ||
+                        target.tagName === 'TEXTAREA' ||
+                        (target.tagName === 'INPUT' && ['text', 'number', 'password', 'search', 'email', 'url', 'tel'].includes((target.type || '').toLowerCase()))
+                    );
+                    if (isTypingTarget) return;
 
                     if (e.key === 'Delete' || e.key === 'Backspace') {
                         if (this.selectedObject) this.deleteSelected();
