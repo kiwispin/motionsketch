@@ -790,7 +790,7 @@
                 this.ctx = this.canvas.getContext('2d');
                 this.bgCtx = this.bgCanvas.getContext('2d');
                 this.framesList = document.getElementById('frames-list');
-                this.frames = [{ strokes: [] }];
+                this.frames = [{ strokes: [], paperStrokes: [] }];
                 this.paperStrokes = [];
                 this.frameIndex = 0;
 
@@ -1049,7 +1049,7 @@
 
                 const rect = this.canvas.getBoundingClientRect();
                 const displayScale = rect.width / this.canvasWidth;
-                const size = this.brushSize * 0.5 * displayScale;
+                const size = this.brushSize * displayScale;
 
                 let visualSize = size;
                 if (this.tool === 'brush' && this.brushType === 'highlighter') {
@@ -1064,11 +1064,11 @@
                 this.cursorEl.style.height = visualSize + 'px';
 
                 if (this.tool === 'eraser') {
-                    this.cursorEl.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+                    this.cursorEl.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
                     this.cursorEl.style.borderColor = '#000';
                 } else {
-                    this.cursorEl.style.backgroundColor = this.hexToRgba(this.brushColor, 0.5);
-                    this.cursorEl.style.borderColor = 'rgba(0,0,0,0.2)';
+                    this.cursorEl.style.backgroundColor = this.hexToRgba(this.brushColor, 0.08);
+                    this.cursorEl.style.borderColor = this.hexToRgba(this.brushColor, 0.55);
                 }
             }
 
@@ -1139,7 +1139,7 @@
                         angle: 0,
                         points: []
                     };
-                    const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+                    const list = this.getActiveStrokeList();
                     list.push(textObj);
                     this.renderCanvas();
                     this.saveStorage();
@@ -1190,12 +1190,36 @@
                 }
             }
 
+            cloneData(value) {
+                return JSON.parse(JSON.stringify(value));
+            }
+
+            normalizeFrames(frames, legacyPaperStrokes = []) {
+                const sourceFrames = Array.isArray(frames) && frames.length ? frames : [{ strokes: [] }];
+                return sourceFrames.map((frame, index) => ({
+                    ...frame,
+                    strokes: Array.isArray(frame.strokes) ? frame.strokes : [],
+                    paperStrokes: Array.isArray(frame.paperStrokes)
+                        ? frame.paperStrokes
+                        : (index === 0 ? this.cloneData(legacyPaperStrokes || []) : [])
+                }));
+            }
+
+            getPaperStrokes(frame = this.frames[this.frameIndex]) {
+                if (!frame.paperStrokes) frame.paperStrokes = [];
+                return frame.paperStrokes;
+            }
+
+            getActiveStrokeList() {
+                const frame = this.frames[this.frameIndex];
+                return this.activeLayer === 'ink' ? frame.strokes : this.getPaperStrokes(frame);
+            }
+
             saveState() {
                 if (this.history.length > 20) this.history.shift();
                 this.redoStack = [];
                 const state = {
-                    frames: JSON.parse(JSON.stringify(this.frames)),
-                    paperStrokes: JSON.parse(JSON.stringify(this.paperStrokes)),
+                    frames: this.cloneData(this.frames),
                     frameIndex: this.frameIndex,
                     bgColor: this.selectedBgColor,
                     width: this.canvasWidth,
@@ -1208,8 +1232,7 @@
             undo() {
                 if (this.history.length === 0) return;
                 const currentState = {
-                    frames: JSON.parse(JSON.stringify(this.frames)),
-                    paperStrokes: JSON.parse(JSON.stringify(this.paperStrokes)),
+                    frames: this.cloneData(this.frames),
                     frameIndex: this.frameIndex,
                     bgColor: this.selectedBgColor,
                     width: this.canvasWidth,
@@ -1218,8 +1241,7 @@
                 };
                 this.redoStack.push(JSON.stringify(currentState));
                 const prevState = JSON.parse(this.history.pop());
-                this.frames = prevState.frames;
-                this.paperStrokes = prevState.paperStrokes;
+                this.frames = this.normalizeFrames(prevState.frames, prevState.paperStrokes);
                 this.frameIndex = prevState.frameIndex;
                 this.selectedBgColor = prevState.bgColor;
                 if (prevState.palette) { this.palette = prevState.palette; this.renderPalette(); }
@@ -1233,8 +1255,7 @@
             redo() {
                 if (this.redoStack.length === 0) return;
                 const currentState = {
-                    frames: JSON.parse(JSON.stringify(this.frames)),
-                    paperStrokes: JSON.parse(JSON.stringify(this.paperStrokes)),
+                    frames: this.cloneData(this.frames),
                     frameIndex: this.frameIndex,
                     bgColor: this.selectedBgColor,
                     width: this.canvasWidth,
@@ -1243,8 +1264,7 @@
                 };
                 this.history.push(JSON.stringify(currentState));
                 const nextState = JSON.parse(this.redoStack.pop());
-                this.frames = nextState.frames;
-                this.paperStrokes = nextState.paperStrokes;
+                this.frames = this.normalizeFrames(nextState.frames, nextState.paperStrokes);
                 this.frameIndex = nextState.frameIndex;
                 this.selectedBgColor = nextState.bgColor;
                 if (nextState.palette) { this.palette = nextState.palette; this.renderPalette(); }
@@ -1263,9 +1283,7 @@
                     const found = this.hitTest(pos);
 
                     // Helper: extract the raw stroke list for current layer
-                    const list = this.activeLayer === 'ink'
-                        ? this.frames[this.frameIndex].strokes
-                        : this.paperStrokes;
+                    const list = this.getActiveStrokeList();
 
                     if (found) {
                         this.saveState();
@@ -1507,7 +1525,7 @@
                     angle: 0
                 };
 
-                const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+                const list = this.getActiveStrokeList();
                 list.push(this.currentStroke);
                 this.renderCanvas();
             }
@@ -1728,7 +1746,7 @@
                             this.currentStroke.points = pts;
                         }
                     }
-                    this.renderCanvas();
+                    this.scheduleRender();
                 }
             }
 
@@ -1744,7 +1762,7 @@
 
                     if (selBox.w > 2 || selBox.h > 2) {
                         const items = [];
-                        const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+                        const list = this.getActiveStrokeList();
 
                         list.forEach((stroke, i) => {
                             const b = this.getStrokeBounds(stroke);
@@ -1774,6 +1792,7 @@
                     }
                     this.isDrawing = false;
                     this.currentStroke = null;
+                    this.renderCanvas();
                     this.updateThumbnails();
                     this.saveStorage();
                 }
@@ -1854,7 +1873,7 @@
                     return null;
                 };
                 if (this.activeLayer === 'ink') return checkList(this.frames[this.frameIndex].strokes, 'ink');
-                else return checkList(this.paperStrokes, 'paper');
+                else return checkList(this.getPaperStrokes(), 'paper');
             }
 
             strokeHit(stroke, pos) {
@@ -1999,8 +2018,7 @@
                 if (type === 'pencil') return 2;
                 if (type === 'highlighter') return stroke.size * 2;
                 if (type === 'marker') return stroke.size;
-                const p = stroke.points && stroke.points[0] ? stroke.points[0] : {};
-                return stroke.size * (p.p !== undefined ? p.p : 0.5);
+                return stroke.size;
             }
 
             getStrokeBounds(stroke) {
@@ -2091,7 +2109,7 @@
                 bgCtx.fillStyle = bgColor;
                 bgCtx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
                 bgCtx.globalAlpha = 1.0;
-                this.paperStrokes.forEach(s => this.drawObject(bgCtx, s, false, 'paper'));
+                this.getPaperStrokes().forEach(s => this.drawObject(bgCtx, s, false, 'paper'));
                 this.currentRenderBgColor = null;
 
                 ctx.globalCompositeOperation = 'source-over';
@@ -2106,7 +2124,7 @@
                 }
 
                 if (this.selectedObject && !this.isPlaying) {
-                    const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+                    const list = this.getActiveStrokeList();
 
                     if (this.selectedObject.isGroup) {
                         this.drawSelectionUI(ctx);
@@ -2134,6 +2152,15 @@
 
                 // Update floating group toolbar
                 this.updateGroupToolbar();
+            }
+
+            scheduleRender() {
+                if (this.renderQueued) return;
+                this.renderQueued = true;
+                requestAnimationFrame(() => {
+                    this.renderQueued = false;
+                    this.renderCanvas();
+                });
             }
 
             drawObject(ctx, obj, simpleMode = false, layerName = 'ink') {
@@ -2265,6 +2292,7 @@
                 if (!stroke.points || stroke.points.length === 0) return;
 
                 const isEraser = stroke.type === 'eraser';
+                if (simpleMode && isEraser) return;
                 const bgColor = this.currentRenderBgColor || this.frames[this.frameIndex].frameBgColor || this.selectedBgColor;
                 const hex = isEraser && layerName === 'paper' ? bgColor : stroke.color;
                 const alpha = stroke.opacity !== undefined ? stroke.opacity : 1.0;
@@ -2279,7 +2307,7 @@
 
                 const type = stroke.brushType || 'brush';
 
-                if (simpleMode || ['rect', 'circle', 'line'].includes(stroke.type) || ['pencil', 'marker', 'highlighter'].includes(type)) {
+                if (simpleMode || ['brush', 'eraser', 'rect', 'circle', 'line'].includes(stroke.type) || ['pencil', 'marker', 'highlighter'].includes(type)) {
                     if (stroke.points.length === 1 && stroke.type !== 'rect' && stroke.type !== 'circle' && stroke.type !== 'line') {
                         const p = stroke.points[0];
                         let renderWidth = this.getSinglePointDiameter(stroke);
@@ -2526,7 +2554,7 @@
             addFrame() {
                 this.saveState();
                 this.selectedObject = null;
-                this.frames.splice(this.frameIndex + 1, 0, { strokes: [] });
+                this.frames.splice(this.frameIndex + 1, 0, { strokes: [], paperStrokes: [] });
                 this.frameIndex++;
                 this.renderUI();
                 this.renderCanvas();
@@ -2541,8 +2569,12 @@
                 this.saveState();
                 this.selectedObject = null;
                 const target = index !== undefined ? index : this.frameIndex;
-                const newStrokes = JSON.parse(JSON.stringify(this.frames[target].strokes));
-                this.frames.splice(target + 1, 0, { strokes: newStrokes });
+                const sourceFrame = this.frames[target];
+                this.frames.splice(target + 1, 0, {
+                    strokes: this.cloneData(sourceFrame.strokes),
+                    paperStrokes: this.cloneData(this.getPaperStrokes(sourceFrame)),
+                    frameBgColor: sourceFrame.frameBgColor
+                });
                 this.frameIndex = target + 1;
                 this.renderUI();
                 this.renderCanvas();
@@ -2555,6 +2587,7 @@
                 const targetIndex = (index !== undefined) ? index : this.frameIndex;
                 if (this.frames.length <= 1) {
                     this.frames[0].strokes = [];
+                    this.frames[0].paperStrokes = [];
                     this.renderCanvas();
                 } else {
                     this.frames.splice(targetIndex, 1);
@@ -2696,7 +2729,7 @@
                 targetCtx.fillStyle = bgColor;
                 targetCtx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
                 targetCtx.globalAlpha = 1.0;
-                this.paperStrokes.forEach(s => this.drawObject(targetCtx, s, false, 'paper'));
+                this.getPaperStrokes(frame).forEach(s => this.drawObject(targetCtx, s, false, 'paper'));
                 targetCtx.restore();
 
                 fgCtx.globalCompositeOperation = 'source-over';
@@ -2730,16 +2763,19 @@
                 if (this.saveTimer) clearTimeout(this.saveTimer);
                 this.saveTimer = setTimeout(() => {
                     const data = {
-                        version: 3,
+                        version: 4,
                         frames: this.frames,
-                        paperStrokes: this.paperStrokes,
                         fps: this.fps,
                         width: this.canvasWidth,
                         height: this.canvasHeight,
                         palette: this.palette
                     };
                     try {
-                        const cleanFrames = this.frames.map(f => ({ strokes: f.strokes }));
+                        const cleanFrames = this.frames.map(f => ({
+                            strokes: f.strokes,
+                            paperStrokes: this.getPaperStrokes(f),
+                            frameBgColor: f.frameBgColor
+                        }));
                         const jsonStr = JSON.stringify({ ...data, frames: cleanFrames });
 
                         const size = jsonStr.length;
@@ -2768,8 +2804,7 @@
                     if (jsonStr) {
                         const data = JSON.parse(jsonStr);
                         if (data.version >= 2) {
-                            this.frames = data.frames;
-                            this.paperStrokes = data.paperStrokes || [];
+                            this.frames = this.normalizeFrames(data.frames, data.paperStrokes);
                             this.fps = data.fps || 12;
                             this.frameIndex = 0;
                             if (data.width && data.height) this.resizeCanvas(data.width, data.height);
@@ -2829,9 +2864,12 @@
 
             saveProject() {
                 const data = {
-                    version: 3,
-                    frames: this.frames.map(f => ({ strokes: f.strokes, frameBgColor: f.frameBgColor })),
-                    paperStrokes: this.paperStrokes,
+                    version: 4,
+                    frames: this.frames.map(f => ({
+                        strokes: f.strokes,
+                        paperStrokes: this.getPaperStrokes(f),
+                        frameBgColor: f.frameBgColor
+                    })),
                     fps: this.fps,
                     width: this.canvasWidth,
                     height: this.canvasHeight,
@@ -2854,8 +2892,7 @@
                     try {
                         const data = JSON.parse(e.target.result);
                         if (data.version >= 2) {
-                            this.frames = data.frames;
-                            this.paperStrokes = data.paperStrokes || [];
+                            this.frames = this.normalizeFrames(data.frames, data.paperStrokes);
                             this.fps = data.fps;
                             this.frameIndex = 0;
                             if (data.width && data.height) this.resizeCanvas(data.width, data.height);
@@ -2876,7 +2913,7 @@
             }
             confirmNewAnimation() {
                 this.closeModal();
-                this.frames = [{ strokes: [] }];
+                this.frames = [{ strokes: [], paperStrokes: [] }];
                 this.paperStrokes = [];
                 this.frameIndex = 0;
                 this.selectedBgColor = '#ffffff';
@@ -2894,7 +2931,7 @@
                 if (!this.selectedObject || !this.selectedObject.isGroup || this.selectedObject.isPersistentGroup) return;
                 this.saveState();
 
-                const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+                const list = this.getActiveStrokeList();
 
                 // Collect all the individual strokes
                 const itemStrokes = this.selectedObject.items.map(i => i.stroke);
@@ -2936,7 +2973,7 @@
                 if (!this.selectedObject || !this.selectedObject.isPersistentGroup) return;
                 this.saveState();
 
-                const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+                const list = this.getActiveStrokeList();
                 const grp = this.selectedObject.persistentGroupStroke;
 
                 // Remove the group stroke
@@ -2986,7 +3023,7 @@
             deleteSelected() {
                 if (!this.selectedObject) return;
                 this.saveState();
-                const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+                const list = this.getActiveStrokeList();
 
                 if (this.selectedObject.isPersistentGroup) {
                     // Remove the single persistent group stroke
@@ -2997,7 +3034,7 @@
                     if (this.activeLayer === 'ink') {
                         this.frames[this.frameIndex].strokes = this.frames[this.frameIndex].strokes.filter(s => !itemsToRemove.has(s));
                     } else {
-                        this.paperStrokes = this.paperStrokes.filter(s => !itemsToRemove.has(s));
+                        this.frames[this.frameIndex].paperStrokes = this.getPaperStrokes().filter(s => !itemsToRemove.has(s));
                     }
                 } else {
                     const idx = list.indexOf(this.selectedObject.stroke);
@@ -3026,7 +3063,7 @@
             pasteSelection() {
                 if (this.clipboard) {
                     this.saveState();
-                    const list = this.activeLayer === 'ink' ? this.frames[this.frameIndex].strokes : this.paperStrokes;
+                    const list = this.getActiveStrokeList();
 
                     if (this.clipboard.type === 'group') {
                         // Paste persistent group as a new group stroke
