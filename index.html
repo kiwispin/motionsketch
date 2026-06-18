@@ -1300,13 +1300,52 @@
 
             normalizeFrames(frames, legacyPaperStrokes = []) {
                 const sourceFrames = Array.isArray(frames) && frames.length ? frames : [{ strokes: [] }];
-                return sourceFrames.map((frame, index) => ({
-                    ...frame,
-                    strokes: Array.isArray(frame.strokes) ? frame.strokes : [],
-                    paperStrokes: Array.isArray(frame.paperStrokes)
+                return sourceFrames.map((frame, index) => {
+                    const paperSource = Array.isArray(frame.paperStrokes)
                         ? frame.paperStrokes
-                        : (index === 0 ? this.cloneData(legacyPaperStrokes || []) : [])
-                }));
+                        : (index === 0 ? this.cloneData(legacyPaperStrokes || []) : []);
+                    return {
+                        ...frame,
+                        strokes: this.materializeErasers(Array.isArray(frame.strokes) ? frame.strokes : []),
+                        paperStrokes: this.materializeErasers(paperSource)
+                    };
+                });
+            }
+
+            materializeErasers(strokes) {
+                const result = [];
+                strokes.forEach(stroke => {
+                    if (stroke && stroke.type === 'eraser') {
+                        this.applyEraserStrokeToList(result, stroke);
+                    } else {
+                        result.push(stroke);
+                    }
+                });
+                return result;
+            }
+
+            applyEraserStrokeToList(list, eraserStroke) {
+                const points = eraserStroke.points || [];
+                const radius = Math.max(2, (eraserStroke.size || this.brushSize) / 2);
+                if (!points.length) return;
+
+                if (points.length === 1) {
+                    const p = points[0];
+                    this.applyEraserSegmentToList(list, p, p, radius);
+                    return;
+                }
+
+                for (let i = 0; i < points.length - 1; i++) {
+                    this.applyEraserSegmentToList(list, points[i], points[i + 1], radius);
+                }
+            }
+
+            applyEraserSegmentToList(list, from, to, radius) {
+                const next = [];
+                list.forEach(stroke => {
+                    this.eraseStrokeWithSegment(stroke, from, to, radius).forEach(piece => next.push(piece));
+                });
+                list.splice(0, list.length, ...next);
             }
 
             getPaperStrokes(frame = this.frames[this.frameIndex]) {
@@ -1631,6 +1670,12 @@
                     angle: 0
                 };
 
+                if (this.tool === 'eraser') {
+                    this.eraseVectorBetween(pos, pos);
+                    this.renderCanvas();
+                    return;
+                }
+
                 const list = this.getActiveStrokeList();
                 list.push(this.currentStroke);
                 this.renderCanvas();
@@ -1823,7 +1868,16 @@
                 }
 
                 if (this.isDrawing && this.currentStroke) {
-                    if (this.tool === 'brush' || this.tool === 'eraser') {
+                    if (this.tool === 'eraser') {
+                        const p = (typeof pressure === 'number') ? pressure : 0.5;
+                        const prev = this.currentStroke.points[this.currentStroke.points.length - 1];
+                        this.currentStroke.points.push({ x: pos.x, y: pos.y, p: p });
+                        this.eraseVectorBetween(prev, pos);
+                        this.renderCanvas();
+                        return;
+                    }
+
+                    if (this.tool === 'brush') {
                         const p = (typeof pressure === 'number') ? pressure : 0.5;
                         if (this.quickLineActive) {
                             this.setQuickLineEnd(pos, p);
@@ -1900,7 +1954,7 @@
 
                 if (this.isDrawing) {
                     this.clearQuickLineTimer();
-                    if (!this.quickLineActive && (this.tool === 'brush' || this.tool === 'eraser') && this.currentStroke.points.length > 5) {
+                    if (!this.quickLineActive && this.tool === 'brush' && this.currentStroke.points.length > 5) {
                         this.currentStroke.points = this.simplifyPoints(this.currentStroke.points, 1.5);
                     }
                     this.isDrawing = false;
@@ -1970,6 +2024,141 @@
                 }
                 newPoints.push(points[points.length - 1]);
                 return newPoints;
+            }
+
+            eraseVectorBetween(from, to) {
+                const list = this.getActiveStrokeList();
+                const radius = Math.max(2, this.brushSize / 2);
+                const next = [];
+                let changed = false;
+
+                list.forEach(stroke => {
+                    const pieces = this.eraseStrokeWithSegment(stroke, from, to, radius);
+                    if (pieces.length !== 1 || pieces[0] !== stroke) changed = true;
+                    pieces.forEach(piece => next.push(piece));
+                });
+
+                if (changed) {
+                    list.splice(0, list.length, ...next);
+                    this.selectedObject = null;
+                }
+            }
+
+            eraseStrokeWithSegment(stroke, from, to, radius) {
+                if (!stroke) return [];
+
+                if (stroke.type === 'group') {
+                    const keptItems = [];
+                    stroke.items.forEach(item => {
+                        this.eraseStrokeWithSegment(item, from, to, radius).forEach(piece => keptItems.push(piece));
+                    });
+                    if (!keptItems.length) return [];
+                    if (keptItems.length === stroke.items.length && keptItems.every((item, index) => item === stroke.items[index])) return [stroke];
+                    const nextGroup = this.cloneData(stroke);
+                    nextGroup.items = keptItems;
+                    return [nextGroup];
+                }
+
+                if (stroke.type === 'text') {
+                    return this.eraserIntersectsBounds(this.getStrokeBounds(stroke), from, to, radius) ? [] : [stroke];
+                }
+
+                if (!stroke.points || !stroke.points.length) return [stroke];
+
+                const brushRadius = Math.max(1, this.getSinglePointDiameter(stroke) / 2);
+                const hitRadius = radius + brushRadius;
+
+                if (['rect', 'circle'].includes(stroke.type) || stroke.fillColor) {
+                    return this.strokeIntersectsEraser(stroke, from, to, hitRadius) ? [] : [stroke];
+                }
+
+                if (stroke.points.length === 1) {
+                    const p = stroke.points[0];
+                    return this.distToSegment(p, from, to) <= hitRadius ? [] : [stroke];
+                }
+
+                const chunks = [];
+                let current = [];
+                for (let i = 0; i < stroke.points.length - 1; i++) {
+                    const p1 = stroke.points[i];
+                    const p2 = stroke.points[i + 1];
+                    const erased = this.segmentsNear(p1, p2, from, to, hitRadius);
+
+                    if (erased) {
+                        if (current.length > 1) chunks.push(current);
+                        current = [];
+                    } else {
+                        if (!current.length) current.push({ ...p1 });
+                        current.push({ ...p2 });
+                    }
+                }
+
+                if (current.length > 1) chunks.push(current);
+                if (chunks.length === 1 && chunks[0].length === stroke.points.length) return [stroke];
+
+                return chunks.map(points => ({
+                    ...this.cloneData(stroke),
+                    points,
+                    fillColor: null
+                }));
+            }
+
+            strokeIntersectsEraser(stroke, from, to, radius) {
+                if (!stroke.points || !stroke.points.length) return false;
+                if (stroke.points.some(p => this.distToSegment(p, from, to) <= radius)) return true;
+                for (let i = 0; i < stroke.points.length - 1; i++) {
+                    if (this.segmentsNear(stroke.points[i], stroke.points[i + 1], from, to, radius)) return true;
+                }
+                return false;
+            }
+
+            eraserIntersectsBounds(bounds, from, to, radius) {
+                const expanded = {
+                    x: bounds.x - radius,
+                    y: bounds.y - radius,
+                    w: bounds.w + radius * 2,
+                    h: bounds.h + radius * 2
+                };
+                if (this.pointInRect(from, expanded) || this.pointInRect(to, expanded)) return true;
+                const corners = [
+                    { x: expanded.x, y: expanded.y },
+                    { x: expanded.x + expanded.w, y: expanded.y },
+                    { x: expanded.x + expanded.w, y: expanded.y + expanded.h },
+                    { x: expanded.x, y: expanded.y + expanded.h }
+                ];
+                for (let i = 0; i < corners.length; i++) {
+                    if (this.segmentsIntersect(from, to, corners[i], corners[(i + 1) % corners.length])) return true;
+                }
+                return false;
+            }
+
+            pointInRect(point, rect) {
+                return point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y && point.y <= rect.y + rect.h;
+            }
+
+            segmentsNear(a, b, c, d, radius) {
+                if (this.segmentsIntersect(a, b, c, d)) return true;
+                return this.distToSegment(a, c, d) <= radius ||
+                    this.distToSegment(b, c, d) <= radius ||
+                    this.distToSegment(c, a, b) <= radius ||
+                    this.distToSegment(d, a, b) <= radius;
+            }
+
+            segmentsIntersect(a, b, c, d) {
+                const orient = (p, q, r) => (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+                const onSegment = (p, q, r) =>
+                    q.x <= Math.max(p.x, r.x) && q.x >= Math.min(p.x, r.x) &&
+                    q.y <= Math.max(p.y, r.y) && q.y >= Math.min(p.y, r.y);
+                const o1 = orient(a, b, c);
+                const o2 = orient(a, b, d);
+                const o3 = orient(c, d, a);
+                const o4 = orient(c, d, b);
+                if (o1 * o2 < 0 && o3 * o4 < 0) return true;
+                if (Math.abs(o1) < 0.0001 && onSegment(a, c, b)) return true;
+                if (Math.abs(o2) < 0.0001 && onSegment(a, d, b)) return true;
+                if (Math.abs(o3) < 0.0001 && onSegment(c, a, d)) return true;
+                if (Math.abs(o4) < 0.0001 && onSegment(c, b, d)) return true;
+                return false;
             }
 
             hitTest(pos) {
