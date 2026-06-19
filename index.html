@@ -579,13 +579,13 @@
 
     <div id="text-modal" class="modal-overlay">
         <div class="modal-box">
-            <div class="modal-title">Enter Text</div>
+            <div class="modal-title" id="text-modal-title">Enter Text</div>
             <div class="modal-input-group">
                 <input type="text" id="text-input-value" class="modal-input" style="width: 100%; text-align: left;" placeholder="Your Text Here">
             </div>
             <div class="modal-btns">
                 <button class="btn-ghost" onclick="app.closeModal('text-modal')">Cancel</button>
-                <button class="btn-primary" onclick="app.confirmAddText()">Add</button>
+                <button class="btn-primary" id="text-modal-submit" onclick="app.confirmAddText()">Add</button>
             </div>
         </div>
     </div>
@@ -860,6 +860,7 @@
                 this.zoom = 1.0;
 
                 this.textInputPos = { x: 0, y: 0 };
+                this.editingTextObject = null;
 
                 this.palette = ['#000000', '#ffffff', '#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#8E8E93'];
                 this.paletteEditIndex = -1;
@@ -973,6 +974,17 @@
                     c.focus({ preventScroll: true });
                     c.setPointerCapture(e.pointerId);
                     start(e);
+                });
+                c.addEventListener('dblclick', (e) => {
+                    if (this.tool !== 'select') return;
+                    const found = this.hitTest(this.getPos(e));
+                    if (found && found.stroke.type === 'text') {
+                        e.preventDefault();
+                        this.selectedObject = found;
+                        this.calcBounds(found.stroke);
+                        this.openTextModal({ x: found.stroke.x, y: found.stroke.y }, found.stroke);
+                        this.renderCanvas();
+                    }
                 });
                 window.addEventListener('pointerup', (e) => {
                     c.releasePointerCapture(e.pointerId);
@@ -1214,41 +1226,57 @@
                 this.saveStorage();
             }
 
-            openTextModal(pos) {
+            openTextModal(pos, textObject = null) {
                 this.textInputPos = pos;
-                document.getElementById('text-input-value').value = "";
+                this.editingTextObject = textObject;
+                document.getElementById('text-modal-title').innerText = textObject ? 'Edit Text' : 'Enter Text';
+                document.getElementById('text-modal-submit').innerText = textObject ? 'Update' : 'Add';
+                const input = document.getElementById('text-input-value');
+                input.value = textObject ? textObject.text : "";
                 document.getElementById('text-modal').style.display = 'flex';
-                document.getElementById('text-input-value').focus();
+                input.focus();
+                input.select();
             }
 
             confirmAddText() {
                 const val = document.getElementById('text-input-value').value;
                 if (val) {
                     this.saveState();
-                    this.ctx.font = `${this.brushSize * 2 + 20}px sans-serif`;
-                    const m = this.ctx.measureText(val);
-                    const h = this.brushSize * 2 + 20;
+                    if (this.editingTextObject) {
+                        const textObj = this.editingTextObject;
+                        this.ctx.font = `${textObj.size}px sans-serif`;
+                        const m = this.ctx.measureText(val);
+                        textObj.text = val;
+                        textObj.width = m.width;
+                        textObj.height = textObj.size;
+                        if (this.selectedObject && this.selectedObject.stroke === textObj) this.calcBounds(textObj);
+                    } else {
+                        this.ctx.font = `${this.brushSize * 2 + 20}px sans-serif`;
+                        const m = this.ctx.measureText(val);
+                        const h = this.brushSize * 2 + 20;
 
-                    const textObj = {
-                        type: 'text',
-                        text: val,
-                        x: this.textInputPos.x,
-                        y: this.textInputPos.y,
-                        width: m.width,
-                        height: h,
-                        sx: 1, sy: 1,
-                        color: this.brushColor,
-                        size: h,
-                        opacity: this.opacity,
-                        angle: 0,
-                        points: []
-                    };
-                    const list = this.getActiveStrokeList();
-                    list.push(textObj);
+                        const textObj = {
+                            type: 'text',
+                            text: val,
+                            x: this.textInputPos.x,
+                            y: this.textInputPos.y,
+                            width: m.width,
+                            height: h,
+                            sx: 1, sy: 1,
+                            color: this.brushColor,
+                            size: h,
+                            opacity: this.opacity,
+                            angle: 0,
+                            points: []
+                        };
+                        const list = this.getActiveStrokeList();
+                        list.push(textObj);
+                    }
                     this.renderCanvas();
                     this.saveStorage();
                 }
                 this.closeModal('text-modal');
+                this.editingTextObject = null;
                 this.setTool('select');
             }
 
@@ -3253,6 +3281,7 @@
             closeModal(id) {
                 if (id) document.getElementById(id).style.display = 'none';
                 else document.getElementById('custom-modal').style.display = 'none';
+                if (id === 'text-modal') this.editingTextObject = null;
             }
             confirmNewAnimation() {
                 this.closeModal();
