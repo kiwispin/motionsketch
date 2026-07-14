@@ -1,0 +1,11 @@
+{
+  "name": "SketchMotion",
+  "short_name": "SketchMotion",
+  "description": "A lightweight browser animation studio.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1115",
+  "theme_color": "#0a84ff",
+  "icons": [{ "src": "icons/sketchmotion.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
