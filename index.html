@@ -880,6 +880,19 @@
             </div>
         </div>
         <div class="prop-group">
+            <div class="prop-label">Color</div>
+            <div class="color-input-wrap">
+                <input type="color" id="html-color-picker" aria-label="Brush colour" value="#000000" oninput="app.setColor(this.value)">
+            </div>
+            <div class="color-grid" id="palette-container"></div>
+            <div class="color-picker-btn" id="bg-color-picker" onclick="app.setColorMode('bg')" title="Background Color"
+                style="background:white; margin-top:10px; width:100%; height:36px; border-radius:8px; border:1px solid var(--border-panel); display:flex; align-items:center; justify-content:center; font-size:0.8rem; color:#333; font-weight:400; position:relative; overflow:hidden; cursor:pointer;">
+                <input type="color" id="bg-color-input" aria-label="Frame background colour" value="#ffffff" oninput="app.updateBgColor(this.value)"
+                    style="position:absolute; width:200%; height:200%; top:-50%; left:-50%; cursor:pointer; padding:0; margin:0; border:none;">
+                <span id="bg-color-label" style="pointer-events:none; z-index:1; text-shadow:none;">Set Background Color</span>
+            </div>
+        </div>
+        <div class="prop-group">
             <div class="prop-label">Placement</div>
             <button type="button" class="btn-ghost" id="snap-toggle" onclick="app.toggleSnapToGrid()" aria-pressed="false" title="Snap selected objects to a 10px grid"><i class="fas fa-magnet"></i> Snap</button>
             <button type="button" class="btn-ghost" id="grid-toggle" onclick="app.toggleGrid()" aria-pressed="false" title="Show a view-only placement grid"><i class="fas fa-th"></i> Grid</button>
@@ -902,19 +915,6 @@
             </label>
         </div>
 
-        <div class="prop-group">
-            <div class="prop-label">Color</div>
-            <div class="color-input-wrap">
-                <input type="color" id="html-color-picker" aria-label="Brush colour" value="#000000" oninput="app.setColor(this.value)">
-            </div>
-            <div class="color-grid" id="palette-container"></div>
-            <div class="color-picker-btn" id="bg-color-picker" onclick="app.setColorMode('bg')" title="Background Color"
-                style="background:white; margin-top:10px; width:100%; height:36px; border-radius:8px; border:1px solid var(--border-panel); display:flex; align-items:center; justify-content:center; font-size:0.8rem; color:#333; font-weight:400; position:relative; overflow:hidden; cursor:pointer;">
-                <input type="color" id="bg-color-input" aria-label="Frame background colour" value="#ffffff" oninput="app.updateBgColor(this.value)"
-                    style="position:absolute; width:200%; height:200%; top:-50%; left:-50%; cursor:pointer; padding:0; margin:0; border:none;">
-                <span id="bg-color-label" style="pointer-events:none; z-index:1; text-shadow:none;">Set Background Color</span>
-            </div>
-        </div>
     </div>
 
     <!-- Floating Group Toolbar - appears when selection is active -->
