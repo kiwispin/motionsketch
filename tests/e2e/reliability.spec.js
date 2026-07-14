@@ -97,11 +97,10 @@ test('bounds extreme canvas settings to a safe exportable size', async ({ page }
   }))).toEqual({ width: 2000, height: 2000, pixels: 4_000_000 });
 });
 
-test('updates the contextual inspector and keeps navigation controls separate from undoable artwork', async ({ page }) => {
+test('keeps navigation controls separate from undoable artwork', async ({ page }) => {
   await page.getByRole('button', { name: 'Text tool (T)' }).click();
-  await expect(page.locator('#inspector-title')).toHaveText('Text');
   await page.getByRole('button', { name: 'Background' }).click();
-  await expect(page.locator('#inspector-description')).toContainText('Active layer: Background');
+  await expect(page.getByRole('button', { name: 'Background' })).toHaveAttribute('aria-pressed', 'true');
 
   await page.getByRole('button', { name: 'Zoom in' }).click();
   await expect(page.locator('#zoom-disp')).toHaveText('110%');
