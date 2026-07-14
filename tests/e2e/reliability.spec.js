@@ -100,8 +100,8 @@ test('bounds extreme canvas settings to a safe exportable size', async ({ page }
 test('updates the contextual inspector and keeps navigation controls separate from undoable artwork', async ({ page }) => {
   await page.getByRole('button', { name: 'Text tool (T)' }).click();
   await expect(page.locator('#inspector-title')).toHaveText('Text');
-  await page.getByRole('button', { name: 'Shared' }).click();
-  await expect(page.locator('#inspector-description')).toContainText('Active layer: Shared');
+  await page.getByRole('button', { name: 'Background' }).click();
+  await expect(page.locator('#inspector-description')).toContainText('Active layer: Background');
 
   await page.getByRole('button', { name: 'Zoom in' }).click();
   await expect(page.locator('#zoom-disp')).toHaveText('110%');
@@ -123,8 +123,8 @@ test('updates the contextual inspector and keeps navigation controls separate fr
 });
 
 test('keeps shared artwork across frames and restores it with undo and redo', async ({ page }) => {
-  await page.getByRole('button', { name: 'Shared' }).click();
-  await expect(page.getByRole('button', { name: 'Shared' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Background' }).click();
+  await expect(page.getByRole('button', { name: 'Background' })).toHaveAttribute('aria-pressed', 'true');
 
   await page.evaluate((stroke) => {
     window.app.saveState();

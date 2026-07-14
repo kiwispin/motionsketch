@@ -2391,7 +2391,7 @@ window.gifshot = gifshot;
                 };
                 const [toolTitle, toolDescription] = this.isHandTool ? labels.hand : (labels[this.tool] || labels.brush);
                 title.textContent = toolTitle;
-                description.textContent = `${toolDescription} Active layer: ${this.activeLayer === 'ink' ? 'Frame' : 'Shared'}.`;
+                description.textContent = `${toolDescription} Active layer: ${this.activeLayer === 'ink' ? 'Foreground' : 'Background'}.`;
             }
 
             setColor(c) {
