@@ -236,11 +236,11 @@ test('aligns a multi-selection and restores it with undo and redo', async ({ pag
   }, rectangle);
   await expect(page.getByTitle('Align top')).toBeVisible();
   await page.getByTitle('Align top').click();
-  await expect.poll(() => page.evaluate(() => window.app.frames[0].strokes.map((stroke) => stroke.points[0].y))).toEqual([100, 100]);
+  await expect.poll(() => page.evaluate(() => window.app.frames[0].strokes[0].items.map((item) => item.points[0].y))).toEqual([100, 100]);
   await page.getByRole('button', { name: 'Undo' }).click();
-  await expect.poll(() => page.evaluate(() => window.app.frames[0].strokes[1].points[0].y)).toBe(145);
+  await expect.poll(() => page.evaluate(() => window.app.frames[0].strokes[0].items[1].points[0].y)).toBe(145);
   await page.getByRole('button', { name: 'Redo' }).click();
-  await expect.poll(() => page.evaluate(() => window.app.frames[0].strokes[1].points[0].y)).toBe(100);
+  await expect.poll(() => page.evaluate(() => window.app.frames[0].strokes[0].items[1].points[0].y)).toBe(100);
 });
 
 test('pans an enlarged canvas with the Hand tool and Space-drag without drawing', async ({ page }) => {

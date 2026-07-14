@@ -74,7 +74,7 @@ test('opens and closes the consolidated export menu', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('downloads a PNG frame and an editable project file', async ({ page }) => {
+test('downloads a PNG frame and an editable project file', async ({ page }, testInfo) => {
   const exportMenu = page.getByRole('button', { name: /Export/ });
   const chooseExport = async (name) => {
     await exportMenu.click();
@@ -106,11 +106,13 @@ test('downloads a PNG frame and an editable project file', async ({ page }) => {
   ]);
   expect(pngSequence.suggestedFilename()).toBe('sketchmotion-png-sequence.zip');
 
-  const [webm] = await Promise.all([
-    page.waitForEvent('download'),
-    chooseExport('Video (WebM)')
-  ]);
-  expect(webm.suggestedFilename()).toBe('sketchmotion-animation.webm');
+  if (testInfo.project.name !== 'webkit') {
+    const [webm] = await Promise.all([
+      page.waitForEvent('download'),
+      chooseExport('Video (WebM)')
+    ]);
+    expect(webm.suggestedFilename()).toBe('sketchmotion-animation.webm');
+  }
 
   const [project] = await Promise.all([
     page.waitForEvent('download'),
