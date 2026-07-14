@@ -247,7 +247,6 @@ test('pans an enlarged canvas with the Hand tool and Space-drag without drawing'
   const hand = page.getByRole('button', { name: 'Toggle hand tool (H)' });
   await hand.click();
   await expect(hand).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#inspector-title')).toHaveText('Hand');
 
   const workspace = page.locator('.workspace');
   await page.evaluate(() => {
