@@ -4,6 +4,8 @@ Audit date: 14 July 2026
 Audited build: the current working copy of `index.html`  
 Scope: product behavior, desktop and responsive UI, interaction design, accessibility, reliability, performance, and maintainability
 
+> Historical baseline: this audit records the pre-upgrade product state and the roadmap that guided the work. The shipped implementation, verification results, final UI corrections, and GitHub Pages release are recorded in `SKETCHMOTION_IMPLEMENTATION_PLAN.md`.
+
 ## Executive assessment
 
 SketchMotion already has the bones of a compelling lightweight animation tool. It is much more than a sketch pad: it has vector-like editable objects, pressure-aware drawing, two drawing planes, frame management, onion skinning, grouping, autosave, project files, and working PNG/GIF export. The dark visual treatment is coherent, the canvas is clearly prioritized, and the app is understandable at first glance on a large desktop.

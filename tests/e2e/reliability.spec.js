@@ -360,3 +360,32 @@ test('opens brush and shape flyouts without clipping the toolbar', async ({ page
   await expect.poll(() => page.evaluate(() => window.app.tool)).toBe('rect');
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.tools-panel')).overflowX)).toBe('visible');
 });
+
+test('bucket-fills the canvas with a real shape that the eraser can carve into', async ({ page }) => {
+  await page.getByRole('button', { name: 'Fill tool (F)' }).click();
+  await expect.poll(() => page.evaluate(() => window.app.tool)).toBe('bucket');
+  await page.evaluate(() => {
+    window.app.setColor('#ff0000');
+    window.app.onDown({ x: 10, y: 10 }, 0.5, false);
+    window.app.onUp();
+  });
+
+  await expect.poll(() => page.evaluate(() => window.app.frames[0].strokes[0])).toMatchObject({
+    type: 'rect',
+    fillColor: '#ff0000',
+    points: [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 600 }, { x: 0, y: 600 }, { x: 0, y: 0 }]
+  });
+
+  await page.getByRole('button', { name: 'Eraser tool (E)' }).click();
+  await expect.poll(() => page.evaluate(() => window.app.tool)).toBe('eraser');
+  await page.evaluate(() => {
+    window.app.onDown({ x: 300, y: 300 }, 0.5, false);
+    window.app.onMove({ x: 320, y: 300 }, 0.5);
+    window.app.onUp();
+  });
+
+  await expect.poll(() => page.evaluate(() => {
+    const fill = window.app.frames[0].strokes.find((s) => s.type === 'rect' && s.fillColor);
+    return { exists: Boolean(fill), holes: fill ? fill.holes.length : 0 };
+  })).toEqual({ exists: true, holes: 2 });
+});
