@@ -963,8 +963,25 @@ window.gifshot = gifshot;
                         if (found.stroke.type === 'text') found.stroke.color = this.brushColor;
                         this.renderCanvas();
                     } else {
-                        this.selectedBgColor = this.brushColor;
-                        this.frames[this.frameIndex].frameBgColor = this.brushColor;
+                        const list = this.getActiveStrokeList();
+                        list.unshift({
+                            type: 'rect',
+                            brushType: 'brush',
+                            color: this.brushColor,
+                            size: 2,
+                            opacity: 1,
+                            points: [
+                                { x: 0, y: 0, p: 0.5 },
+                                { x: this.canvasWidth, y: 0, p: 0.5 },
+                                { x: this.canvasWidth, y: this.canvasHeight, p: 0.5 },
+                                { x: 0, y: this.canvasHeight, p: 0.5 },
+                                { x: 0, y: 0, p: 0.5 }
+                            ],
+                            fillColor: this.brushColor,
+                            holes: [],
+                            sx: 1, sy: 1,
+                            angle: 0
+                        });
                         this.updateThumbnails();
                         this.renderCanvas();
                     }
@@ -1509,7 +1526,16 @@ window.gifshot = gifshot;
                 const hitRadius = radius + brushRadius;
 
                 if (['rect', 'circle'].includes(stroke.type) || stroke.fillColor) {
-                    return this.strokeIntersectsEraser(stroke, from, to, hitRadius) ? [] : [stroke];
+                    const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+                    if (this.strokeIntersectsEraser(stroke, from, to, hitRadius) ||
+                        this.containsPoint(stroke.points, mid) ||
+                        this.containsPoint(stroke.points, from)) {
+                        const next = this.cloneData(stroke);
+                        if (!next.holes) next.holes = [];
+                        next.holes.push(this.buildEraserHole(from, to, radius));
+                        return [next];
+                    }
+                    return [stroke];
                 }
 
                 if (stroke.points.length === 1) {
@@ -1550,6 +1576,45 @@ window.gifshot = gifshot;
                     if (this.segmentsNear(stroke.points[i], stroke.points[i + 1], from, to, radius)) return true;
                 }
                 return false;
+            }
+
+            buildEraserHole(from, to, radius) {
+                const dx = to.x - from.x;
+                const dy = to.y - from.y;
+                const len = Math.hypot(dx, dy) || 1;
+                const ux = dx / len;
+                const uy = dy / len;
+                const px = -uy;
+                const py = ux;
+                const segs = 12;
+                const pts = [];
+
+                const arc = (center, startAngle, sweep) => {
+                    for (let i = 0; i <= segs; i++) {
+                        const a = startAngle + (sweep * i) / segs;
+                        pts.push({ x: center.x + Math.cos(a) * radius, y: center.y + Math.sin(a) * radius });
+                    }
+                };
+
+                const startAngle = Math.atan2(py, px);
+                arc(from, startAngle, Math.PI);
+                arc(to, startAngle + Math.PI, Math.PI);
+                return pts;
+            }
+
+            punchHoles(ctx, stroke) {
+                if (!stroke.holes || !stroke.holes.length) return;
+                const prevOp = ctx.globalCompositeOperation;
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.fillStyle = 'rgba(0,0,0,1)';
+                stroke.holes.forEach(hole => {
+                    ctx.beginPath();
+                    ctx.moveTo(hole[0].x, hole[0].y);
+                    for (let i = 1; i < hole.length; i++) ctx.lineTo(hole[i].x, hole[i].y);
+                    ctx.closePath();
+                    ctx.fill();
+                });
+                ctx.globalCompositeOperation = prevOp;
             }
 
             eraserIntersectsBounds(bounds, from, to, radius) {
@@ -2159,6 +2224,7 @@ window.gifshot = gifshot;
                         ctx.closePath();
                         ctx.fillStyle = this.hexToRgba(stroke.fillColor, alpha);
                         ctx.fill();
+                        this.punchHoles(ctx, stroke);
                         if (type === 'highlighter') ctx.fillStyle = this.hexToRgba(hex, alpha * 0.4);
                         else ctx.fillStyle = rgba;
                     }
@@ -2191,6 +2257,7 @@ window.gifshot = gifshot;
                     ctx.closePath();
                     ctx.fillStyle = this.hexToRgba(stroke.fillColor, alpha);
                     ctx.fill();
+                    this.punchHoles(ctx, stroke);
                     ctx.restore();
                 }
 
@@ -2902,6 +2969,11 @@ window.gifshot = gifshot;
                     if (object.type === 'text') return `<text x="${object.x}" y="${object.y}" fill="${object.color}" fill-opacity="${opacity}" font-family="sans-serif" font-size="${object.size}">${escape(object.text)}</text>`;
                     if (!points.length) return '';
                     const path = points.map((point) => `${point.x},${point.y}`).join(' ');
+                    if (object.fillColor && object.holes && object.holes.length) {
+                        const holes = object.holes.map(hole => ' ' + hole.map((point) => `${point.x},${point.y}`).join(' ')).join('');
+                        const output = `<polygon points="${path}${holes}" fill="${object.fillColor}" fill-opacity="${opacity}" fill-rule="evenodd" stroke="${object.color || '#000'}" stroke-opacity="${opacity}" stroke-width="${object.size || 1}" stroke-linejoin="round"/>`;
+                        return object.symmetric && object.type === 'brush' ? output + render(this.getMirroredStroke(object)) : output;
+                    }
                     if (object.type === 'circle' && points.length > 1) { const [a, b] = points; const radius = Math.hypot(b.x - a.x, b.y - a.y); return `<circle cx="${a.x}" cy="${a.y}" r="${radius}" ${style}/>`; }
                     if (object.type === 'rect' && points.length > 1) { const [a, b] = points; return `<rect x="${Math.min(a.x,b.x)}" y="${Math.min(a.y,b.y)}" width="${Math.abs(b.x-a.x)}" height="${Math.abs(b.y-a.y)}" ${style}/>`; }
                     const output = `<polyline points="${path}" ${style}/>`;
