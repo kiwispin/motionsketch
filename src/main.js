@@ -1525,7 +1525,7 @@ window.gifshot = gifshot;
                 const brushRadius = Math.max(1, this.getSinglePointDiameter(stroke) / 2);
                 const hitRadius = radius + brushRadius;
 
-                if (['rect', 'circle'].includes(stroke.type) || stroke.fillColor) {
+                if (stroke.fillColor) {
                     const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
                     if (this.strokeIntersectsEraser(stroke, from, to, hitRadius) ||
                         this.containsPoint(stroke.points, mid) ||
