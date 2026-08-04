@@ -389,3 +389,22 @@ test('bucket-fills the canvas with a real shape that the eraser can carve into',
     return { exists: Boolean(fill), holes: fill ? fill.holes.length : 0 };
   })).toEqual({ exists: true, holes: 2 });
 });
+
+test('eraser splits the outline of an unfilled shape it crosses', async ({ page }) => {
+  await page.evaluate((stroke) => {
+    window.app.frames[0].strokes.push(structuredClone(stroke));
+    window.app.tool = 'eraser';
+    window.app.brushSize = 30;
+    // Cross the top edge of the rect at y=100 from outside to inside
+    window.app.onDown({ x: 150, y: 85 }, 0.5, false);
+    window.app.onMove({ x: 150, y: 115 }, 0.5);
+    window.app.onUp();
+  }, rectangle);
+
+  const result = await page.evaluate(() => ({
+    count: window.app.frames[0].strokes.length,
+    points: window.app.frames[0].strokes.map((s) => (s.points || []).length)
+  }));
+  expect(result.count).toBe(1);
+  expect(result.points[0]).toBeLessThan(5);
+});
