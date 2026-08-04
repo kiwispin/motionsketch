@@ -2224,11 +2224,11 @@ window.gifshot = gifshot;
                         ctx.closePath();
                         ctx.fillStyle = this.hexToRgba(stroke.fillColor, alpha);
                         ctx.fill();
-                        this.punchHoles(ctx, stroke);
                         if (type === 'highlighter') ctx.fillStyle = this.hexToRgba(hex, alpha * 0.4);
                         else ctx.fillStyle = rgba;
                     }
                     ctx.stroke();
+                    this.punchHoles(ctx, stroke);
                     return;
                 }
 
@@ -2257,7 +2257,6 @@ window.gifshot = gifshot;
                     ctx.closePath();
                     ctx.fillStyle = this.hexToRgba(stroke.fillColor, alpha);
                     ctx.fill();
-                    this.punchHoles(ctx, stroke);
                     ctx.restore();
                 }
 
@@ -2279,6 +2278,7 @@ window.gifshot = gifshot;
                         ctx.fill();
                     }
                 }
+                this.punchHoles(ctx, stroke);
             }
 
             hexToRgba(hex, alpha) {
