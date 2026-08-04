@@ -408,3 +408,53 @@ test('eraser splits the outline of an unfilled shape it crosses', async ({ page 
   expect(result.count).toBe(1);
   expect(result.points[0]).toBeLessThan(5);
 });
+
+test('eraser cuts through the border of a filled shape it crosses', async ({ page }) => {
+  await page.evaluate(() => {
+    window.app.setTool('rect');
+    window.app.setColor('#ff0000');
+    window.app.onDown({ x: 100, y: 100 }, 0.5, false);
+    window.app.onMove({ x: 500, y: 500 }, 0.5);
+    window.app.onUp();
+    const s = window.app.frames[0].strokes[0];
+    s.fillColor = '#ff0000';
+    window.app.renderCanvas();
+  });
+
+  await page.evaluate(() => {
+    window.app.setTool('eraser');
+    window.app.brushSize = 40;
+    // Cross the LEFT border (x=100) from outside to inside at y=300
+    window.app.onDown({ x: 80, y: 300 }, 0.5, false);
+    window.app.onMove({ x: 120, y: 300 }, 0.5);
+    window.app.onUp();
+  });
+
+  const data = await page.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = window.app.canvasWidth;
+    c.height = window.app.canvasHeight;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(window.app.bgCanvas, 0, 0);
+    ctx.drawImage(window.app.canvas, 0, 0);
+    const image = ctx.getImageData(0, 0, c.width, c.height);
+    const isRed = (x, y) => {
+      const i = (y * c.width + x) * 4;
+      return image.data[i] > 200 && image.data[i + 1] < 100 && image.data[i + 2] < 100;
+    };
+    let borderRedCount = 0;
+    for (let y = 288; y <= 312; y++) {
+      if (isRed(100, y)) borderRedCount++;
+    }
+    return {
+      borderRedCount,
+      interiorIsWhite: !isRed(90, 300),
+      strokes: window.app.frames[0].strokes.map((s) => ({
+        type: s.type, fillColor: s.fillColor, holes: (s.holes || []).length
+      }))
+    };
+  });
+  expect(data.interiorIsWhite).toBe(true);
+  expect(data.borderRedCount).toBe(0);
+  expect(data.strokes[0].holes).toBeGreaterThan(0);
+});
