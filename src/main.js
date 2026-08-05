@@ -491,8 +491,8 @@ window.gifshot = gifshot;
                     this.cursorEl.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
                     this.cursorEl.style.borderColor = '#000';
                 } else {
-                    this.cursorEl.style.backgroundColor = this.hexToRgba(this.brushColor, 0.08);
-                    this.cursorEl.style.borderColor = this.hexToRgba(this.brushColor, 0.55);
+                    this.cursorEl.style.backgroundColor = this.hexToRgba(this.brushColor, this.opacity);
+                    this.cursorEl.style.borderColor = this.hexToRgba(this.brushColor, Math.min(1, this.opacity + 0.3));
                 }
             }
 

@@ -502,3 +502,36 @@ test('onion skin keeps the previous ball at full size', async ({ page }) => {
   expect(data.strokeSize).toBe(100);
   expect(data.onionDiameter).toBeGreaterThan(80);
 });
+
+test('brush cursor preview reflects the brush opacity setting', async ({ page }) => {
+  await page.evaluate(() => {
+    window.app.setColor('#ff0000');
+    window.app.updateCursorStyle();
+  });
+  await page.waitForTimeout(300); // let CSS transitions settle
+  const full = await page.evaluate(() => {
+    const cursor = document.getElementById('brush-cursor');
+    return {
+      background: getComputedStyle(cursor).backgroundColor,
+      border: getComputedStyle(cursor).borderColor,
+      opacity: window.app.opacity
+    };
+  });
+  expect(full.opacity).toBe(1);
+  expect(full.background).toBe('rgb(255, 0, 0)');
+
+  await page.evaluate(() => {
+    window.app.setOpacity(25);
+    window.app.updateCursorStyle();
+  });
+  await page.waitForTimeout(300);
+  const faded = await page.evaluate(() => {
+    const cursor = document.getElementById('brush-cursor');
+    return {
+      background: getComputedStyle(cursor).backgroundColor,
+      opacity: window.app.opacity
+    };
+  });
+  expect(faded.opacity).toBe(0.25);
+  expect(faded.background.startsWith('rgba(255, 0, 0, 0.25)')).toBe(true);
+});
