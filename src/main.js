@@ -2176,7 +2176,6 @@ window.gifshot = gifshot;
                     if (stroke.points.length === 1 && stroke.type !== 'rect' && stroke.type !== 'circle' && stroke.type !== 'line') {
                         const p = stroke.points[0];
                         let renderWidth = this.getSinglePointDiameter(stroke);
-                        if (simpleMode && (type === 'brush' || stroke.type === 'brush')) renderWidth *= 0.5;
 
                         if (type === 'highlighter') {
                             if (!simpleMode) ctx.fillStyle = this.hexToRgba(hex, alpha * 0.4);
@@ -2195,7 +2194,6 @@ window.gifshot = gifshot;
 
                     ctx.beginPath();
                     let renderWidth = stroke.size;
-                    if (simpleMode && (type === 'brush' || stroke.type === 'brush')) renderWidth *= 0.5;
 
                     if (type === 'pencil') {
                         ctx.lineWidth = 2;

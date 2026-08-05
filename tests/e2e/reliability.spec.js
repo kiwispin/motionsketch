@@ -458,3 +458,47 @@ test('eraser cuts through the border of a filled shape it crosses', async ({ pag
   expect(data.borderRedCount).toBe(0);
   expect(data.strokes[0].holes).toBeGreaterThan(0);
 });
+
+test('onion skin keeps the previous ball at full size', async ({ page }) => {
+  await page.evaluate(() => {
+    window.app.brushSize = 100;
+    window.app.setTool('brush');
+    window.app.onDown({ x: 150, y: 150 }, 0.5, false);
+    window.app.onUp();
+    window.app.duplicateFrame();
+    window.app.frameIndex = 1;
+    const ball = window.app.frames[1].strokes[0];
+    ball.points = [{ x: 350, y: 350, p: 0.5 }];
+    window.app.isOnion = true;
+    window.app.onionFrames = 1;
+    window.app.onionOpacity = 0.5;
+    window.app.renderCanvas();
+  });
+
+  const data = await page.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = window.app.canvasWidth;
+    c.height = window.app.canvasHeight;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(window.app.canvas, 0, 0);
+    const image = ctx.getImageData(0, 0, c.width, c.height);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let y = 50; y <= 250; y++) {
+      for (let x = 50; x <= 250; x++) {
+        const i = (y * c.width + x) * 4;
+        if (image.data[i + 3] > 0) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    return {
+      onionDiameter: Math.round(Math.hypot(maxX - minX, maxY - minY)),
+      strokeSize: window.app.frames[0].strokes[0].size
+    };
+  });
+  expect(data.strokeSize).toBe(100);
+  expect(data.onionDiameter).toBeGreaterThan(80);
+});
