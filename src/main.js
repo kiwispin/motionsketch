@@ -2189,6 +2189,7 @@ window.gifshot = gifshot;
                         ctx.arc(0, 0, renderWidth / 2, 0, Math.PI * 2);
                         ctx.fill();
                         ctx.restore();
+                        this.punchHoles(ctx, stroke);
                         return;
                     }
 
@@ -2241,6 +2242,7 @@ window.gifshot = gifshot;
                     ctx.arc(0, 0, w / 2, 0, Math.PI * 2);
                     ctx.fill();
                     ctx.restore();
+                    this.punchHoles(ctx, stroke);
                     return;
                 }
 

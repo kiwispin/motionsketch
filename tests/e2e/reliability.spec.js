@@ -535,3 +535,44 @@ test('brush cursor preview reflects the brush opacity setting', async ({ page })
   expect(faded.opacity).toBe(0.25);
   expect(faded.background.startsWith('rgba(255, 0, 0, 0.25)')).toBe(true);
 });
+
+test('erasing a single-point ball renders the hole so it can be drawn over', async ({ page }) => {
+  await page.evaluate(() => {
+    window.app.brushSize = 100;
+    window.app.setTool('brush');
+    window.app.setColor('#000000');
+    window.app.onDown({ x: 300, y: 300 }, 0.5, false);
+    window.app.onUp();
+    window.app.frames[0].strokes[0].fillColor = '#000000';
+    window.app.renderCanvas();
+  });
+
+  await page.evaluate(() => {
+    window.app.setTool('eraser');
+    window.app.brushSize = 40;
+    window.app.onDown({ x: 300, y: 300 }, 0.5, false);
+    window.app.onMove({ x: 380, y: 300 }, 0.5);
+    window.app.onUp();
+  });
+
+  const data = await page.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = window.app.canvasWidth;
+    c.height = window.app.canvasHeight;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(window.app.bgCanvas, 0, 0);
+    ctx.drawImage(window.app.canvas, 0, 0);
+    const image = ctx.getImageData(0, 0, c.width, c.height);
+    const p = (x, y) => {
+      const i = (y * c.width + x) * 4;
+      return [image.data[i], image.data[i + 1], image.data[i + 2], image.data[i + 3]];
+    };
+    return {
+      holes: window.app.frames[0].strokes[0].holes.length,
+      insideErase: p(320, 300),
+      ballCenter: p(300, 300)
+    };
+  });
+  expect(data.holes).toBeGreaterThan(0);
+  expect(data.insideErase).toEqual([255, 255, 255, 255]);
+});
