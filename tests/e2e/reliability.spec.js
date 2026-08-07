@@ -576,3 +576,9 @@ test('erasing a single-point ball renders the hole so it can be drawn over', asy
   expect(data.holes).toBeGreaterThan(0);
   expect(data.insideErase).toEqual([255, 255, 255, 255]);
 });
+
+test('layer buttons carry shared/foreground hints', async ({ page }) => {
+  await expect(page.locator('#layer-ink')).toHaveAttribute('title', /drawn fresh on each frame/);
+  await expect(page.locator('#layer-paper')).toHaveAttribute('title', /shared across all frames/);
+  await expect(page.locator('#layer-hint')).toHaveText(/Foreground is per-frame; Background is shared across all frames/);
+});

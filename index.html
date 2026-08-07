@@ -335,6 +335,7 @@
 
         .prop-group { display: flex; flex-direction: column; gap: 10px; }
         .prop-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 700; }
+        .prop-hint { font-size: 0.7rem; color: var(--text-muted); line-height: 1.35; }
 
         .layer-switch { display: flex; background: var(--input-bg); border-radius: 8px; padding: 2px; }
         .layer-option { flex: 1; border: 0; background: transparent; font: inherit; text-align: center; padding: 6px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; color: var(--text-muted); font-weight: 500; transition: all 0.2s; }
@@ -645,6 +646,7 @@
             .props-panel::-webkit-scrollbar { display: none; }
             .props-panel .prop-group { flex: 0 0 auto; gap: 6px; }
             .props-panel .prop-label { display: none; }
+            .props-panel .prop-hint { display: none; }
             .props-panel .brush-preview,
             .props-panel .color-grid,
             .props-panel #bg-color-picker,
@@ -854,9 +856,10 @@
         <div class="prop-group">
             <div class="prop-label">Layer</div>
             <div class="layer-switch">
-                <button type="button" class="layer-option active" id="layer-ink" onclick="app.setLayer('ink')" aria-pressed="true">Foreground</button>
-                <button type="button" class="layer-option" id="layer-paper" onclick="app.setLayer('shared')" aria-pressed="false">Background</button>
+                <button type="button" class="layer-option active" id="layer-ink" onclick="app.setLayer('ink')" aria-pressed="true" title="Foreground: drawn fresh on each frame (animate here)">Foreground</button>
+                <button type="button" class="layer-option" id="layer-paper" onclick="app.setLayer('shared')" aria-pressed="false" title="Background: shared across all frames (static art appears in every frame)">Background</button>
             </div>
+            <div class="prop-hint" id="layer-hint">Foreground is per-frame; Background is shared across all frames.</div>
         </div>
 
         <div class="prop-group">
