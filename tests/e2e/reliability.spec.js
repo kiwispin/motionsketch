@@ -582,3 +582,31 @@ test('layer buttons carry shared/foreground hints', async ({ page }) => {
   await expect(page.locator('#layer-paper')).toHaveAttribute('title', /shared across all frames/);
   await expect(page.locator('#layer-hint')).toHaveText(/Foreground is per-frame; Background is shared across all frames/);
 });
+
+test('project name is editable, persisted, and used for the save filename', async ({ page }) => {
+  const nameInput = page.locator('#project-name');
+  await expect(nameInput).toHaveValue('Untitled');
+
+  await nameInput.fill('My Beach Scene');
+  await nameInput.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.app.projectName)).toBe('My Beach Scene');
+
+  await page.waitForTimeout(1500);
+  const stored = await page.evaluate(async () => window.app.db.get('currentProject'));
+  expect(stored).toContain('My Beach Scene');
+
+  await page.reload();
+  await page.waitForFunction(() => window.app && window.app.frames);
+  await expect.poll(() => page.evaluate(() => window.app.projectName)).toBe('My Beach Scene');
+  await expect(nameInput).toHaveValue('My Beach Scene');
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.evaluate(() => window.app.saveProject())
+  ]);
+  expect(download.suggestedFilename()).toBe('My Beach Scene.json');
+
+  await page.evaluate(() => window.app.confirmNewAnimation());
+  await expect.poll(() => page.evaluate(() => window.app.projectName)).toBe('Untitled');
+  await expect(nameInput).toHaveValue('Untitled');
+});

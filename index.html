@@ -153,6 +153,23 @@
 
         .logo i { color: var(--accent-blue); font-size: 1.2rem; }
 
+        .project-name {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-main);
+            font: inherit;
+            font-size: 1rem;
+            font-weight: 600;
+            padding: 6px 10px;
+            border-radius: 8px;
+            max-width: 200px;
+            min-width: 90px;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .project-name:hover { border-color: var(--border-panel); }
+        .project-name:focus { border-color: var(--accent-blue); background: var(--input-bg); }
+
         .top-actions {
             display: flex;
             gap: 8px;
@@ -667,6 +684,7 @@
             .app-header { padding: 0 10px; top: 10px; height: 50px; gap: 6px; }
             .logo span { display: none; }
             .logo { width: 30px; min-width: 30px; gap: 0; overflow: hidden; }
+            .project-name { max-width: 110px; min-width: 60px; font-size: 0.85rem; padding: 4px 6px; }
             .top-actions { justify-content: flex-start; }
             .top-actions .btn-ghost { font-size: 0; padding: 8px 10px; }
             .top-actions .btn-primary { font-size: 0.75rem; padding: 8px 10px; }
@@ -766,6 +784,7 @@
         <div class="logo">
             <i class="fas fa-pen-nib"></i> SketchMotion
         </div>
+        <input class="project-name" id="project-name" type="text" value="Untitled" aria-label="Project name" title="Project name" onchange="app.setProjectName(this.value)" onkeydown="event.stopPropagation()">
         <div class="top-actions">
             <button class="btn-ghost" onclick="app.requestNewAnimation()"><i class="fas fa-plus"></i> New</button>
             <button class="btn-ghost" onclick="app.saveProject()"><i class="fas fa-download"></i> Save</button>

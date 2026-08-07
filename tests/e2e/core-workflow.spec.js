@@ -118,7 +118,7 @@ test('downloads a PNG frame and an editable project file', async ({ page }, test
     page.waitForEvent('download'),
     page.getByRole('button', { name: /Save$/ }).click()
   ]);
-  expect(project.suggestedFilename()).toBe('motionsketch.json');
+  expect(project.suggestedFilename()).toBe('Untitled.json');
 });
 
 test('navigates timeline frames forwards and backwards without crossing boundaries', async ({ page }) => {

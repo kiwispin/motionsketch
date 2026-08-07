@@ -98,6 +98,7 @@ window.gifshot = gifshot;
 
                 this.canvasWidth = 600;
                 this.canvasHeight = 600;
+                this.projectName = 'Untitled';
                 this.zoom = 1.0;
                 this.isHandTool = false;
                 this.spacePanActive = false;
@@ -2885,6 +2886,7 @@ window.gifshot = gifshot;
                 this.saveTimer = setTimeout(() => {
                     const data = {
                         version: 5,
+                        name: this.projectName,
                         frames: this.frames,
                         sharedStrokes: this.sharedStrokes,
                         fps: this.fps,
@@ -2923,6 +2925,11 @@ window.gifshot = gifshot;
                 }, 1000);
             }
 
+            syncProjectNameUI() {
+                const input = document.getElementById('project-name');
+                if (input) input.value = this.projectName || 'Untitled';
+            }
+
             async loadStorage() {
                 try {
                     const jsonStr = await this.db.get('currentProject');
@@ -2934,9 +2941,11 @@ window.gifshot = gifshot;
                             this.fps = this.normalizeFps(data.fps);
                             this.syncFpsUI();
                             this.frameIndex = 0;
+                            this.projectName = typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled';
                             if (data.width && data.height) this.resizeCanvas(data.width, data.height);
                             if (data.palette) { this.palette = data.palette; this.renderPalette(); }
                             this.renderUI();
+                            this.syncProjectNameUI();
                             this.renderCanvas();
                         }
                     }
@@ -3141,6 +3150,7 @@ window.gifshot = gifshot;
             saveProject() {
                 const data = {
                     version: 5,
+                    name: this.projectName,
                     frames: this.frames.map(f => ({
                         strokes: f.strokes,
                         paperStrokes: this.getPaperStrokes(f),
@@ -3156,8 +3166,21 @@ window.gifshot = gifshot;
                 const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url; a.download = 'motionsketch.json';
+                const safeName = this.sanitizeProjectName(this.projectName) || 'motionsketch';
+                a.href = url; a.download = `${safeName}.json`;
                 a.click();
+            }
+
+            sanitizeProjectName(name) {
+                return String(name || '').trim().replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').slice(0, 80);
+            }
+
+            setProjectName(name) {
+                const clean = String(name || '').trim().slice(0, 80);
+                this.projectName = clean || 'Untitled';
+                const input = document.getElementById('project-name');
+                if (input) input.value = this.projectName;
+                this.saveStorage();
             }
 
             openProject() { document.getElementById('file-input').click(); }
@@ -3193,9 +3216,11 @@ window.gifshot = gifshot;
                 this.fps = this.normalizeFps(data.fps);
                 this.syncFpsUI();
                 this.frameIndex = 0;
+                this.projectName = typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled';
                 if (data.width && data.height) this.resizeCanvas(data.width, data.height);
                 if (Array.isArray(data.palette)) { this.palette = data.palette; this.renderPalette(); }
                 this.renderUI();
+                this.syncProjectNameUI();
                 this.renderCanvas();
                 this.saveStorage();
                 this.showExportNotice(version < 5 ? 'Project upgraded and opened' : 'Project opened');
@@ -3250,6 +3275,7 @@ window.gifshot = gifshot;
                 this.paperStrokes = [];
                 this.sharedStrokes = [];
                 this.frameIndex = 0;
+                this.projectName = 'Untitled';
                 this.resizeCanvas(width, height);
                 this.selectedBgColor = '#ffffff';
                 this.selectedObject = null;
@@ -3257,6 +3283,7 @@ window.gifshot = gifshot;
                 this.history = [];
                 this.redoStack = [];
                 this.renderUI();
+                this.syncProjectNameUI();
                 this.renderCanvas();
                 this.saveStorage();
             }
