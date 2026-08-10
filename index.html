@@ -293,6 +293,21 @@
         .tool-btn:hover { background: var(--btn-hover); color: var(--text-main); }
         .tool-btn.active { background: var(--accent-blue); color: white; box-shadow: 0 4px 12px rgba(10, 132, 255, 0.4); }
 
+        .onion-icon {
+            width: 1.5rem;
+            height: 1.5rem;
+            display: block;
+            overflow: visible;
+            fill: currentColor;
+        }
+
+        .onion-icon .onion-cut {
+            fill: none;
+            stroke: var(--bg-app);
+            stroke-width: 1.8;
+            stroke-linecap: round;
+        }
+
         .divider { width: 30px; height: 1px; background: var(--border-panel); margin: 5px 0; }
 
         .tool-flyout-wrapper { position: relative; display: flex; justify-content: center; width: 100%; }
@@ -885,7 +900,10 @@
         <div class="divider"></div>
 
         <button type="button" class="tool-btn" id="onion-btn" onclick="app.toggleOnion()" aria-label="Toggle onion skin" aria-pressed="false" title="Onion Skin">
-            <i class="fas fa-layer-group"></i>
+            <svg class="onion-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 2c.8 1.4 2.4 2.2 4.4 3.7 2.4 1.8 3.7 4.1 3.5 6.7-.2 3.5-2.1 6.3-4.9 7.8L13.5 22 12 20.7 10.5 22 9 20.2c-2.8-1.5-4.7-4.3-4.9-7.8-.2-2.6 1.1-4.9 3.5-6.7C9.6 4.2 11.2 3.4 12 2Z"></path>
+                <path class="onion-cut" d="M9.1 9.4c-1.4 1.1-1.4 3.1 0 4.2M14.9 9.4c1.4 1.1 1.4 3.1 0 4.2"></path>
+            </svg>
         </button>
 
         <div style="flex:1"></div>

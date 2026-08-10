@@ -292,6 +292,7 @@ test('pans an enlarged canvas with the Hand tool and Space-drag without drawing'
 
 test('configures onion skin depth and opacity without altering undoable artwork', async ({ page }) => {
   const onion = page.getByRole('button', { name: 'Toggle onion skin' });
+  await expect(onion.locator('.onion-icon')).toHaveCount(1);
   const count = page.locator('#onion-count');
   const opacity = page.locator('#onion-opacity');
   await expect(count).toBeDisabled();
