@@ -535,6 +535,10 @@
         .modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
         .modal-desc { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.4; }
         .modal-btns { display: flex; gap: 10px; justify-content: center; }
+        .gif-warning-modal .modal-box { width: min(440px, calc(100vw - 32px)); }
+        .gif-warning-actions { flex-wrap: wrap; }
+        .gif-warning-actions .btn-primary { flex: 1 1 100%; }
+        .gif-warning-actions .btn-ghost { flex: 1 1 auto; }
         .modal-input-group { margin-bottom: 20px; display: flex; gap: 10px; justify-content: center; }
         .modal-input { background: var(--input-bg); border: 1px solid var(--border-panel); color: var(--text-main); padding: 8px; border-radius: 6px; width: 80px; text-align: center; }
         .modal-label { font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px; }
@@ -741,6 +745,22 @@
                 <button type="button" class="new-animation-option" onclick="app.confirmNewAnimation(1280, 720)"><span><strong>Wide animation</strong>For video and presentations</span><span>1280 × 720</span></button>
             </div>
             <div class="modal-btns"><button class="btn-ghost" onclick="app.closeModal('custom-modal')">Cancel</button></div>
+        </div>
+    </div>
+
+    <div id="gif-warning-modal" class="modal-overlay gif-warning-modal" role="dialog" aria-modal="true" aria-labelledby="gif-warning-title" aria-describedby="gif-warning-description" aria-hidden="true" tabindex="-1">
+        <div class="modal-box" role="document">
+            <div class="modal-title" id="gif-warning-title">Long GIF export</div>
+            <div class="modal-desc" id="gif-warning-description">
+                This animation has <strong id="gif-warning-frame-count">151</strong> frames.<br>
+                Long GIFs can be very large and may not preview correctly in Google Classroom. Video is recommended for smoother, more reliable playback.
+            </div>
+            <div class="modal-desc" id="gif-warning-video-unavailable" hidden></div>
+            <div class="modal-btns gif-warning-actions">
+                <button class="btn-primary" id="gif-warning-video" type="button" onclick="app.confirmGifWarning('webm')">Export Video (recommended)</button>
+                <button class="btn-ghost" id="gif-warning-gif" type="button" onclick="app.confirmGifWarning('gif')">Export GIF Anyway</button>
+                <button class="btn-ghost" id="gif-warning-cancel" type="button" onclick="app.closeModal('gif-warning-modal')">Cancel</button>
+            </div>
         </div>
     </div>
 

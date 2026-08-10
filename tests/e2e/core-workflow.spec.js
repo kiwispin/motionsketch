@@ -121,6 +121,203 @@ test('downloads a PNG frame and an editable project file', async ({ page }, test
   expect(project.suggestedFilename()).toBe('Untitled.json');
 });
 
+test('prefers VP8, then VP9, then browser-default WebM', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'webkit', 'WebKit does not expose canvas captureStream in this test environment');
+
+  const supportedMimeType = async (supported) => page.evaluate((supportedTypes) => {
+    const originalRecorder = window.MediaRecorder;
+    const FakeMediaRecorder = function FakeMediaRecorder() {};
+    FakeMediaRecorder.isTypeSupported = (type) => supportedTypes.includes(type);
+    window.MediaRecorder = FakeMediaRecorder;
+    const result = window.app.getVideoSupport();
+    window.MediaRecorder = originalRecorder;
+    return result.mimeType;
+  }, supported);
+
+  expect(await supportedMimeType(['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm']))
+    .toBe('video/webm;codecs=vp8');
+  expect(await supportedMimeType(['video/webm;codecs=vp9', 'video/webm']))
+    .toBe('video/webm;codecs=vp9');
+  expect(await supportedMimeType(['video/webm']))
+    .toBe('video/webm');
+});
+
+test('exports GIFs up to 150 frames without a warning', async ({ page }) => {
+  await page.evaluate(() => {
+    window.app.frames = Array.from({ length: 150 }, () => ({ strokes: [], paperStrokes: [], hold: 1 }));
+    window.app.exportGIF = () => { window.__exportChoice = 'gif'; };
+    window.app.runExport('gif');
+  });
+
+  await expect(page.locator('#gif-warning-modal')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__exportChoice)).toBe('gif');
+});
+
+test('warns for long GIFs, preserves the project, and routes each choice', async ({ page }) => {
+  await page.evaluate(() => {
+    window.app.frames = Array.from({ length: 151 }, (_, index) => ({
+      strokes: [{ type: 'text', text: `Frame ${index}`, x: 10, y: 20, size: 20, color: '#000000' }],
+      paperStrokes: [],
+      hold: (index % 3) + 1
+    }));
+    window.app.frameIndex = 37;
+    window.app.fps = 17;
+    window.app.loopMode = 'once';
+    window.app.isOnion = true;
+    window.app.projectName = 'Long animation';
+    window.app.history = ['history-entry'];
+    window.app.redoStack = ['redo-entry'];
+    window.app.getVideoSupport = () => ({ available: true, codecMimeType: 'video/webm;codecs=vp8', fallbackMimeType: 'video/webm', mimeType: 'video/webm;codecs=vp8' });
+    window.app.exportWebM = () => { window.__exportChoice = 'webm'; };
+    window.app.exportGIF = () => { window.__exportChoice = 'gif'; };
+    window.app.runExport('gif');
+  });
+
+  await expect(page.locator('#gif-warning-modal')).toBeVisible();
+  await expect(page.locator('#gif-warning-description')).toContainText('This animation has 151 frames');
+  await expect(page.locator('#gif-warning-description')).toContainText('Google Classroom');
+
+  const before = await page.evaluate(() => ({
+    frames: structuredClone(window.app.frames),
+    frameIndex: window.app.frameIndex,
+    fps: window.app.fps,
+    loopMode: window.app.loopMode,
+    isOnion: window.app.isOnion,
+    projectName: window.app.projectName,
+    history: [...window.app.history],
+    redoStack: [...window.app.redoStack]
+  }));
+
+  await page.locator('#gif-warning-video').click();
+  await expect.poll(() => page.evaluate(() => window.__exportChoice)).toBe('webm');
+  await expect(page.locator('#gif-warning-modal')).toBeHidden();
+  expect(await page.evaluate(() => ({
+    frames: structuredClone(window.app.frames),
+    frameIndex: window.app.frameIndex,
+    fps: window.app.fps,
+    loopMode: window.app.loopMode,
+    isOnion: window.app.isOnion,
+    projectName: window.app.projectName,
+    history: [...window.app.history],
+    redoStack: [...window.app.redoStack]
+  }))).toEqual(before);
+
+  await page.evaluate(() => window.app.runExport('gif'));
+  await expect(page.locator('#gif-warning-modal')).toBeVisible();
+  await page.locator('#gif-warning-gif').click();
+  await expect.poll(() => page.evaluate(() => window.__exportChoice)).toBe('gif');
+  await expect(page.locator('#gif-warning-modal')).toBeHidden();
+
+  await page.evaluate(() => window.app.runExport('gif'));
+  await expect(page.locator('#gif-warning-modal')).toBeVisible();
+  await page.locator('#gif-warning-cancel').click();
+  await expect(page.locator('#gif-warning-modal')).toBeHidden();
+});
+
+test('keeps GIF export available when VP8 and VP9 are unsupported', async ({ page }) => {
+  await page.evaluate(() => {
+    window.app.frames = Array.from({ length: 151 }, () => ({ strokes: [], paperStrokes: [], hold: 1 }));
+    window.app.getVideoSupport = () => ({ available: true, codecMimeType: null, fallbackMimeType: 'video/webm', mimeType: 'video/webm' });
+    window.app.exportGIF = () => { window.__exportChoice = 'gif'; };
+    window.app.runExport('gif');
+  });
+
+  await expect(page.locator('#gif-warning-modal')).toBeVisible();
+  await expect(page.locator('#gif-warning-video')).toBeHidden();
+  await expect(page.locator('#gif-warning-video-unavailable')).toContainText('Video export is unsupported in this browser');
+  await page.locator('#gif-warning-gif').click();
+  await expect.poll(() => page.evaluate(() => window.__exportChoice)).toBe('gif');
+});
+
+test('paces WebM frames and flushes recorder data before stopping', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'Recorder timing is covered with a deterministic Chromium fake');
+
+  const result = await page.evaluate(async () => {
+    const originalRecorder = window.MediaRecorder;
+    const originalCaptureStream = HTMLCanvasElement.prototype.captureStream;
+    const calls = [];
+    const frameTimes = [];
+    const track = {
+      requestFrame: () => frameTimes.push(performance.now()),
+      stop: () => calls.push('track.stop')
+    };
+    const stream = {
+      getVideoTracks: () => [track],
+      getTracks: () => [track]
+    };
+    HTMLCanvasElement.prototype.captureStream = () => stream;
+
+    class FakeMediaRecorder {
+      static isTypeSupported(type) {
+        return type === 'video/webm;codecs=vp8';
+      }
+
+      constructor() {
+        this.mimeType = 'video/webm;codecs=vp8';
+        this.state = 'inactive';
+        this.listeners = new Map();
+      }
+
+      addEventListener(type, listener, options = {}) {
+        const listeners = this.listeners.get(type) || [];
+        listeners.push({ listener, once: options.once === true });
+        this.listeners.set(type, listeners);
+      }
+
+      dispatch(type, event = {}) {
+        const listeners = this.listeners.get(type) || [];
+        this.listeners.set(type, listeners.filter(({ once }) => !once));
+        listeners.forEach(({ listener }) => listener(event));
+      }
+
+      start() {
+        calls.push('start');
+        this.state = 'recording';
+      }
+
+      requestData() {
+        calls.push('requestData');
+        this.dispatch('dataavailable', { data: new Blob(['flush']) });
+      }
+
+      stop() {
+        calls.push('stop');
+        this.state = 'inactive';
+        this.dispatch('dataavailable', { data: new Blob(['final']) });
+        this.dispatch('stop');
+      }
+    }
+
+    window.MediaRecorder = FakeMediaRecorder;
+    window.app.frames = [
+      { strokes: [], paperStrokes: [], hold: 1 },
+      { strokes: [], paperStrokes: [], hold: 1 }
+    ];
+    window.app.fps = 30;
+    window.app.setExportProgress = () => {};
+    window.app.showExportNotice = () => {};
+    const started = performance.now();
+    try {
+      await window.app.exportWebM();
+      return {
+        elapsed: performance.now() - started,
+        frameCount: frameTimes.length,
+        minimumFrameInterval: frameTimes.length > 1 ? frameTimes[1] - frameTimes[0] : 0,
+        calls
+      };
+    } finally {
+      window.MediaRecorder = originalRecorder;
+      HTMLCanvasElement.prototype.captureStream = originalCaptureStream;
+    }
+  });
+
+  expect(result.frameCount).toBe(2);
+  expect(result.minimumFrameInterval).toBeGreaterThanOrEqual(25);
+  expect(result.calls.indexOf('requestData')).toBeGreaterThan(-1);
+  expect(result.calls.indexOf('requestData')).toBeLessThan(result.calls.indexOf('stop'));
+  expect(result.calls.at(-1)).toBe('track.stop');
+});
+
 test('navigates timeline frames forwards and backwards without crossing boundaries', async ({ page }) => {
   await page.evaluate(() => {
     window.app.addFrame();

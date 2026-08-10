@@ -4,6 +4,8 @@ import JSZip from 'jszip';
 
 window.gifshot = gifshot;
 
+const LONG_GIF_FRAME_THRESHOLD = 150;
+
         class IDBHelper {
             constructor(dbName, storeName) {
                 this.dbName = dbName;
@@ -782,8 +784,7 @@ window.gifshot = gifshot;
             }
 
             getPaperStrokes(frame = this.frames[this.frameIndex]) {
-                if (!frame.paperStrokes) frame.paperStrokes = [];
-                return frame.paperStrokes;
+                return Array.isArray(frame?.paperStrokes) ? frame.paperStrokes : [];
             }
 
             getActiveStrokeList() {
@@ -3032,8 +3033,56 @@ window.gifshot = gifshot;
                 }
             }
 
+            getVideoSupport() {
+                const hasRecorder = typeof window.MediaRecorder === 'function';
+                const hasCaptureStream = typeof HTMLCanvasElement.prototype.captureStream === 'function';
+                if (!hasRecorder || !hasCaptureStream) {
+                    return { available: false, codecMimeType: null, fallbackMimeType: null, mimeType: null };
+                }
+
+                const isSupported = (mimeType) => {
+                    try {
+                        return typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported(mimeType);
+                    } catch {
+                        return false;
+                    }
+                };
+                const vp8 = 'video/webm;codecs=vp8';
+                const vp9 = 'video/webm;codecs=vp9';
+                const fallback = 'video/webm';
+                const codecMimeType = [vp8, vp9].find(isSupported) || null;
+                const fallbackMimeType = isSupported(fallback) ? fallback : null;
+                return {
+                    available: true,
+                    codecMimeType,
+                    fallbackMimeType,
+                    mimeType: codecMimeType || fallbackMimeType
+                };
+            }
+
+            async flushMediaRecorder(recorder) {
+                if (typeof recorder.requestData !== 'function') return;
+                await new Promise((resolve) => {
+                    let settled = false;
+                    const finish = () => {
+                        if (settled) return;
+                        settled = true;
+                        resolve();
+                    };
+                    recorder.addEventListener('dataavailable', finish, { once: true });
+                    try {
+                        recorder.requestData();
+                    } catch {
+                        finish();
+                        return;
+                    }
+                    setTimeout(finish, 0);
+                });
+            }
+
             async exportWebM() {
-                if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
+                const videoSupport = this.getVideoSupport();
+                if (!videoSupport.available) {
                     this.showExportNotice('Video export is unavailable in this browser', true);
                     return;
                 }
@@ -3043,9 +3092,7 @@ window.gifshot = gifshot;
                 tempC.height = this.canvasHeight;
                 const tCtx = tempC.getContext('2d');
                 const stream = tempC.captureStream(this.fps);
-                const preferredType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
-                    .find((type) => MediaRecorder.isTypeSupported(type));
-                const recorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined);
+                const recorder = new MediaRecorder(stream, videoSupport.mimeType ? { mimeType: videoSupport.mimeType } : undefined);
                 const chunks = [];
                 const total = this.frames.length;
                 const frameDuration = 1000 / this.fps;
@@ -3072,6 +3119,7 @@ window.gifshot = gifshot;
                         }
                     }
                     this.setExportProgress('Finishing video…');
+                    await this.flushMediaRecorder(recorder);
                     recorder.stop();
                     await completed;
                     stream.getTracks().forEach((track) => track.stop());
@@ -3145,6 +3193,31 @@ window.gifshot = gifshot;
                         }
                     });
                 }, 30);
+            }
+
+            showGifWarning() {
+                const modal = document.getElementById('gif-warning-modal');
+                const count = document.getElementById('gif-warning-frame-count');
+                const videoButton = document.getElementById('gif-warning-video');
+                const unavailable = document.getElementById('gif-warning-video-unavailable');
+                if (!modal || !count || !videoButton || !unavailable) return;
+
+                const videoSupport = this.getVideoSupport();
+                const hasRecommendedVideo = Boolean(videoSupport.codecMimeType);
+                count.textContent = this.frames.length;
+                videoButton.hidden = !hasRecommendedVideo;
+                videoButton.disabled = !hasRecommendedVideo;
+                unavailable.hidden = hasRecommendedVideo;
+                if (!hasRecommendedVideo) {
+                    unavailable.textContent = 'Video export is unsupported in this browser. You can still export the GIF.';
+                }
+                this.openModal('gif-warning-modal', hasRecommendedVideo ? 'gif-warning-video' : 'gif-warning-gif');
+            }
+
+            confirmGifWarning(format) {
+                this.closeModal('gif-warning-modal');
+                if (format === 'webm') this.exportWebM();
+                else if (format === 'gif') this.exportGIF();
             }
 
             saveProject() {
@@ -3251,6 +3324,10 @@ window.gifshot = gifshot;
 
             runExport(format) {
                 this.setExportMenuOpen(false);
+                if (format === 'gif' && this.frames.length > LONG_GIF_FRAME_THRESHOLD) {
+                    this.showGifWarning();
+                    return;
+                }
                 ({
                     gif: () => this.exportGIF(),
                     webm: () => this.exportWebM(),
