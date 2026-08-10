@@ -195,15 +195,6 @@
         .btn-ghost:hover { background: var(--btn-hover); }
         .btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
         .btn-ghost i { font-size: 1rem; opacity: 0.8; }
-        .onion-icon {
-            width: 1.18rem;
-            height: 1.18rem;
-            fill: none !important;
-            stroke: currentColor;
-            stroke-width: 1.7;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
         .btn-ghost.active { background: rgba(10, 132, 255, 0.2); color: var(--accent-blue); }
         .btn-ghost.active i, .btn-ghost.active svg { opacity: 1; fill: var(--accent-blue); color: var(--accent-blue); }
 
@@ -894,13 +885,7 @@
         <div class="divider"></div>
 
         <button type="button" class="tool-btn" id="onion-btn" onclick="app.toggleOnion()" aria-label="Toggle onion skin" aria-pressed="false" title="Onion Skin">
-            <svg class="onion-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M12 4c-4.5 0-7 4-7 8.5C5 17.2 8.1 21 12 21s7-3.8 7-8.5C19 8 16.5 4 12 4Z"></path>
-                <path d="M12 4c-.1-1.2-.5-2.2-1.4-3"></path>
-                <path d="M12 4c.1-1.2.5-2.2 1.4-3"></path>
-                <path d="M6 12c1.7 1.1 3.7 1.6 6 1.6s4.3-.5 6-1.6"></path>
-                <path d="M6.4 16.2c1.6.8 3.5 1.2 5.6 1.2s4-.4 5.6-1.2"></path>
-            </svg>
+            <i class="fas fa-layer-group"></i>
         </button>
 
         <div style="flex:1"></div>
