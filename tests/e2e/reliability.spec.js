@@ -607,6 +607,18 @@ test('project name is editable, persisted, and used for the save filename', asyn
   ]);
   expect(download.suggestedFilename()).toBe('My Beach Scene.json');
 
+  const frameDownload = await Promise.all([
+    page.waitForEvent('download'),
+    page.evaluate(() => window.app.exportFrame())
+  ]).then(([event]) => event);
+  expect(frameDownload.suggestedFilename()).toBe('My Beach Scene-frame-001.png');
+
+  const svgDownload = await Promise.all([
+    page.waitForEvent('download'),
+    page.evaluate(() => window.app.exportSVG())
+  ]).then(([event]) => event);
+  expect(svgDownload.suggestedFilename()).toBe('My Beach Scene-frame-001.svg');
+
   await page.evaluate(() => window.app.confirmNewAnimation());
   await expect.poll(() => page.evaluate(() => window.app.projectName)).toBe('Untitled');
   await expect(nameInput).toHaveValue('Untitled');

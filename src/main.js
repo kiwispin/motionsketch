@@ -2964,7 +2964,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const a = document.createElement('a');
                 const frameNumber = String(this.frameIndex + 1).padStart(3, '0');
                 a.href = tempC.toDataURL('image/png');
-                a.download = `sketchmotion-frame-${frameNumber}${transparent ? '-transparent' : ''}.png`;
+                a.download = `${this.getExportBaseName()}-frame-${frameNumber}${transparent ? '-transparent' : ''}.png`;
                 a.click();
                 this.showExportNotice(`${transparent ? 'Transparent ' : ''}frame ${frameNumber} exported`);
             }
@@ -2994,7 +2994,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const content = [...this.sharedStrokes, ...this.getPaperStrokes(frame), ...frame.strokes].map(render).join('');
                 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${this.canvasWidth}" height="${this.canvasHeight}" viewBox="0 0 ${this.canvasWidth} ${this.canvasHeight}"><rect width="100%" height="100%" fill="${background}"/>${content}</svg>`;
                 const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
-                const link = document.createElement('a'); link.href = url; link.download = `sketchmotion-frame-${String(this.frameIndex + 1).padStart(3, '0')}.svg`; link.click(); URL.revokeObjectURL(url);
+                const link = document.createElement('a'); link.href = url; link.download = `${this.getExportBaseName()}-frame-${String(this.frameIndex + 1).padStart(3, '0')}.svg`; link.click(); URL.revokeObjectURL(url);
                 this.showExportNotice('SVG exported');
             }
 
@@ -3007,12 +3007,13 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const zip = new JSZip();
 
                 try {
+                    const exportBaseName = this.getExportBaseName();
                     this.setExportProgress(`Preparing frame 1 of ${total}…`);
                     for (let index = 0; index < total; index++) {
                         this.renderFrameToContext(tCtx, this.frames[index]);
                         const image = await new Promise((resolve) => tempC.toBlob(resolve, 'image/png'));
                         if (!image) throw new Error('PNG encoding failed');
-                        zip.file(`sketchmotion-frame-${String(index + 1).padStart(3, '0')}.png`, image);
+                        zip.file(`${exportBaseName}-frame-${String(index + 1).padStart(3, '0')}.png`, image);
                         this.setExportProgress(`Preparing frame ${index + 1} of ${total}…`);
                     }
 
@@ -3021,7 +3022,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     const url = URL.createObjectURL(archive);
                     const link = document.createElement('a');
                     link.href = url;
-                    link.download = 'sketchmotion-png-sequence.zip';
+                    link.download = `${exportBaseName}-png-sequence.zip`;
                     link.click();
                     setTimeout(() => URL.revokeObjectURL(url), 0);
                     this.setExportProgress('', false);
@@ -3127,7 +3128,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     const url = URL.createObjectURL(new Blob(chunks, { type: recorder.mimeType || 'video/webm' }));
                     const link = document.createElement('a');
                     link.href = url;
-                    link.download = 'sketchmotion-animation.webm';
+                    link.download = `${this.getExportBaseName()}.webm`;
                     link.click();
                     setTimeout(() => URL.revokeObjectURL(url), 0);
                     this.setExportProgress('', false);
@@ -3185,7 +3186,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         if (!obj.error) {
                             const a = document.createElement('a');
                             a.href = obj.image;
-                            a.download = 'sketchmotion.gif';
+                            a.download = `${this.getExportBaseName()}.gif`;
                             a.click();
                             this.showExportNotice('Animated GIF exported');
                         } else {
@@ -3239,9 +3240,13 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                const safeName = this.sanitizeProjectName(this.projectName) || 'motionsketch';
+                const safeName = this.getExportBaseName();
                 a.href = url; a.download = `${safeName}.json`;
                 a.click();
+            }
+
+            getExportBaseName() {
+                return this.sanitizeProjectName(this.projectName) || 'motionsketch';
             }
 
             sanitizeProjectName(name) {

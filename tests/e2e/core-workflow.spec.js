@@ -86,32 +86,32 @@ test('downloads a PNG frame and an editable project file', async ({ page }, test
     page.waitForEvent('download'),
     chooseExport('Current frame PNG')
   ]);
-  expect(png.suggestedFilename()).toBe('sketchmotion-frame-001.png');
+  expect(png.suggestedFilename()).toBe('Untitled-frame-001.png');
 
   const [transparentPng] = await Promise.all([
     page.waitForEvent('download'),
     chooseExport('Transparent PNG')
   ]);
-  expect(transparentPng.suggestedFilename()).toBe('sketchmotion-frame-001-transparent.png');
+  expect(transparentPng.suggestedFilename()).toBe('Untitled-frame-001-transparent.png');
 
   const [svg] = await Promise.all([
     page.waitForEvent('download'),
     chooseExport('SVG artwork')
   ]);
-  expect(svg.suggestedFilename()).toBe('sketchmotion-frame-001.svg');
+  expect(svg.suggestedFilename()).toBe('Untitled-frame-001.svg');
 
   const [pngSequence] = await Promise.all([
     page.waitForEvent('download'),
     chooseExport('PNG frames ZIP')
   ]);
-  expect(pngSequence.suggestedFilename()).toBe('sketchmotion-png-sequence.zip');
+  expect(pngSequence.suggestedFilename()).toBe('Untitled-png-sequence.zip');
 
   if (testInfo.project.name !== 'webkit') {
     const [webm] = await Promise.all([
       page.waitForEvent('download'),
       chooseExport('Video (WebM)')
     ]);
-    expect(webm.suggestedFilename()).toBe('sketchmotion-animation.webm');
+    expect(webm.suggestedFilename()).toBe('Untitled.webm');
   }
 
   const [project] = await Promise.all([
@@ -390,7 +390,7 @@ test('exports an animated GIF without external runtime requests', async ({ page 
     page.waitForEvent('download'),
     page.getByRole('button', { name: /Export/ }).click().then(() => page.getByRole('menuitem', { name: 'GIF animation' }).click())
   ]);
-  expect(gif.suggestedFilename()).toBe('sketchmotion.gif');
+  expect(gif.suggestedFilename()).toBe('Untitled.gif');
   expect(externalRequests).toEqual([]);
 });
 
