@@ -85,6 +85,10 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.symmetryEnabled = false;
                 this.referenceImage = null;
                 this.draggedFrameIndex = null;
+                this.selectedFrameIndices = [];
+                this.frameSelectionAnchor = null;
+                this.timelineSelectionFocused = false;
+                this.frameClipboard = null;
 
                 this.isSelectingBox = false;
                 this.selectionStart = { x: 0, y: 0 };
@@ -246,6 +250,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
                 workspace?.addEventListener('pointerdown', (e) => {
                     if (e.button !== 1 && !this.isHandTool && !this.spacePanActive) return;
+                    this.clearFrameSelection();
                     this.startPan(e, workspace);
                 }, true);
 
@@ -272,6 +277,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 c.addEventListener('pointerleave', () => { this.cursorEl.style.display = 'none'; });
 
                 c.addEventListener('pointerdown', (e) => {
+                    this.clearFrameSelection();
                     if (this.isHandTool || this.spacePanActive || e.button === 1) {
                         this.startPan(e, workspace);
                         return;
@@ -306,6 +312,9 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 c.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 
                 document.addEventListener('click', (e) => {
+                    if (!e.target.closest?.('#frames-list') && !e.target.closest?.('#canvas-wrapper')) {
+                        this.timelineSelectionFocused = false;
+                    }
                     const shapeWrapper = document.getElementById('shape-wrapper');
                     if (shapeWrapper && !shapeWrapper.contains(e.target)) this.setFlyoutExpanded('shape-wrapper', 'tool-shape-anchor', false);
                     const brushWrapper = document.getElementById('brush-wrapper');
@@ -340,9 +349,16 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     const hasCommandModifier = e.ctrlKey || e.metaKey;
                     const hasToolModifier = hasCommandModifier || e.altKey;
 
-                    // Reserve modified keys for explicit editor commands. In particular,
-                    // Ctrl/Cmd+V must never also select the Select tool.
+                    // Timeline frame copy/paste is routed by the focused surface. A
+                    // focused timeline card owns C/V; a focused canvas owns the artwork
+                    // clipboard. Inputs were returned from above so text entry is safe.
                     if (hasCommandModifier) {
+                        if ((key === 'c' || key === 'v') && this.isTimelineCommandContext(target)) {
+                            if (key === 'c') this.copySelectedFrames();
+                            else this.pasteSelectedFrames();
+                            e.preventDefault();
+                            return;
+                        }
                         if (key === 'c' && this.copySelection()) {
                             e.preventDefault();
                             return;
@@ -732,6 +748,89 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 return JSON.parse(JSON.stringify(value));
             }
 
+            getSelectedFrameIndices() {
+                const selected = Array.isArray(this.selectedFrameIndices) ? this.selectedFrameIndices : [];
+                return [...new Set(selected)]
+                    .filter((index) => Number.isInteger(index) && index >= 0 && index < this.frames.length)
+                    .sort((a, b) => a - b);
+            }
+
+            updateFrameSelectionUI() {
+                const selected = new Set(this.getSelectedFrameIndices());
+                this.framesList?.querySelectorAll('.frame-card').forEach((card, index) => {
+                    const isSelected = selected.has(index);
+                    card.classList.toggle('frame-selected', isSelected);
+                });
+            }
+
+            clearFrameSelection(render = true) {
+                this.selectedFrameIndices = [];
+                this.frameSelectionAnchor = null;
+                this.timelineSelectionFocused = false;
+                if (render) this.updateFrameSelectionUI();
+            }
+
+            isTimelineCommandContext(target = document.activeElement) {
+                if (target === this.canvas || target?.closest?.('#canvas-wrapper')) return false;
+                return Boolean(this.timelineSelectionFocused || target?.closest?.('#frames-list'));
+            }
+
+            handleFrameCardClick(index, event) {
+                const isRange = Boolean(event?.shiftKey);
+                const isToggle = Boolean(event?.ctrlKey || event?.metaKey);
+                const current = new Set(this.getSelectedFrameIndices());
+
+                this.timelineSelectionFocused = true;
+                if (isRange) {
+                    const anchor = Number.isInteger(this.frameSelectionAnchor) ? this.frameSelectionAnchor : index;
+                    const start = Math.min(anchor, index);
+                    const end = Math.max(anchor, index);
+                    this.selectedFrameIndices = Array.from({ length: end - start + 1 }, (_, offset) => start + offset);
+                } else if (isToggle) {
+                    if (current.has(index)) current.delete(index);
+                    else current.add(index);
+                    this.selectedFrameIndices = [...current].sort((a, b) => a - b);
+                    this.frameSelectionAnchor = index;
+                } else {
+                    this.selectedFrameIndices = [index];
+                    this.frameSelectionAnchor = index;
+                }
+
+                if (!isRange && !isToggle) this.frameSelectionAnchor = index;
+                if (isRange && !Number.isInteger(this.frameSelectionAnchor)) this.frameSelectionAnchor = index;
+                event?.currentTarget?.focus?.({ preventScroll: true });
+                this.selectFrame(index, { preserveFrameSelection: true });
+                this.updateFrameSelectionUI();
+            }
+
+            copySelectedFrames() {
+                const indices = this.getSelectedFrameIndices();
+                if (!indices.length) return false;
+                this.frameClipboard = {
+                    frames: indices.map((index) => this.cloneData(this.frames[index]))
+                };
+                return true;
+            }
+
+            pasteSelectedFrames() {
+                const copiedFrames = this.frameClipboard?.frames;
+                if (!Array.isArray(copiedFrames) || !copiedFrames.length) return false;
+
+                this.saveState();
+                const insertAt = this.frameIndex + 1;
+                const pastedFrames = this.cloneData(copiedFrames);
+                this.frames.splice(insertAt, 0, ...pastedFrames);
+                this.selectedFrameIndices = pastedFrames.map((_, offset) => insertAt + offset);
+                this.frameSelectionAnchor = insertAt;
+                this.timelineSelectionFocused = true;
+                this.selectedObject = null;
+                this.dragMode = null;
+                this.renderUI();
+                this.renderCanvas();
+                this.saveStorage();
+                return true;
+            }
+
             getBrushScale(stroke) {
                 const readScale = (axis) => {
                     const value = Number(stroke?.[axis]);
@@ -846,6 +945,9 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             }
 
             saveState() {
+                // Frame selection is transient UI state; any document mutation
+                // invalidates its old indexes before the history snapshot starts.
+                this.clearFrameSelection();
                 if (this.history.length > 20) this.history.shift();
                 this.redoStack = [];
                 const state = {
@@ -862,6 +964,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
             undo() {
                 if (this.history.length === 0) return false;
+                this.clearFrameSelection(false);
                 const currentState = {
                     frames: this.cloneData(this.frames),
                     sharedStrokes: this.cloneData(this.sharedStrokes),
@@ -889,6 +992,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
             redo() {
                 if (this.redoStack.length === 0) return false;
+                this.clearFrameSelection(false);
                 const currentState = {
                     frames: this.cloneData(this.frames),
                     sharedStrokes: this.cloneData(this.sharedStrokes),
@@ -2721,6 +2825,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             }
 
             updateBgColor(color) {
+                this.clearFrameSelection();
                 this.selectedBgColor = color;
                 this.frames[this.frameIndex].frameBgColor = color;
                 this.renderCanvas();
@@ -2819,12 +2924,15 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.syncTimelineSettings();
             }
 
-            selectFrame(index) {
+            selectFrame(index, { preserveFrameSelection = false } = {}) {
                 const nextIndex = Math.max(0, Math.min(this.frames.length - 1, index));
                 if (nextIndex === this.frameIndex) {
+                    if (!preserveFrameSelection) this.clearFrameSelection(false);
                     this.syncFramePosition();
+                    this.updateFrameSelectionUI();
                     return false;
                 }
+                if (!preserveFrameSelection) this.clearFrameSelection(false);
                 this.frameIndex = nextIndex;
                 this.selectedObject = null;
                 this.renderCanvas();
@@ -2966,9 +3074,9 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     this.frames.forEach((f, i) => {
                         const el = document.createElement('div');
                         el.className = `frame-card ${i === this.frameIndex ? 'active' : ''}`;
-                        el.onclick = () => {
-                            this.selectFrame(i);
-                        };
+                        el.tabIndex = 0;
+                        el.setAttribute('aria-label', `Frame ${i + 1}`);
+                        el.onclick = (event) => this.handleFrameCardClick(i, event);
 
                         let html = `<div class="frame-num">${i + 1}</div><img src="${f.thumb || ''}">`;
                         if (this.frames.length > 1) {
@@ -3004,6 +3112,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         }
                     });
                 }
+                this.updateFrameSelectionUI();
                 this.syncFramePosition();
                 this.syncTimelineSettings();
             }
@@ -3063,6 +3172,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             updateTimelineActive() {
                 const cards = this.framesList.querySelectorAll('.frame-card');
                 cards.forEach((c, i) => c.classList.toggle('active', i === this.frameIndex));
+                this.updateFrameSelectionUI();
                 this.syncFramePosition();
             }
 
@@ -3176,6 +3286,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         if (data.version >= 2) {
                             this.frames = this.normalizeFrames(data.frames, data.paperStrokes);
                             this.sharedStrokes = this.materializeErasers(data.sharedStrokes || []);
+                            this.clearFrameSelection(false);
                             this.fps = this.normalizeFps(data.fps);
                             this.syncFpsUI();
                             this.frameIndex = 0;
@@ -3549,6 +3660,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
                 this.frames = this.normalizeFrames(data.frames, data.paperStrokes);
                 this.sharedStrokes = this.materializeErasers(data.sharedStrokes || []);
+                this.clearFrameSelection(false);
                 this.fps = this.normalizeFps(data.fps);
                 this.syncFpsUI();
                 this.frameIndex = 0;
@@ -3614,6 +3726,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.frames = [{ strokes: [], paperStrokes: [], hold: 1 }];
                 this.paperStrokes = [];
                 this.sharedStrokes = [];
+                this.clearFrameSelection(false);
                 this.frameIndex = 0;
                 this.projectName = 'Untitled';
                 this.resizeCanvas(width, height);
