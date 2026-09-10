@@ -732,6 +732,26 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 return JSON.parse(JSON.stringify(value));
             }
 
+            getBrushScale(stroke) {
+                const readScale = (axis) => {
+                    const value = Number(stroke?.[axis]);
+                    return Number.isFinite(value) && value !== 0 ? Math.abs(value) : 1;
+                };
+                return { x: readScale('sx'), y: readScale('sy') };
+            }
+
+            getPointBounds(points) {
+                if (!Array.isArray(points) || points.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                points.forEach(point => {
+                    if (point.x < minX) minX = point.x;
+                    if (point.x > maxX) maxX = point.x;
+                    if (point.y < minY) minY = point.y;
+                    if (point.y > maxY) maxY = point.y;
+                });
+                return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+            }
+
             transformHoles(holes, transform) {
                 if (!Array.isArray(holes) || !holes.length) return holes;
                 return holes.map(hole => hole.map(point => transform(point)));
@@ -1048,7 +1068,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                 };
                                 this.dragOriginalItems = this.selectedObject.items.map(item => {
                                     if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height, angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
-                                    return { points: item.stroke.points.map(p => ({ ...p })), angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
+                                    return { points: item.stroke.points.map(p => ({ ...p })), sx: item.stroke.sx, sy: item.stroke.sy, angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
                                 });
                             } else if (this.selectedObject.stroke.type === 'text') {
                                 this.dragOriginalProps = {
@@ -1065,6 +1085,9 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                 this.dragOriginalHoles = this.cloneData(this.selectedObject.stroke.holes || []);
                             } else {
                                 this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({ ...p }));
+                                const brushScale = this.getBrushScale(this.selectedObject.stroke);
+                                this.dragOriginalScaleX = brushScale.x;
+                                this.dragOriginalScaleY = brushScale.y;
                                 this.dragOriginalAngle = this.selectedObject.stroke.angle || 0;
                                 this.dragOriginalBounds = { ...this.selectedObject.bounds };
                                 this.dragCenter = { x: this.selectedObject.bounds.x + this.selectedObject.bounds.w / 2, y: this.selectedObject.bounds.y + this.selectedObject.bounds.h / 2 };
@@ -1082,13 +1105,16 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                             if (this.selectedObject.isGroup) {
                                 this.dragOriginalItems = this.selectedObject.items.map(item => {
                                     if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, holes: this.cloneData(item.stroke.holes || []) };
-                                    return { points: item.stroke.points.map(p => ({ ...p })), holes: this.cloneData(item.stroke.holes || []) };
+                                    return { points: item.stroke.points.map(p => ({ ...p })), sx: item.stroke.sx, sy: item.stroke.sy, holes: this.cloneData(item.stroke.holes || []) };
                                 });
                             } else if (this.selectedObject.stroke.type === 'text') {
                                 this.dragOriginalProps = { x: this.selectedObject.stroke.x, y: this.selectedObject.stroke.y };
                                 this.dragOriginalHoles = this.cloneData(this.selectedObject.stroke.holes || []);
                             } else {
                                 this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({ ...p }));
+                                const brushScale = this.getBrushScale(this.selectedObject.stroke);
+                                this.dragOriginalScaleX = brushScale.x;
+                                this.dragOriginalScaleY = brushScale.y;
                                 this.dragOriginalHoles = this.cloneData(this.selectedObject.stroke.holes || []);
                             }
                             return;
@@ -1122,7 +1148,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                             this.dragCenter = { x: cx, y: cy };
                             this.dragOriginalItems = items.map(item => {
                                 if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height, angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
-                                return { points: item.stroke.points.map(p => ({ ...p })), angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
+                                return { points: item.stroke.points.map(p => ({ ...p })), sx: item.stroke.sx, sy: item.stroke.sy, angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
                             });
                         } else {
                             this.selectedObject = found;
@@ -1133,6 +1159,9 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                 this.dragOriginalHoles = this.cloneData(found.stroke.holes || []);
                             } else {
                                 this.dragOriginalPoints = found.stroke.points.map(p => ({ ...p }));
+                                const brushScale = this.getBrushScale(found.stroke);
+                                this.dragOriginalScaleX = brushScale.x;
+                                this.dragOriginalScaleY = brushScale.y;
                                 this.dragOriginalHoles = this.cloneData(found.stroke.holes || []);
                             }
                         }
@@ -1296,6 +1325,11 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                                 pts[k].y = newY + relY * scaleY;
                                             }
                                         }
+                                        if (item.stroke.type === 'brush') {
+                                            const originalScale = this.getBrushScale(orig);
+                                            item.stroke.sx = originalScale.x * scaleX;
+                                            item.stroke.sy = originalScale.y * scaleY;
+                                        }
                                     }
                                     this.scaleHoles(item.stroke, orig.holes, bounds, { x: newX, y: newY, w: newW, h: newH });
                                 });
@@ -1351,8 +1385,10 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                 stroke.x = this.dragOriginalProps.x + (newX - bounds.x);
                                 stroke.y = this.dragOriginalProps.y + (newY - bounds.y);
                             } else if (stroke.points.length === 1) {
-                                stroke.sx = newW / this.dragOriginalBounds.w;
-                                stroke.sy = newH / this.dragOriginalBounds.h;
+                                const originalScaleX = Number.isFinite(this.dragOriginalScaleX) ? this.dragOriginalScaleX : this.getBrushScale(stroke).x;
+                                const originalScaleY = Number.isFinite(this.dragOriginalScaleY) ? this.dragOriginalScaleY : this.getBrushScale(stroke).y;
+                                stroke.sx = originalScaleX * (newW / this.dragOriginalBounds.w);
+                                stroke.sy = originalScaleY * (newH / this.dragOriginalBounds.h);
                                 stroke.points[0].x = newX + newW / 2;
                                 stroke.points[0].y = newY + newH / 2;
                             } else {
@@ -1365,6 +1401,12 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                         pts[i].x = newX + (normX * newW);
                                         pts[i].y = newY + (normY * newH);
                                     }
+                                }
+                                if (stroke.type === 'brush') {
+                                    const originalScaleX = Number.isFinite(this.dragOriginalScaleX) ? this.dragOriginalScaleX : this.getBrushScale(stroke).x;
+                                    const originalScaleY = Number.isFinite(this.dragOriginalScaleY) ? this.dragOriginalScaleY : this.getBrushScale(stroke).y;
+                                    stroke.sx = originalScaleX * (newW / bounds.w);
+                                    stroke.sy = originalScaleY * (newH / bounds.h);
                                 }
                             }
                             this.scaleHoles(stroke, this.dragOriginalHoles, bounds, { x: newX, y: newY, w: newW, h: newH });
@@ -1582,7 +1624,11 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const pointScale = stroke.points.length === 1
                     ? Math.max(Math.abs(stroke.sx || 1), Math.abs(stroke.sy || 1))
                     : 1;
-                const brushRadius = Math.max(1, this.getSinglePointDiameter(stroke) * pointScale / 2);
+                const brushScale = stroke.type === 'brush' ? this.getBrushScale(stroke) : { x: 1, y: 1 };
+                const brushRadius = Math.max(
+                    1,
+                    this.getSinglePointDiameter(stroke) * Math.max(pointScale, brushScale.x, brushScale.y) / 2
+                );
                 const hitRadius = radius + brushRadius;
 
                 const fillSegment = this.inverseRotateSegment(stroke, from, to);
@@ -1767,7 +1813,10 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
             strokeHit(stroke, pos) {
                 if (!stroke.points || stroke.points.length === 0) return false;
-                const hitThresh = Math.max(10, stroke.size);
+                const scale = stroke.type === 'brush' ? this.getBrushScale(stroke) : { x: 1, y: 1 };
+                const hitThreshX = Math.max(10, (stroke.size || 0) * scale.x);
+                const hitThreshY = Math.max(10, (stroke.size || 0) * scale.y);
+                const hitThresh = Math.max(hitThreshX, hitThreshY);
 
                 let checkPos = pos;
                 if (stroke.angle) {
@@ -1786,15 +1835,14 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 if (stroke.points.length === 1) {
                     const p = stroke.points[0];
                     const dist = Math.hypot(checkPos.x - p.x, checkPos.y - p.y);
-                    const sx = stroke.sx || 1;
-                    const sy = stroke.sy || 1;
-                    const maxDim = Math.max(sx, sy) * (this.getSinglePointDiameter(stroke) / 2);
+                    const pointScale = this.getBrushScale(stroke);
+                    const maxDim = Math.max(pointScale.x, pointScale.y) * (this.getSinglePointDiameter(stroke) / 2);
                     return dist < maxDim + 10;
                 }
 
                 let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
                 stroke.points.forEach(p => { if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x; if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; });
-                if (checkPos.x < minX - hitThresh || checkPos.x > maxX + hitThresh || checkPos.y < minY - hitThresh || checkPos.y > maxY + hitThresh) return false;
+                if (checkPos.x < minX - hitThreshX || checkPos.x > maxX + hitThreshX || checkPos.y < minY - hitThreshY || checkPos.y > maxY + hitThreshY) return false;
 
                 for (let i = 0; i < stroke.points.length - 1; i++) {
                     if (this.distToSegment(checkPos, stroke.points[i], stroke.points[i + 1]) < hitThresh) return true;
@@ -1929,23 +1977,23 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     return { x: stroke.x - 5, y: stroke.y - h - 5, w: w + 10, h: h + 15 };
                 } else if (stroke.points.length === 1) {
                     const s = this.getSinglePointDiameter(stroke);
-                    const sx = stroke.sx || 1;
-                    const sy = stroke.sy || 1;
+                    const { x: sx, y: sy } = this.getBrushScale(stroke);
                     const p = stroke.points[0];
                     const w = s * sx;
                     const h = s * sy;
                     return { x: p.x - w / 2, y: p.y - h / 2, w: w, h: h };
                 } else {
                     if (stroke.points.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
-                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-                    stroke.points.forEach(p => {
-                        if (p.x < minX) minX = p.x;
-                        if (p.x > maxX) maxX = p.x;
-                        if (p.y < minY) minY = p.y;
-                        if (p.y > maxY) maxY = p.y;
-                    });
-                    const pad = stroke.size / 2;
-                    return { x: minX - pad, y: minY - pad, w: (maxX - minX) + pad * 2, h: (maxY - minY) + pad * 2 };
+                    const pointBounds = this.getPointBounds(stroke.points);
+                    const scale = stroke.type === 'brush' ? this.getBrushScale(stroke) : { x: 1, y: 1 };
+                    const padX = (stroke.size || 0) * scale.x / 2;
+                    const padY = (stroke.size || 0) * scale.y / 2;
+                    return {
+                        x: pointBounds.x - padX,
+                        y: pointBounds.y - padY,
+                        w: pointBounds.w + padX * 2,
+                        h: pointBounds.h + padY * 2
+                    };
                 }
             }
 
@@ -2365,6 +2413,26 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         return;
                     }
 
+                    const brushScale = stroke.type === 'brush' ? this.getBrushScale(stroke) : { x: 1, y: 1 };
+                    const useBrushScale = stroke.type === 'brush' && (brushScale.x !== 1 || brushScale.y !== 1);
+                    const pointBounds = useBrushScale ? this.getPointBounds(stroke.points) : null;
+                    const brushCenter = pointBounds
+                        ? { x: pointBounds.x + pointBounds.w / 2, y: pointBounds.y + pointBounds.h / 2 }
+                        : null;
+                    if (useBrushScale) {
+                        ctx.save();
+                        ctx.translate(brushCenter.x, brushCenter.y);
+                        ctx.scale(brushScale.x, brushScale.y);
+                        ctx.translate(-brushCenter.x, -brushCenter.y);
+                    }
+
+                    const renderPoint = (point) => useBrushScale
+                        ? {
+                            x: brushCenter.x + (point.x - brushCenter.x) / brushScale.x,
+                            y: brushCenter.y + (point.y - brushCenter.y) / brushScale.y
+                        }
+                        : point;
+                    const firstPoint = renderPoint(stroke.points[0]);
                     ctx.beginPath();
                     let renderWidth = stroke.size;
 
@@ -2385,9 +2453,10 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         ctx.lineJoin = 'round';
                     }
 
-                    ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+                    ctx.moveTo(firstPoint.x, firstPoint.y);
                     for (let i = 1; i < stroke.points.length; i++) {
-                        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+                        const point = renderPoint(stroke.points[i]);
+                        ctx.lineTo(point.x, point.y);
                     }
 
                     // FIX 2: closePath before fill so rect/circle shapes render their fill correctly
@@ -2399,6 +2468,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         else ctx.fillStyle = rgba;
                     }
                     ctx.stroke();
+                    if (useBrushScale) ctx.restore();
                     return;
                 }
 
@@ -3154,11 +3224,26 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     const style = `stroke="${object.color || '#000'}" stroke-opacity="${opacity}" fill="${object.fillColor || 'none'}" fill-opacity="${opacity}" stroke-width="${object.size || 1}" stroke-linecap="round" stroke-linejoin="round"`;
                     if (object.type === 'text') return withHoles(object, `<text x="${object.x}" y="${object.y}" fill="${object.color}" fill-opacity="${opacity}" font-family="sans-serif" font-size="${object.size}">${escape(object.text)}</text>`);
                     if (!points.length) return '';
-                    const path = points.map((point) => `${point.x},${point.y}`).join(' ');
+                    const brushScale = object.type === 'brush' ? this.getBrushScale(object) : { x: 1, y: 1 };
+                    const useBrushScale = object.type === 'brush' && (brushScale.x !== 1 || brushScale.y !== 1);
+                    const pointBounds = useBrushScale ? this.getPointBounds(points) : null;
+                    const brushCenter = pointBounds
+                        ? { x: pointBounds.x + pointBounds.w / 2, y: pointBounds.y + pointBounds.h / 2 }
+                        : null;
+                    const pathPoints = useBrushScale
+                        ? points.map((point) => ({
+                            x: brushCenter.x + (point.x - brushCenter.x) / brushScale.x,
+                            y: brushCenter.y + (point.y - brushCenter.y) / brushScale.y
+                        }))
+                        : points;
+                    const path = pathPoints.map((point) => `${point.x},${point.y}`).join(' ');
                     let output;
                     if (object.type === 'circle' && points.length > 1) { const [a, b] = points; const radius = Math.hypot(b.x - a.x, b.y - a.y); output = `<circle cx="${a.x}" cy="${a.y}" r="${radius}" ${style}/>`; }
                     else if (object.type === 'rect' && points.length > 1) { const [a, b] = points; output = `<rect x="${Math.min(a.x,b.x)}" y="${Math.min(a.y,b.y)}" width="${Math.abs(b.x-a.x)}" height="${Math.abs(b.y-a.y)}" ${style}/>`; }
                     else output = `<polyline points="${path}" ${style}/>`;
+                    if (useBrushScale) {
+                        output = `<g transform="translate(${brushCenter.x} ${brushCenter.y}) scale(${brushScale.x} ${brushScale.y}) translate(${-brushCenter.x} ${-brushCenter.y})">${output}</g>`;
+                    }
                     output = withHoles(object, output);
                     return object.symmetric && object.type === 'brush' ? output + render(this.getMirroredStroke(object)) : output;
                 };
