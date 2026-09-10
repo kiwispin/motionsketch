@@ -732,6 +732,39 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 return JSON.parse(JSON.stringify(value));
             }
 
+            transformHoles(holes, transform) {
+                if (!Array.isArray(holes) || !holes.length) return holes;
+                return holes.map(hole => hole.map(point => transform(point)));
+            }
+
+            setTransformedHoles(stroke, sourceHoles, transform) {
+                if (!Array.isArray(sourceHoles) || !sourceHoles.length) return;
+                stroke.holes = this.transformHoles(sourceHoles, transform);
+            }
+
+            translateHoles(stroke, sourceHoles, dx, dy) {
+                this.setTransformedHoles(stroke, sourceHoles, point => ({ x: point.x + dx, y: point.y + dy }));
+            }
+
+            rotateHoles(stroke, sourceHoles, center, angle) {
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                this.setTransformedHoles(stroke, sourceHoles, point => {
+                    const dx = point.x - center.x;
+                    const dy = point.y - center.y;
+                    return { x: center.x + dx * cos - dy * sin, y: center.y + dx * sin + dy * cos };
+                });
+            }
+
+            scaleHoles(stroke, sourceHoles, oldBounds, newBounds) {
+                const scaleX = oldBounds.w ? newBounds.w / oldBounds.w : 1;
+                const scaleY = oldBounds.h ? newBounds.h / oldBounds.h : 1;
+                this.setTransformedHoles(stroke, sourceHoles, point => ({
+                    x: newBounds.x + (point.x - oldBounds.x) * scaleX,
+                    y: newBounds.y + (point.y - oldBounds.y) * scaleY
+                }));
+            }
+
             normalizeFrames(frames, legacyPaperStrokes = []) {
                 const sourceFrames = Array.isArray(frames) && frames.length ? frames : [{ strokes: [] }];
                 return sourceFrames.map((frame, index) => {
@@ -761,7 +794,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
             applyEraserStrokeToList(list, eraserStroke) {
                 const points = eraserStroke.points || [];
-                const radius = Math.max(2, (eraserStroke.size || this.brushSize) / 2);
+                const radius = Math.max(0.5, (eraserStroke.size || this.brushSize) / 2);
                 if (!points.length) return;
 
                 if (points.length === 1) {
@@ -1014,8 +1047,8 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                     y: this.selectedObject.bounds.y + this.selectedObject.bounds.h / 2
                                 };
                                 this.dragOriginalItems = this.selectedObject.items.map(item => {
-                                    if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height, angle: item.stroke.angle || 0 };
-                                    return { points: item.stroke.points.map(p => ({ ...p })), angle: item.stroke.angle || 0 };
+                                    if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height, angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
+                                    return { points: item.stroke.points.map(p => ({ ...p })), angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
                                 });
                             } else if (this.selectedObject.stroke.type === 'text') {
                                 this.dragOriginalProps = {
@@ -1029,11 +1062,13 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                 };
                                 this.dragOriginalBounds = { ...this.selectedObject.bounds };
                                 this.dragCenter = { x: this.selectedObject.bounds.x + this.selectedObject.bounds.w / 2, y: this.selectedObject.bounds.y + this.selectedObject.bounds.h / 2 };
+                                this.dragOriginalHoles = this.cloneData(this.selectedObject.stroke.holes || []);
                             } else {
                                 this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({ ...p }));
                                 this.dragOriginalAngle = this.selectedObject.stroke.angle || 0;
                                 this.dragOriginalBounds = { ...this.selectedObject.bounds };
                                 this.dragCenter = { x: this.selectedObject.bounds.x + this.selectedObject.bounds.w / 2, y: this.selectedObject.bounds.y + this.selectedObject.bounds.h / 2 };
+                                this.dragOriginalHoles = this.cloneData(this.selectedObject.stroke.holes || []);
                             }
                             return;
                         }
@@ -1046,13 +1081,15 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
                             if (this.selectedObject.isGroup) {
                                 this.dragOriginalItems = this.selectedObject.items.map(item => {
-                                    if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y };
-                                    return { points: item.stroke.points.map(p => ({ ...p })) };
+                                    if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, holes: this.cloneData(item.stroke.holes || []) };
+                                    return { points: item.stroke.points.map(p => ({ ...p })), holes: this.cloneData(item.stroke.holes || []) };
                                 });
                             } else if (this.selectedObject.stroke.type === 'text') {
                                 this.dragOriginalProps = { x: this.selectedObject.stroke.x, y: this.selectedObject.stroke.y };
+                                this.dragOriginalHoles = this.cloneData(this.selectedObject.stroke.holes || []);
                             } else {
                                 this.dragOriginalPoints = this.selectedObject.stroke.points.map(p => ({ ...p }));
+                                this.dragOriginalHoles = this.cloneData(this.selectedObject.stroke.holes || []);
                             }
                             return;
                         }
@@ -1084,8 +1121,8 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                             this.dragOriginalAngle = grp.angle || 0;
                             this.dragCenter = { x: cx, y: cy };
                             this.dragOriginalItems = items.map(item => {
-                                if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height, angle: item.stroke.angle || 0 };
-                                return { points: item.stroke.points.map(p => ({ ...p })), angle: item.stroke.angle || 0 };
+                                if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height, angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
+                                return { points: item.stroke.points.map(p => ({ ...p })), angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
                             });
                         } else {
                             this.selectedObject = found;
@@ -1093,8 +1130,10 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                             this.dragOriginalBounds = { ...this.selectedObject.bounds };
                             if (found.stroke.type === 'text') {
                                 this.dragOriginalProps = { x: found.stroke.x, y: found.stroke.y };
+                                this.dragOriginalHoles = this.cloneData(found.stroke.holes || []);
                             } else {
                                 this.dragOriginalPoints = found.stroke.points.map(p => ({ ...p }));
+                                this.dragOriginalHoles = this.cloneData(found.stroke.holes || []);
                             }
                         }
                         this.dragMode = 'move';
@@ -1178,6 +1217,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                             }
                                         }
                                     }
+                                    this.translateHoles(item.stroke, orig.holes, dx, dy);
                                 });
                                 this.selectedObject.bounds.x = bounds.x + dx;
                                 this.selectedObject.bounds.y = bounds.y + dy;
@@ -1193,6 +1233,10 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                     // Persistent group: rotation is purely a canvas transform on the group stroke.
                                     // Do NOT physically move item points — drawObject handles it via ctx.rotate.
                                     this.selectedObject.persistentGroupStroke.angle = newAngle;
+                                    this.selectedObject.items.forEach((item, i) => {
+                                        const orig = this.dragOriginalItems[i];
+                                        if (orig) this.rotateHoles(item.stroke, orig.holes, this.dragCenter, angleDiff);
+                                    });
                                 } else {
                                     // Temporary multi-select: physically rotate each item's points
                                     // (no canvas-level rotation available for these)
@@ -1221,6 +1265,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                                 }
                                             }
                                         }
+                                        this.rotateHoles(item.stroke, orig.holes, { x: cx, y: cy }, angleDiff);
                                     });
                                 }
                             } else if (this.dragMode.startsWith('resize')) {
@@ -1252,6 +1297,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                             }
                                         }
                                     }
+                                    this.scaleHoles(item.stroke, orig.holes, bounds, { x: newX, y: newY, w: newW, h: newH });
                                 });
                                 this.selectedObject.bounds = { x: newX, y: newY, w: newW, h: newH };
                             }
@@ -1278,6 +1324,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                     }
                                 }
                             }
+                            this.translateHoles(stroke, this.dragOriginalHoles, dx, dy);
                         } else if (this.dragMode === 'rotate') {
                             const startAngle = Math.atan2(this.dragStart.y - this.dragCenter.y, this.dragStart.x - this.dragCenter.x);
                             const currAngle = Math.atan2(pos.y - this.dragCenter.y, pos.x - this.dragCenter.x);
@@ -1288,6 +1335,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                             } else {
                                 stroke.angle = (this.dragOriginalAngle || 0) + angleDiff;
                             }
+                            this.rotateHoles(stroke, this.dragOriginalHoles, this.dragCenter, angleDiff);
                         } else {
                             if (!bounds) return;
 
@@ -1319,6 +1367,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                                     }
                                 }
                             }
+                            this.scaleHoles(stroke, this.dragOriginalHoles, bounds, { x: newX, y: newY, w: newW, h: newH });
                         }
                         this.calcBounds(this.selectedObject.stroke);
                         this.renderCanvas();
@@ -1487,7 +1536,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
             eraseVectorBetween(from, to) {
                 const list = this.getActiveStrokeList();
-                const radius = Math.max(2, this.brushSize / 2);
+                const radius = Math.max(0.5, this.brushSize / 2);
                 const next = [];
                 let changed = false;
 
@@ -1503,13 +1552,14 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 }
             }
 
-            eraseStrokeWithSegment(stroke, from, to, radius) {
+            eraseStrokeWithSegment(stroke, from, to, radius, holeFrom = from, holeTo = to) {
                 if (!stroke) return [];
 
                 if (stroke.type === 'group') {
                     const keptItems = [];
+                    const groupSegment = this.inverseRotateSegment(stroke, from, to);
                     stroke.items.forEach(item => {
-                        this.eraseStrokeWithSegment(item, from, to, radius).forEach(piece => keptItems.push(piece));
+                        this.eraseStrokeWithSegment(item, groupSegment.from, groupSegment.to, radius, holeFrom, holeTo).forEach(piece => keptItems.push(piece));
                     });
                     if (!keptItems.length) return [];
                     if (keptItems.length === stroke.items.length && keptItems.every((item, index) => item === stroke.items[index])) return [stroke];
@@ -1519,60 +1569,66 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 }
 
                 if (stroke.type === 'text') {
-                    return this.eraserIntersectsBounds(this.getStrokeBounds(stroke), from, to, radius) ? [] : [stroke];
+                    const textSegment = this.inverseRotateSegment(stroke, from, to);
+                    if (!this.eraserIntersectsBounds(this.getStrokeBounds(stroke), textSegment.from, textSegment.to, radius)) return [stroke];
+                    const next = this.cloneData(stroke);
+                    if (!next.holes) next.holes = [];
+                    next.holes.push(this.buildEraserHole(holeFrom, holeTo, radius));
+                    return [next];
                 }
 
                 if (!stroke.points || !stroke.points.length) return [stroke];
 
-                const brushRadius = Math.max(1, this.getSinglePointDiameter(stroke) / 2);
+                const pointScale = stroke.points.length === 1
+                    ? Math.max(Math.abs(stroke.sx || 1), Math.abs(stroke.sy || 1))
+                    : 1;
+                const brushRadius = Math.max(1, this.getSinglePointDiameter(stroke) * pointScale / 2);
                 const hitRadius = radius + brushRadius;
 
-                if (stroke.fillColor) {
-                    const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-                    if (this.strokeIntersectsEraser(stroke, from, to, hitRadius) ||
-                        this.containsPoint(stroke.points, mid) ||
-                        this.containsPoint(stroke.points, from)) {
-                        const next = this.cloneData(stroke);
-                        if (!next.holes) next.holes = [];
-                        next.holes.push(this.buildEraserHole(from, to, radius));
-                        return [next];
-                    }
-                    return [stroke];
-                }
+                const fillSegment = this.inverseRotateSegment(stroke, from, to);
+                const mid = { x: (fillSegment.from.x + fillSegment.to.x) / 2, y: (fillSegment.from.y + fillSegment.to.y) / 2 };
+                const mirroredStroke = stroke.symmetric && stroke.type === 'brush' ? this.getMirroredStroke(stroke) : null;
+                const mirroredFillSegment = mirroredStroke ? this.inverseRotateSegment(mirroredStroke, from, to) : null;
+                const mirroredMid = mirroredFillSegment ? {
+                    x: (mirroredFillSegment.from.x + mirroredFillSegment.to.x) / 2,
+                    y: (mirroredFillSegment.from.y + mirroredFillSegment.to.y) / 2
+                } : null;
+                const intersects = this.strokeIntersectsEraser(stroke, from, to, hitRadius) ||
+                    (mirroredStroke && this.strokeIntersectsEraser(mirroredStroke, from, to, hitRadius)) ||
+                    (stroke.fillColor && (this.containsPoint(stroke.points, mid) || this.containsPoint(stroke.points, fillSegment.from))) ||
+                    (mirroredStroke?.fillColor && (this.containsPoint(mirroredStroke.points, mirroredMid) || this.containsPoint(mirroredStroke.points, mirroredFillSegment.from)));
+                if (!intersects) return [stroke];
 
-                if (stroke.points.length === 1) {
-                    const p = stroke.points[0];
-                    return this.distToSegment(p, from, to) <= hitRadius ? [] : [stroke];
-                }
+                // Preserve the original geometry. The eraser footprint is drawn as
+                // a hole, so a thick or translucent stroke cannot remove a whole
+                // stored segment just because its centerline was touched.
+                const next = this.cloneData(stroke);
+                if (!next.holes) next.holes = [];
+                next.holes.push(this.buildEraserHole(holeFrom, holeTo, radius));
+                return [next];
+            }
 
-                const chunks = [];
-                let current = [];
-                for (let i = 0; i < stroke.points.length - 1; i++) {
-                    const p1 = stroke.points[i];
-                    const p2 = stroke.points[i + 1];
-                    const erased = this.segmentsNear(p1, p2, from, to, hitRadius);
-
-                    if (erased) {
-                        if (current.length > 1) chunks.push(current);
-                        current = [];
-                    } else {
-                        if (!current.length) current.push({ ...p1 });
-                        current.push({ ...p2 });
-                    }
-                }
-
-                if (current.length > 1) chunks.push(current);
-                if (chunks.length === 1 && chunks[0].length === stroke.points.length) return [stroke];
-
-                return chunks.map(points => ({
-                    ...this.cloneData(stroke),
-                    points,
-                    fillColor: null
-                }));
+            inverseRotateSegment(stroke, from, to) {
+                if (!stroke?.angle) return { from, to };
+                const bounds = this.getStrokeBounds(stroke);
+                const cx = bounds.x + bounds.w / 2;
+                const cy = bounds.y + bounds.h / 2;
+                const cos = Math.cos(-stroke.angle);
+                const sin = Math.sin(-stroke.angle);
+                const toLocal = (point) => {
+                    const dx = point.x - cx;
+                    const dy = point.y - cy;
+                    return {
+                        x: cx + dx * cos - dy * sin,
+                        y: cy + dx * sin + dy * cos
+                    };
+                };
+                return { from: toLocal(from), to: toLocal(to) };
             }
 
             strokeIntersectsEraser(stroke, from, to, radius) {
                 if (!stroke.points || !stroke.points.length) return false;
+                ({ from, to } = this.inverseRotateSegment(stroke, from, to));
                 if (stroke.points.some(p => this.distToSegment(p, from, to) <= radius)) return true;
                 for (let i = 0; i < stroke.points.length - 1; i++) {
                     if (this.segmentsNear(stroke.points[i], stroke.points[i + 1], from, to, radius)) return true;
@@ -1602,21 +1658,6 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 arc(from, startAngle, Math.PI);
                 arc(to, startAngle + Math.PI, Math.PI);
                 return pts;
-            }
-
-            punchHoles(ctx, stroke) {
-                if (!stroke.holes || !stroke.holes.length) return;
-                const prevOp = ctx.globalCompositeOperation;
-                ctx.globalCompositeOperation = 'destination-out';
-                ctx.fillStyle = 'rgba(0,0,0,1)';
-                stroke.holes.forEach(hole => {
-                    ctx.beginPath();
-                    ctx.moveTo(hole[0].x, hole[0].y);
-                    for (let i = 1; i < hole.length; i++) ctx.lineTo(hole[i].x, hole[i].y);
-                    ctx.closePath();
-                    ctx.fill();
-                });
-                ctx.globalCompositeOperation = prevOp;
             }
 
             eraserIntersectsBounds(bounds, from, to, radius) {
@@ -2018,7 +2059,137 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 });
             }
 
-            drawObject(ctx, obj, simpleMode = false, layerName = 'ink') {
+            objectHasEraserHoles(obj) {
+                if (!obj) return false;
+                if (obj.type === 'group') return (obj.items || []).some(item => this.objectHasEraserHoles(item));
+                return Array.isArray(obj.holes) && obj.holes.length > 0;
+            }
+
+            collectEraserHoles(obj, result = []) {
+                if (!obj) return result;
+                if (obj.type === 'group') {
+                    (obj.items || []).forEach(item => this.collectEraserHoles(item, result));
+                    return result;
+                }
+                (obj.holes || []).forEach(hole => result.push(hole));
+                return result;
+            }
+
+            drawObjectWithEraserHoles(ctx, obj, simpleMode, layerName) {
+                if (!this.eraserCanvas) {
+                    this.eraserCanvas = document.createElement('canvas');
+                    this.eraserCtx = this.eraserCanvas.getContext('2d');
+                }
+                if (this.eraserCanvas.width !== this.canvasWidth || this.eraserCanvas.height !== this.canvasHeight) {
+                    this.eraserCanvas.width = this.canvasWidth;
+                    this.eraserCanvas.height = this.canvasHeight;
+                }
+
+                const isolatedCtx = this.eraserCtx;
+                isolatedCtx.save();
+                isolatedCtx.globalCompositeOperation = 'source-over';
+                isolatedCtx.globalAlpha = 1;
+                isolatedCtx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+                this.drawObject(isolatedCtx, obj, simpleMode, layerName, false);
+
+                isolatedCtx.globalCompositeOperation = 'destination-out';
+                isolatedCtx.globalAlpha = 1;
+                isolatedCtx.fillStyle = 'rgba(0,0,0,1)';
+                this.collectEraserHoles(obj).forEach(hole => {
+                    if (!hole || !hole.length) return;
+                    isolatedCtx.beginPath();
+                    isolatedCtx.moveTo(hole[0].x, hole[0].y);
+                    for (let i = 1; i < hole.length; i++) isolatedCtx.lineTo(hole[i].x, hole[i].y);
+                    isolatedCtx.closePath();
+                    isolatedCtx.fill();
+                });
+                isolatedCtx.restore();
+
+                ctx.save();
+                const targetAlpha = ctx.globalAlpha;
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = targetAlpha;
+                ctx.drawImage(this.eraserCanvas, 0, 0);
+                ctx.restore();
+            }
+
+            drawGroupWithEraserHoles(ctx, group, simpleMode, layerName) {
+                if (!this.groupEraserCanvas) {
+                    this.groupEraserCanvas = document.createElement('canvas');
+                    this.groupEraserCtx = this.groupEraserCanvas.getContext('2d');
+                }
+                if (!this.groupEraserCanvas.width || this.groupEraserCanvas.width !== this.canvasWidth || this.groupEraserCanvas.height !== this.canvasHeight) {
+                    this.groupEraserCanvas.width = this.canvasWidth;
+                    this.groupEraserCanvas.height = this.canvasHeight;
+                }
+                if (!this.childEraserCanvas) {
+                    this.childEraserCanvas = document.createElement('canvas');
+                    this.childEraserCtx = this.childEraserCanvas.getContext('2d');
+                }
+                if (this.childEraserCanvas.width !== this.canvasWidth || this.childEraserCanvas.height !== this.canvasHeight) {
+                    this.childEraserCanvas.width = this.canvasWidth;
+                    this.childEraserCanvas.height = this.canvasHeight;
+                }
+
+                const groupCtx = this.groupEraserCtx;
+                groupCtx.save();
+                groupCtx.globalCompositeOperation = 'source-over';
+                groupCtx.globalAlpha = 1;
+                groupCtx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+
+                const bounds = this.getStrokeBounds(group);
+                const cx = bounds.x + bounds.w / 2;
+                const cy = bounds.y + bounds.h / 2;
+                (group.items || []).forEach(item => {
+                    const childCtx = this.childEraserCtx;
+                    childCtx.save();
+                    childCtx.globalCompositeOperation = 'source-over';
+                    childCtx.globalAlpha = 1;
+                    childCtx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+                    if (group.angle) {
+                        childCtx.translate(cx, cy);
+                        childCtx.rotate(group.angle);
+                        childCtx.translate(-cx, -cy);
+                    }
+                    this.drawObject(childCtx, item, simpleMode, layerName, false);
+                    childCtx.restore();
+
+                    if (this.objectHasEraserHoles(item)) {
+                        childCtx.save();
+                        childCtx.globalCompositeOperation = 'destination-out';
+                        childCtx.globalAlpha = 1;
+                        childCtx.fillStyle = 'rgba(0,0,0,1)';
+                        this.collectEraserHoles(item).forEach(hole => {
+                            if (!hole || !hole.length) return;
+                            childCtx.beginPath();
+                            childCtx.moveTo(hole[0].x, hole[0].y);
+                            for (let i = 1; i < hole.length; i++) childCtx.lineTo(hole[i].x, hole[i].y);
+                            childCtx.closePath();
+                            childCtx.fill();
+                        });
+                        childCtx.restore();
+                    }
+                    groupCtx.drawImage(this.childEraserCanvas, 0, 0);
+                });
+                groupCtx.restore();
+
+                ctx.save();
+                const targetAlpha = ctx.globalAlpha;
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = targetAlpha;
+                ctx.drawImage(this.groupEraserCanvas, 0, 0);
+                ctx.restore();
+            }
+
+            drawObject(ctx, obj, simpleMode = false, layerName = 'ink', applyHoles = true) {
+                if (applyHoles && obj.type === 'group' && this.objectHasEraserHoles(obj)) {
+                    this.drawGroupWithEraserHoles(ctx, obj, simpleMode, layerName);
+                    return;
+                }
+                if (applyHoles && obj.type !== 'group' && this.objectHasEraserHoles(obj)) {
+                    this.drawObjectWithEraserHoles(ctx, obj, simpleMode, layerName);
+                    return;
+                }
                 // Handle persistent group objects
                 if (obj.type === 'group') {
                     ctx.save();
@@ -2030,7 +2201,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         ctx.rotate(obj.angle);
                         ctx.translate(-cx, -cy);
                     }
-                    obj.items.forEach(item => this.drawObject(ctx, item, simpleMode, layerName));
+                    obj.items.forEach(item => this.drawObject(ctx, item, simpleMode, layerName, applyHoles));
                     ctx.restore();
                     return;
                 }
@@ -2075,7 +2246,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     }
 
                     if (obj.symmetric && obj.type === 'brush') {
-                        this.drawObject(ctx, this.getMirroredStroke(obj), simpleMode, layerName);
+                        this.drawObject(ctx, this.getMirroredStroke(obj), simpleMode, layerName, applyHoles);
                     }
                 }
             }
@@ -2191,7 +2362,6 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         ctx.arc(0, 0, renderWidth / 2, 0, Math.PI * 2);
                         ctx.fill();
                         ctx.restore();
-                        this.punchHoles(ctx, stroke);
                         return;
                     }
 
@@ -2229,7 +2399,6 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         else ctx.fillStyle = rgba;
                     }
                     ctx.stroke();
-                    this.punchHoles(ctx, stroke);
                     return;
                 }
 
@@ -2244,7 +2413,6 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     ctx.arc(0, 0, w / 2, 0, Math.PI * 2);
                     ctx.fill();
                     ctx.restore();
-                    this.punchHoles(ctx, stroke);
                     return;
                 }
 
@@ -2280,7 +2448,6 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         ctx.fill();
                     }
                 }
-                this.punchHoles(ctx, stroke);
             }
 
             hexToRgba(hex, alpha) {
@@ -2971,28 +3138,34 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
             exportSVG() {
                 const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]);
+                const maskDefs = [];
+                let maskIndex = 0;
+                const withHoles = (object, output) => {
+                    if (!object.holes || !object.holes.length) return output;
+                    const id = `eraser-mask-${maskIndex++}`;
+                    const holes = object.holes.map(hole => `<polygon points="${hole.map((point) => `${point.x},${point.y}`).join(' ')}" fill="black"/>`).join('');
+                    maskDefs.push(`<mask id="${id}" maskUnits="userSpaceOnUse"><rect width="${this.canvasWidth}" height="${this.canvasHeight}" fill="white"/>${holes}</mask>`);
+                    return `<g mask="url(#${id})">${output}</g>`;
+                };
                 const render = (object) => {
                     if (object.type === 'group') return object.items.map(render).join('');
                     const points = object.points || [];
                     const opacity = object.opacity ?? 1;
                     const style = `stroke="${object.color || '#000'}" stroke-opacity="${opacity}" fill="${object.fillColor || 'none'}" fill-opacity="${opacity}" stroke-width="${object.size || 1}" stroke-linecap="round" stroke-linejoin="round"`;
-                    if (object.type === 'text') return `<text x="${object.x}" y="${object.y}" fill="${object.color}" fill-opacity="${opacity}" font-family="sans-serif" font-size="${object.size}">${escape(object.text)}</text>`;
+                    if (object.type === 'text') return withHoles(object, `<text x="${object.x}" y="${object.y}" fill="${object.color}" fill-opacity="${opacity}" font-family="sans-serif" font-size="${object.size}">${escape(object.text)}</text>`);
                     if (!points.length) return '';
                     const path = points.map((point) => `${point.x},${point.y}`).join(' ');
-                    if (object.fillColor && object.holes && object.holes.length) {
-                        const holes = object.holes.map(hole => ' ' + hole.map((point) => `${point.x},${point.y}`).join(' ')).join('');
-                        const output = `<polygon points="${path}${holes}" fill="${object.fillColor}" fill-opacity="${opacity}" fill-rule="evenodd" stroke="${object.color || '#000'}" stroke-opacity="${opacity}" stroke-width="${object.size || 1}" stroke-linejoin="round"/>`;
-                        return object.symmetric && object.type === 'brush' ? output + render(this.getMirroredStroke(object)) : output;
-                    }
-                    if (object.type === 'circle' && points.length > 1) { const [a, b] = points; const radius = Math.hypot(b.x - a.x, b.y - a.y); return `<circle cx="${a.x}" cy="${a.y}" r="${radius}" ${style}/>`; }
-                    if (object.type === 'rect' && points.length > 1) { const [a, b] = points; return `<rect x="${Math.min(a.x,b.x)}" y="${Math.min(a.y,b.y)}" width="${Math.abs(b.x-a.x)}" height="${Math.abs(b.y-a.y)}" ${style}/>`; }
-                    const output = `<polyline points="${path}" ${style}/>`;
+                    let output;
+                    if (object.type === 'circle' && points.length > 1) { const [a, b] = points; const radius = Math.hypot(b.x - a.x, b.y - a.y); output = `<circle cx="${a.x}" cy="${a.y}" r="${radius}" ${style}/>`; }
+                    else if (object.type === 'rect' && points.length > 1) { const [a, b] = points; output = `<rect x="${Math.min(a.x,b.x)}" y="${Math.min(a.y,b.y)}" width="${Math.abs(b.x-a.x)}" height="${Math.abs(b.y-a.y)}" ${style}/>`; }
+                    else output = `<polyline points="${path}" ${style}/>`;
+                    output = withHoles(object, output);
                     return object.symmetric && object.type === 'brush' ? output + render(this.getMirroredStroke(object)) : output;
                 };
                 const frame = this.frames[this.frameIndex];
                 const background = frame.frameBgColor || this.selectedBgColor;
                 const content = [...this.sharedStrokes, ...this.getPaperStrokes(frame), ...frame.strokes].map(render).join('');
-                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${this.canvasWidth}" height="${this.canvasHeight}" viewBox="0 0 ${this.canvasWidth} ${this.canvasHeight}"><rect width="100%" height="100%" fill="${background}"/>${content}</svg>`;
+                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${this.canvasWidth}" height="${this.canvasHeight}" viewBox="0 0 ${this.canvasWidth} ${this.canvasHeight}"><defs>${maskDefs.join('')}</defs><rect width="100%" height="100%" fill="${background}"/>${content}</svg>`;
                 const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
                 const link = document.createElement('a'); link.href = url; link.download = `${this.getExportBaseName()}-frame-${String(this.frameIndex + 1).padStart(3, '0')}.svg`; link.click(); URL.revokeObjectURL(url);
                 this.showExportNotice('SVG exported');
@@ -3478,6 +3651,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     const dx = targetX - itemBounds.x, dy = targetY - itemBounds.y;
                     if (item.stroke.type === 'text') { item.stroke.x += dx; item.stroke.y += dy; }
                     else item.stroke.points?.forEach((point) => { point.x += dx; point.y += dy; });
+                    this.translateHoles(item.stroke, item.stroke.holes, dx, dy);
                 });
                 this.selectedObject.bounds = this.getGroupBounds(this.selectedObject.items);
                 this.renderCanvas(); this.updateThumbnails(); this.saveStorage();
@@ -3538,6 +3712,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                             } else {
                                 item.x += 20; item.y += 20;
                             }
+                            this.translateHoles(item, item.holes, 20, 20);
                         });
                         list.push(newGroup);
                         const bounds = this.getStrokeBounds(newGroup);
@@ -3559,6 +3734,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                             } else {
                                 newStroke.x += 20; newStroke.y += 20;
                             }
+                            this.translateHoles(newStroke, newStroke.holes, 20, 20);
                             list.push(newStroke);
                             newItems.push({ stroke: newStroke, layer: this.activeLayer });
                         });
@@ -3574,6 +3750,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         } else {
                             newStroke.x += 20; newStroke.y += 20;
                         }
+                        this.translateHoles(newStroke, newStroke.holes, 20, 20);
                         list.push(newStroke);
                         this.selectedObject = { stroke: newStroke, layer: this.activeLayer };
                         this.calcBounds(newStroke);

@@ -391,7 +391,7 @@ test('bucket-fills the canvas with a real shape that the eraser can carve into',
   })).toEqual({ exists: true, holes: 2 });
 });
 
-test('eraser splits the outline of an unfilled shape it crosses', async ({ page }) => {
+test('eraser keeps an outline intact and removes only its requested footprint', async ({ page }) => {
   await page.evaluate((stroke) => {
     window.app.frames[0].strokes.push(structuredClone(stroke));
     window.app.tool = 'eraser';
@@ -404,10 +404,290 @@ test('eraser splits the outline of an unfilled shape it crosses', async ({ page 
 
   const result = await page.evaluate(() => ({
     count: window.app.frames[0].strokes.length,
-    points: window.app.frames[0].strokes.map((s) => (s.points || []).length)
+    points: window.app.frames[0].strokes[0].points,
+    holes: window.app.frames[0].strokes[0].holes?.length || 0
   }));
   expect(result.count).toBe(1);
-  expect(result.points[0]).toBeLessThan(5);
+  expect(result.points).toHaveLength(5);
+  expect(result.holes).toBeGreaterThan(0);
+});
+
+test('eraser footprint stays exact for sparse thick strokes at full and low opacity', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const makeStroke = (opacity) => ({
+      type: 'brush',
+      brushType: 'brush',
+      color: '#000000',
+      size: 80,
+      opacity,
+      points: [{ x: 100, y: 300, p: 0.5 }, { x: 500, y: 300, p: 0.5 }],
+      fillColor: null,
+      sx: 1,
+      sy: 1,
+      angle: 0
+    });
+    const diffOutsideFootprint = (before, after, from, to, radius) => {
+      let changedOutside = 0;
+      const distanceToSegment = (x, y) => {
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const lengthSquared = dx * dx + dy * dy;
+        const t = lengthSquared ? Math.max(0, Math.min(1, ((x - from.x) * dx + (y - from.y) * dy) / lengthSquared)) : 0;
+        return Math.hypot(x - (from.x + t * dx), y - (from.y + t * dy));
+      };
+      for (let y = 0; y < window.app.canvasHeight; y++) {
+        for (let x = 0; x < window.app.canvasWidth; x++) {
+          const i = (y * window.app.canvasWidth + x) * 4;
+          const changed = before[i] !== after[i] || before[i + 1] !== after[i + 1] || before[i + 2] !== after[i + 2] || before[i + 3] !== after[i + 3];
+          if (changed && distanceToSegment(x + 0.5, y + 0.5) > radius) changedOutside++;
+        }
+      }
+      return changedOutside;
+    };
+    const measure = (opacity) => {
+      const stroke = makeStroke(opacity);
+      window.app.frames[0].strokes = [stroke];
+      window.app.renderCanvas();
+      const before = window.app.ctx.getImageData(0, 0, window.app.canvasWidth, window.app.canvasHeight).data;
+      window.app.setTool('eraser');
+      window.app.brushSize = 20;
+      window.app.onDown({ x: 300, y: 300 }, 0.5, false);
+      window.app.onMove({ x: 320, y: 300 }, 0.5);
+      window.app.onUp();
+      const after = window.app.ctx.getImageData(0, 0, window.app.canvasWidth, window.app.canvasHeight).data;
+      return {
+        changedOutside: diffOutsideFootprint(before, after, { x: 300, y: 300 }, { x: 320, y: 300 }, 11),
+        strokeCount: window.app.frames[0].strokes.length,
+        pointCount: window.app.frames[0].strokes[0].points.length,
+        holeCount: window.app.frames[0].strokes[0].holes.length
+      };
+    };
+    return { full: measure(1), low: measure(0.3) };
+  });
+
+  expect(result.full.changedOutside).toBe(0);
+  expect(result.low.changedOutside).toBe(0);
+  expect(result.full.strokeCount).toBe(1);
+  expect(result.low.strokeCount).toBe(1);
+  expect(result.full.pointCount).toBe(2);
+  expect(result.low.pointCount).toBe(2);
+  expect(result.full.holeCount).toBeGreaterThan(0);
+  expect(result.low.holeCount).toBeGreaterThan(0);
+});
+
+test('eraser finds rotated artwork without erasing its mirrored copy', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const makeStroke = (symmetric = false) => ({
+      type: 'brush',
+      brushType: 'brush',
+      color: '#000000',
+      size: 40,
+      opacity: 1,
+      points: [{ x: 50, y: 100, p: 0.5 }, { x: 250, y: 100, p: 0.5 }],
+      fillColor: null,
+      sx: 1,
+      sy: 1,
+      angle: Math.PI / 2,
+      symmetric
+    });
+    const pixel = (x, y) => {
+      const data = window.app.ctx.getImageData(x, y, 1, 1).data;
+      return Array.from(data);
+    };
+
+    window.app.frames[0].strokes = [makeStroke()];
+    window.app.renderCanvas();
+    const rotatedBefore = pixel(150, 170);
+    window.app.setTool('eraser');
+    window.app.brushSize = 10;
+    window.app.onDown({ x: 150, y: 170 }, 0.5, false);
+    window.app.onUp();
+    const rotatedAfter = pixel(150, 170);
+    const rotatedHoles = window.app.frames[0].strokes[0].holes?.length || 0;
+
+    const symmetric = makeStroke(true);
+    symmetric.angle = 0;
+    symmetric.points = [{ x: 50, y: 100, p: 0.5 }, { x: 100, y: 100, p: 0.5 }];
+    window.app.frames[0].strokes = [symmetric];
+    window.app.renderCanvas();
+    const mirroredBefore = pixel(520, 100);
+    window.app.setTool('eraser');
+    window.app.brushSize = 10;
+    window.app.onDown({ x: 80, y: 100 }, 0.5, false);
+    window.app.onUp();
+    const mirroredAfter = pixel(520, 100);
+    window.app.frames[0].strokes = [symmetric];
+    window.app.renderCanvas();
+    window.app.setTool('eraser');
+    window.app.brushSize = 10;
+    window.app.onDown({ x: 520, y: 100 }, 0.5, false);
+    window.app.onUp();
+    const rightHit = pixel(520, 100);
+    const leftUntouched = pixel(80, 100);
+
+    const scaledDot = {
+      type: 'brush', brushType: 'brush', color: '#000000', size: 40, opacity: 1,
+      points: [{ x: 150, y: 150, p: 0.5 }], fillColor: null, sx: 4, sy: 2, angle: 0
+    };
+    window.app.frames[0].strokes = [scaledDot];
+    window.app.renderCanvas();
+    window.app.setTool('eraser');
+    window.app.brushSize = 10;
+    window.app.onDown({ x: 200, y: 150 }, 0.5, false);
+    window.app.onUp();
+    const scaledHit = pixel(200, 150);
+    return { rotatedBefore, rotatedAfter, rotatedHoles, mirroredBefore, mirroredAfter, rightHit, leftUntouched, scaledHit };
+  });
+
+  expect(result.rotatedBefore[3]).toBeGreaterThan(0);
+  expect(result.rotatedAfter[3]).toBe(0);
+  expect(result.rotatedHoles).toBeGreaterThan(0);
+  expect(result.mirroredAfter).toEqual(result.mirroredBefore);
+  expect(result.rightHit[3]).toBe(0);
+  expect(result.leftUntouched[3]).toBeGreaterThan(0);
+  expect(result.scaledHit[3]).toBe(0);
+});
+
+test('erased holes follow moved objects and do not hide artwork drawn over them in a group', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const oldStroke = {
+      type: 'brush',
+      brushType: 'brush',
+      color: '#000000',
+      size: 40,
+      opacity: 1,
+      points: [{ x: 100, y: 300, p: 0.5 }, { x: 500, y: 300, p: 0.5 }],
+      fillColor: null,
+      sx: 1,
+      sy: 1,
+      angle: 0,
+      holes: [window.app.buildEraserHole({ x: 300, y: 300 }, { x: 300, y: 300 }, 10)]
+    };
+    const overdraw = {
+      type: 'brush',
+      brushType: 'brush',
+      color: '#ff0000',
+      size: 20,
+      opacity: 1,
+      points: [{ x: 300, y: 300, p: 0.5 }],
+      fillColor: null,
+      sx: 1,
+      sy: 1,
+      angle: 0
+    };
+    window.app.frames[0].strokes = [oldStroke, overdraw];
+    window.app.renderCanvas();
+    const colorAt = (x, y) => Array.from(window.app.ctx.getImageData(x, y, 1, 1).data);
+    const groupedBefore = colorAt(300, 300);
+    window.app.selectedObject = {
+      isGroup: true,
+      items: [oldStroke, overdraw].map((stroke, index) => ({ stroke, layer: 'ink', index })),
+      bounds: window.app.getGroupBounds([oldStroke, overdraw].map((stroke, index) => ({ stroke, layer: 'ink', index }))),
+      angle: 0
+    };
+    window.app.groupSelection();
+    const groupedAfter = colorAt(300, 300);
+
+    const movable = {
+      type: 'brush',
+      brushType: 'brush',
+      color: '#000000',
+      size: 40,
+      opacity: 1,
+      points: [{ x: 100, y: 450, p: 0.5 }, { x: 500, y: 450, p: 0.5 }],
+      fillColor: null,
+      sx: 1,
+      sy: 1,
+      angle: 0,
+      holes: [window.app.buildEraserHole({ x: 300, y: 450 }, { x: 300, y: 450 }, 10)]
+    };
+    window.app.frames[0].strokes = [movable];
+    window.app.selectedObject = { stroke: movable, layer: 'ink', index: 0 };
+    window.app.tool = 'select';
+    window.app.calcBounds(movable);
+    window.app.dragMode = 'move';
+    window.app.dragStart = { x: 0, y: 0 };
+    window.app.dragOriginalBounds = { ...window.app.selectedObject.bounds };
+    window.app.dragOriginalPoints = movable.points.map(point => ({ ...point }));
+    window.app.dragOriginalHoles = structuredClone(movable.holes);
+    window.app.onMove({ x: 50, y: 0 });
+    const movedHole = colorAt(350, 450);
+    const restoredOldLocation = colorAt(300, 450);
+    return { groupedBefore, groupedAfter, movedHole, restoredOldLocation };
+  });
+
+  expect(result.groupedBefore[0]).toBeGreaterThan(200);
+  expect(result.groupedAfter[0]).toBeGreaterThan(200);
+  expect(result.movedHole[3]).toBe(0);
+  expect(result.restoredOldLocation[3]).toBeGreaterThan(0);
+});
+
+test('eraser preserves a text object while recording its exact cutout', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const text = {
+      type: 'text',
+      text: 'TEXT',
+      x: 250,
+      y: 340,
+      width: 110,
+      height: 40,
+      sx: 1,
+      sy: 1,
+      color: '#000000',
+      size: 40,
+      bold: false,
+      opacity: 0.3,
+      angle: 0,
+      points: []
+    };
+    window.app.frames[0].strokes = [text];
+    window.app.renderCanvas();
+    window.app.setTool('eraser');
+    window.app.brushSize = 12;
+    window.app.onDown({ x: 300, y: 320 }, 0.5, false);
+    window.app.onUp();
+    return {
+      count: window.app.frames[0].strokes.length,
+      type: window.app.frames[0].strokes[0].type,
+      holes: window.app.frames[0].strokes[0].holes?.length || 0
+    };
+  });
+  expect(result).toEqual({ count: 1, type: 'text', holes: 1 });
+});
+
+test('eraser honors one and two pixel sizes without widening the cutout', async ({ page }) => {
+  const measurements = await page.evaluate(() => {
+    const source = {
+      type: 'brush', brushType: 'brush', color: '#000000', size: 40, opacity: 1,
+      points: [{ x: 300, y: 300, p: 0.5 }], fillColor: null, sx: 1, sy: 1, angle: 0
+    };
+    const distance = (x, y, radius) => Math.hypot(x - 300, y - 300) > radius;
+    return [1, 2].map(size => {
+      window.app.frames[0].strokes = [structuredClone(source)];
+      window.app.renderCanvas();
+      const before = window.app.ctx.getImageData(0, 0, 600, 600).data;
+      window.app.setTool('eraser');
+      window.app.brushSize = size;
+      window.app.onDown({ x: 300, y: 300 }, 0.5, false);
+      window.app.onUp();
+      const after = window.app.ctx.getImageData(0, 0, 600, 600).data;
+      let outsideChanges = 0;
+      for (let y = 0; y < 600; y++) {
+        for (let x = 0; x < 600; x++) {
+          const i = (y * 600 + x) * 4;
+          const changed = before[i] !== after[i] || before[i + 1] !== after[i + 1] || before[i + 2] !== after[i + 2] || before[i + 3] !== after[i + 3];
+          if (changed && distance(x + 0.5, y + 0.5, size / 2 + 1)) outsideChanges++;
+        }
+      }
+      const hole = window.app.frames[0].strokes[0].holes[0];
+      const xs = hole.map(point => point.x);
+      return { size, diameter: Math.max(...xs) - Math.min(...xs), outsideChanges };
+    });
+  });
+  expect(measurements[0].diameter).toBeCloseTo(1, 5);
+  expect(measurements[1].diameter).toBeCloseTo(2, 5);
+  expect(measurements[0].outsideChanges).toBe(0);
+  expect(measurements[1].outsideChanges).toBe(0);
 });
 
 test('eraser cuts through the border of a filled shape it crosses', async ({ page }) => {
@@ -458,6 +738,38 @@ test('eraser cuts through the border of a filled shape it crosses', async ({ pag
   expect(data.interiorIsWhite).toBe(true);
   expect(data.borderRedCount).toBe(0);
   expect(data.strokes[0].holes).toBeGreaterThan(0);
+});
+
+test('eraser reaches the interior of a rotated filled shape', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const rotated = {
+      type: 'rect',
+      brushType: 'brush',
+      color: '#ff0000',
+      size: 10,
+      opacity: 1,
+      points: [
+        { x: 100, y: 100, p: 0.5 }, { x: 200, y: 100, p: 0.5 },
+        { x: 200, y: 500, p: 0.5 }, { x: 100, y: 500, p: 0.5 },
+        { x: 100, y: 100, p: 0.5 }
+      ],
+      fillColor: '#ff0000',
+      sx: 1,
+      sy: 1,
+      angle: Math.PI / 2
+    };
+    window.app.frames[0].strokes = [rotated];
+    window.app.renderCanvas();
+    window.app.setTool('eraser');
+    window.app.brushSize = 20;
+    window.app.onDown({ x: 300, y: 300 }, 0.5, false);
+    window.app.onUp();
+    return {
+      count: window.app.frames[0].strokes.length,
+      holes: window.app.frames[0].strokes[0].holes?.length || 0
+    };
+  });
+  expect(result).toEqual({ count: 1, holes: 1 });
 });
 
 test('onion skin keeps the previous ball at full size', async ({ page }) => {
