@@ -158,3 +158,11 @@ Acceptance: pending user visual review.
 - Layer paragraph removal and Foreground/Background title tooltips remain in place; no control behavior changed.
 - `npm run build:portable` — passed after this edit.
 - Acceptance: pending root visual review.
+
+## 2026-09-12 — Toolbar height breakpoint follow-up
+
+- Raised only the existing desktop compact-toolbar breakpoint from 800px to 890px viewport height. At 820–890px the existing compact sizes/gaps now apply before the onion control can fall below the left toolbar panel; the ≤700px rule remains unchanged.
+- Preserved panel placement, flyout overflow behavior, canvas geometry, tool order, and all toolbar handlers. No overflow clipping was added.
+- Added a focused bounds regression covering normal and Truck states at 1366×820, 1366×850, 1366×900, 1600×1000, and 1024×850; every direct tool/flyout/onion control and divider must remain within `.tools-panel`.
+- Measured bounds: 1366×820 panel `80–580`, onion `437–477`; 1366×850 panel `80–610`, onion `437–477`; 1366×900 panel `100–660`, onion `587–631`; 1600×1000 panel `100–760`, onion `587–631`; 1024×850 panel `80–610`, onion `437–477`. Canvas wrapper rectangles were identical before/after Truck in every case.
+- Acceptance: pending root visual review.

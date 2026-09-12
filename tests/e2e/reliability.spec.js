@@ -367,6 +367,41 @@ test('opens brush and shape flyouts without clipping the toolbar', async ({ page
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.tools-panel')).overflowX)).toBe('visible');
 });
 
+for (const viewport of [
+  { name: 'desktop-820', width: 1366, height: 820 },
+  { name: 'desktop-850', width: 1366, height: 850 },
+  { name: 'desktop-900', width: 1366, height: 900 },
+  { name: 'wide-desktop', width: 1600, height: 1000 },
+  { name: 'zoom-like-width', width: 1024, height: 850 }
+]) {
+  test(`keeps the full toolbar inside its panel at ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+
+    const measure = () => page.evaluate(() => {
+      const panel = document.querySelector('.tools-panel').getBoundingClientRect();
+      const selectors = ['#tool-select', '#tool-truck', '#brush-wrapper', '#shape-wrapper', '#tool-text', '#tool-eraser', '#tool-bucket', '#tool-hand', '.divider', '#onion-btn'];
+      const boxes = selectors.map((selector) => {
+        const box = document.querySelector(selector).getBoundingClientRect();
+        return { selector, top: box.top, bottom: box.bottom };
+      });
+      return {
+        panel: { top: panel.top, bottom: panel.bottom },
+        boxes
+      };
+    });
+
+    for (const mode of ['normal', 'truck']) {
+      if (mode === 'truck') await page.locator('#tool-truck').click();
+      const bounds = await measure();
+      for (const box of bounds.boxes) {
+        expect(box.top).toBeGreaterThanOrEqual(bounds.panel.top - 0.5);
+        expect(box.bottom).toBeLessThanOrEqual(bounds.panel.bottom + 0.5);
+      }
+      if (mode === 'truck') await page.locator('#tool-truck').click();
+    }
+  });
+}
+
 test('bucket-fills the canvas with a real shape that the eraser can carve into', async ({ page }) => {
   await page.getByRole('button', { name: 'Fill tool (F)' }).click();
   await expect.poll(() => page.evaluate(() => window.app.tool)).toBe('bucket');
