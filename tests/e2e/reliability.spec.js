@@ -300,30 +300,20 @@ test('configures onion skin depth and opacity without altering undoable artwork'
   await expect(onion.locator('.onion-icon')).toHaveCount(1);
   const count = page.locator('#onion-count');
   const opacity = page.locator('#onion-opacity');
-  await expect(count).toBeDisabled();
-  await expect(opacity).toBeDisabled();
+  await expect(count).toHaveCount(0);
+  await expect(opacity).toHaveCount(0);
 
   await onion.click();
-  await expect(count).toBeEnabled();
-  await count.fill('3');
-  await opacity.fill('55');
   await expect.poll(() => page.evaluate(() => ({
     enabled: window.app.isOnion,
     frames: window.app.onionFrames,
     opacity: window.app.onionOpacity,
     strokes: window.app.frames[0].strokes.length
-  }))).toEqual({ enabled: true, frames: 3, opacity: 0.55, strokes: 0 });
-  await expect(page.locator('#onion-count-disp')).toHaveText('3');
-  await expect(page.locator('#onion-opacity-disp')).toHaveText('55%');
-  expect(await page.locator('#onion-count-disp').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-  expect(await page.locator('#onion-opacity-disp').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  }))).toEqual({ enabled: true, frames: 1, opacity: 0.3, strokes: 0 });
 
   await onion.click();
-  await expect(count).toBeDisabled();
-  await expect(opacity).toBeDisabled();
-  await onion.click();
   await expect.poll(() => page.evaluate(() => ({ frames: window.app.onionFrames, opacity: window.app.onionOpacity })))
-    .toEqual({ frames: 3, opacity: 0.55 });
+    .toEqual({ frames: 1, opacity: 0.3 });
 });
 
 test('supports undoable frame holds and loop/once playback modes', async ({ page }) => {
@@ -368,6 +358,7 @@ test('opens brush and shape flyouts without clipping the toolbar', async ({ page
 });
 
 for (const viewport of [
+  { name: 'desktop-768', width: 1366, height: 768 },
   { name: 'desktop-820', width: 1366, height: 820 },
   { name: 'desktop-850', width: 1366, height: 850 },
   { name: 'desktop-900', width: 1366, height: 900 },
@@ -379,6 +370,7 @@ for (const viewport of [
 
     const measure = () => page.evaluate(() => {
       const panel = document.querySelector('.tools-panel').getBoundingClientRect();
+      const props = document.querySelector('.props-panel').getBoundingClientRect();
       const selectors = ['#tool-select', '#tool-truck', '#brush-wrapper', '#shape-wrapper', '#tool-text', '#tool-eraser', '#tool-bucket', '#tool-hand', '.divider', '#onion-btn'];
       const boxes = selectors.map((selector) => {
         const box = document.querySelector(selector).getBoundingClientRect();
@@ -386,6 +378,7 @@ for (const viewport of [
       });
       return {
         panel: { top: panel.top, bottom: panel.bottom },
+        props: { top: props.top, bottom: props.bottom },
         boxes
       };
     });
@@ -393,6 +386,7 @@ for (const viewport of [
     for (const mode of ['normal', 'truck']) {
       if (mode === 'truck') await page.locator('#tool-truck').click();
       const bounds = await measure();
+      expect(Math.abs(bounds.props.bottom - bounds.panel.bottom)).toBeLessThanOrEqual(0.5);
       for (const box of bounds.boxes) {
         expect(box.top).toBeGreaterThanOrEqual(bounds.panel.top - 0.5);
         expect(box.bottom).toBeLessThanOrEqual(bounds.panel.bottom + 0.5);

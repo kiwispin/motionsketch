@@ -166,3 +166,37 @@ Acceptance: pending user visual review.
 - Added a focused bounds regression covering normal and Truck states at 1366×820, 1366×850, 1366×900, 1600×1000, and 1024×850; every direct tool/flyout/onion control and divider must remain within `.tools-panel`.
 - Measured bounds: 1366×820 panel `80–580`, onion `437–477`; 1366×850 panel `80–610`, onion `437–477`; 1366×900 panel `100–660`, onion `587–631`; 1600×1000 panel `100–760`, onion `587–631`; 1024×850 panel `80–610`, onion `437–477`. Canvas wrapper rectangles were identical before/after Truck in every case.
 - Acceptance: pending root visual review.
+
+## 2026-09-12 — Toolbar spacing distribution refinement
+
+- User-refused the prior compact top-packed appearance. Kept the existing desktop compact breakpoint, button sizes, gaps, panel bounds, flyout overflow, and canvas layout, but changed only the desktop toolbar flex distribution to `space-between` and removed its trailing layout-only flex spacer.
+- This uses the existing panel height to distribute the controls evenly from top padding through the Onion Skin button instead of leaving a large empty region below it; no controls or handlers moved.
+- Measured direct control containment in normal and Truck states: 1366×820 panel `80–580`, first button `87–127`, Onion `533–573`; 1366×850 panel `80–610`, first `87–127`, Onion `563–603`; 1366×900 panel `100–660`, first `116–160`, Onion `600–644`; 1600×1000 panel `100–760`, first `116–160`, Onion `700–744`. All controls stayed within the panel.
+- Focused Chromium toolbar/flyout and bounds checks: 6 passed. `npm run build:portable`: passed.
+- Acceptance: pending root visual review.
+
+## 2026-09-12 — Compact toolbar top alignment
+
+- Aligned only the existing desktop compact toolbar top from `80px` to `100px`, matching the right inspector’s unchanged top edge and the header’s existing lower gap. The short-height ≤700px rule remains unchanged.
+- Preserved the compact toolbar bottom, distributed spacing, button/flyout behavior, right panel, and canvas geometry.
+- Measured 1366px normal and Truck states: at 768px panel `100–528`, Onion `481–521`; at 820px panel `100–580`, Onion `533–573`; at 850px panel `100–610`, Onion `563–603`; at 900px panel `100–660`, Onion `600–644`. Toolbar top equals props top (`100px`) and Onion remains contained in every case.
+- Acceptance: pending root visual review.
+
+## 2026-09-12 — Onion Skin controls held
+
+- Commented out only the visible Onion Skin `Prev. frames` and `Opacity` controls in `#onion-settings`; the original markup, IDs, defaults (`1` and `30%`), inline handlers, and JS methods remain preserved in an HTML comment for restoration.
+- Kept the Onion Skin toggle button and state behavior unchanged. Added only a `65px` minimum footprint to retain the former section height as blank space below the Onion Skin label.
+- `syncOnionUI()` already null-checks these controls, so no JS guard change was needed. Updated the focused reliability expectation to verify the controls are absent while defaults remain `1` / `0.3` after toggling.
+- Acceptance: pending root visual review.
+
+## 2026-09-12 — Onion Skin heading held
+
+- Commented out the remaining visible `Onion Skin` heading so the entire Onion Skin section is blank while retaining the existing `65px` spacer footprint, toggle button, defaults, and preserved control markup.
+- No JS, layout bounds, or other inspector controls changed.
+- Acceptance: pending root visual review.
+
+## 2026-09-12 — Desktop inspector bottom alignment
+
+- Adjusted only the desktop right `.props-panel` bottom inset to `240px`, matching the existing left toolbar bottom; the existing ≤700px desktop rule uses the left toolbar’s `180px` inset and the right panel now mirrors it.
+- Top alignment, left toolbar spacing/geometry, canvas, timeline, internal scrolling, and blank Onion Skin footprint remain unchanged. Mobile horizontal inspector rules were not modified.
+- Added bottom-equality coverage for normal and Truck at desktop 1366×768/820/850/900, 1600×1000, and 1024×850. Acceptance: pending root visual review.

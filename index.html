@@ -396,6 +396,7 @@
         }
 
         .prop-group { display: flex; flex-direction: column; gap: 10px; }
+        #onion-settings { min-height: 65px; }
         .prop-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 700; }
         .prop-hint { font-size: 0.7rem; color: var(--text-muted); line-height: 1.35; }
 
@@ -809,6 +810,11 @@
             gap: 5px;
         }
 
+        @media (min-width: 901px) {
+            .tools-panel { justify-content: space-between; }
+            .tools-panel > div[style*="flex:1"] { display: none; }
+        }
+
         @media (max-width: 900px) {
             .app-header { padding: 0 12px; }
             .top-actions {
@@ -863,7 +869,7 @@
         }
 
         @media (max-height: 890px) and (min-width: 901px) {
-            .tools-panel { top: 80px; bottom: 240px; padding: 6px 0; gap: 3px; }
+            .tools-panel { top: 100px; bottom: 240px; padding: 6px 0; gap: 3px; }
             .tools-panel .tool-btn,
             .tools-panel .flyout-menu .tool-btn { width: 40px; height: 40px; min-width: 40px; min-height: 40px; flex-basis: 40px; }
             .tools-panel .divider { margin: 1px 0; }
@@ -874,6 +880,16 @@
             .tools-panel .tool-btn,
             .tools-panel .flyout-menu .tool-btn { width: 34px; height: 34px; min-width: 34px; min-height: 34px; flex-basis: 34px; }
             .tools-panel .divider { margin: 0; }
+        }
+
+        @media (min-width: 901px) {
+            .props-panel,
+            body.has-motion-timeline .props-panel { bottom: 240px; }
+        }
+
+        @media (max-height: 700px) and (min-width: 901px) {
+            .props-panel,
+            body.has-motion-timeline .props-panel { bottom: 180px; }
         }
 
         @media (max-width: 600px) {
@@ -1152,7 +1168,11 @@
             </div>
         </div>
         <div class="prop-group" id="onion-settings">
-            <div class="prop-label">Onion Skin</div>
+            <!-- Onion Skin controls are intentionally held for a future UI pass; keep this section footprint blank. -->
+            <!-- <div class="prop-label">Onion Skin</div> -->
+            <!-- Onion depth and opacity controls are intentionally held for a future UI pass.
+                 Keep this markup here so the existing handlers and defaults can be restored directly. -->
+            <!--
             <label class="slider-row" for="onion-count">
                 <span style="font-size:0.75rem; color:var(--text-muted);">Prev. frames</span>
                 <input type="range" id="onion-count" min="1" max="3" value="1" oninput="app.setOnionFrames(this.value)">
@@ -1163,6 +1183,7 @@
                 <input type="range" id="onion-opacity" min="5" max="80" value="30" oninput="app.setOnionOpacity(this.value)">
                 <output class="slider-val" id="onion-opacity-disp">30%</output>
             </label>
+            -->
         </div>
 
     </div>
