@@ -327,7 +327,7 @@
             opacity: 0;
             pointer-events: none;
             transform: translateX(-10px) scale(0.95);
-            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transition: opacity 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
             box-shadow: var(--shadow-elevation);
             z-index: 100;
         }
@@ -342,6 +342,8 @@
         .flyout-menu .tool-btn { width: 44px; height: 44px; background: transparent; }
         .flyout-menu .tool-btn:hover { background: var(--btn-hover); }
         .flyout-menu .tool-btn.active { background: var(--accent-blue); color: white; }
+        body.truck-active .flyout-menu { position: fixed; }
+        .flyout-menu.is-portal-flyout { opacity: 1; pointer-events: auto; transform: translateX(0) scale(1); z-index: 1000; }
 
         .props-panel {
             position: absolute;
@@ -352,7 +354,7 @@
             display: flex;
             flex-direction: column;
             gap: 20px;
-            bottom: 180px;
+            bottom: 186px;
             overflow-x: hidden;
             overflow-y: auto;
             scrollbar-width: thin;
@@ -364,6 +366,34 @@
         .props-panel:hover::-webkit-scrollbar-thumb { background: rgba(128, 140, 160, 0.55); }
         .props-panel::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
         .props-panel::-webkit-scrollbar:horizontal { display: none; }
+
+        .drawing-aids-wrapper { position: relative; }
+        .drawing-aids-toggle { width: 100%; justify-content: space-between; }
+        .drawing-aids-toggle i:last-child { font-size: .7rem; color: var(--text-muted); }
+        .drawing-aids-menu {
+            display: grid;
+            gap: 4px;
+            width: 100%;
+            padding: 7px;
+            border: 1px solid var(--border-panel);
+            border-radius: 12px;
+            background: var(--bg-panel);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: var(--shadow-elevation);
+        }
+        .drawing-aids-menu[hidden] { display: none; }
+        .drawing-aids-menu .btn-ghost { width: 100%; justify-content: flex-start; }
+        .drawing-aids-menu .btn-ghost.active { background: rgba(10, 132, 255, .2); }
+        .header-drawing-aids-wrapper { flex: 0 0 auto; }
+        .header-drawing-aids-wrapper .drawing-aids-toggle { width: auto; white-space: nowrap; }
+        .header-drawing-aids-wrapper .drawing-aids-menu {
+            position: fixed;
+            z-index: 240;
+            width: min(214px, calc(100vw - 16px));
+            max-height: calc(100vh - 16px);
+            overflow-y: auto;
+        }
 
         .prop-group { display: flex; flex-direction: column; gap: 10px; }
         .prop-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 700; }
@@ -384,33 +414,28 @@
         input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: white; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
 
         .brush-preview {
-            height: 200px;
+            height: 76px;
             border-radius: 8px;
             border: 1px solid var(--border-panel);
-            background:
-                linear-gradient(45deg, rgba(128, 128, 128, 0.14) 25%, transparent 25%),
-                linear-gradient(-45deg, rgba(128, 128, 128, 0.14) 25%, transparent 25%),
-                linear-gradient(45deg, transparent 75%, rgba(128, 128, 128, 0.14) 75%),
-                linear-gradient(-45deg, transparent 75%, rgba(128, 128, 128, 0.14) 75%),
-                var(--input-bg);
-            background-size: 16px 16px;
-            background-position: 0 0, 0 8px, 8px -8px, -8px 0;
-            display: grid;
-            place-items: center;
+            background: #fff;
             overflow: hidden;
             position: relative;
         }
 
+        .brush-preview-curve {
+            width: 100%;
+            height: 100%;
+            display: block;
+            overflow: visible;
+        }
+
         .brush-preview-mark {
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            width: 10px;
-            height: 10px;
-            border-radius: 999px;
-            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45), 0 0 0 2px rgba(0, 0, 0, 0.25);
-            transition: width 0.12s ease, height 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+            fill: none;
+            stroke: #000;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            vector-effect: non-scaling-stroke;
+            transition: stroke 0.12s ease, stroke-width 0.12s ease, opacity 0.12s ease, filter 0.12s ease;
         }
 
         .color-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
@@ -427,7 +452,7 @@
             bottom: 20px;
             left: 20px;
             right: 20px;
-            height: 140px;
+            height: 166px;
             display: flex;
             flex-direction: column;
             padding: 0;
@@ -437,19 +462,95 @@
         }
 
         .timeline-controls {
-            height: 44px;
+            min-height: 44px;
+            height: auto;
             border-bottom: 1px solid var(--border-panel);
             display: flex;
             align-items: center;
             padding: 0 15px;
-            gap: 15px;
+            gap: 10px;
             background: var(--input-bg);
             justify-content: center;
-            padding-left: 80px;
-            padding-right: 260px;
+            padding-left: 15px;
+            padding-right: 15px;
         }
 
-        .timeline-controls-wrapper { display: flex; align-items: center; justify-content: center; gap: 10px; width: auto; }
+        .timeline-controls-wrapper { display: flex; align-items: center; justify-content: center; gap: 7px; flex: 1 1 auto; width: auto; min-width: 0; }
+        .timeline-controls .btn-ghost { padding: 7px 9px; }
+        .timeline-controls .slider-row { flex: 0 0 auto; }
+        .timeline-hold { gap: 4px; width: auto; }
+        .timeline-hold input[type="range"] { width: 46px; flex: 0 0 46px; }
+        .timeline-hold .slider-val { width: 24px; }
+        .timeline-fps { display: flex; align-items: center; gap: 5px; flex: 0 0 auto; }
+        .timeline-fps input[type="range"] { width: 50px; flex: 0 0 50px; }
+        .timeline-fps .fps-value {
+            width: 48px;
+            min-width: 48px;
+            flex: 0 0 48px;
+            display: inline-block;
+            white-space: nowrap;
+        }
+
+        .timeline-frames-row {
+            min-height: 92px;
+            flex: 1;
+            display: flex;
+            align-items: stretch;
+            min-width: 0;
+        }
+        .timeline-frames-row .frames-track { min-width: 0; }
+        .frame-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 0 0 auto;
+            padding: 8px 12px 8px 0;
+        }
+        .timeline-controls > .frame-actions {
+            gap: 4px;
+            padding: 0 0 0 8px;
+            align-items: center;
+        }
+        .timeline-action {
+            width: 60px;
+            min-width: 60px;
+            height: 36px;
+            padding: 2px 3px;
+            display: inline-flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 2px;
+            border: 1px solid var(--border-panel);
+            border-radius: 8px;
+            background: var(--input-bg);
+            color: var(--text-main);
+            cursor: pointer;
+            font: inherit;
+            font-size: .62rem;
+            line-height: 1.05;
+        }
+        .timeline-action.add-frame-btn { margin-left: 0; border-radius: 8px; }
+        .timeline-action i {
+            width: 14px;
+            height: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .8rem;
+            line-height: 14px;
+            color: var(--text-main);
+        }
+        .timeline-action span {
+            min-height: 1.1em;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        .timeline-action:hover:not(:disabled) { background: var(--btn-hover); border-color: var(--accent-blue); }
+        .timeline-action:disabled { opacity: .4; cursor: not-allowed; }
+        .timeline-action.primary { background: rgba(10, 132, 255, .18); }
 
         .frames-track {
             flex: 1;
@@ -486,7 +587,7 @@
         .frame-card img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
         .frame-card.active { border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.3); transform: translateY(-2px); }
         .frame-card.frame-selected { border-color: #ff9f0a; box-shadow: inset 0 0 0 2px rgba(255, 159, 10, 0.9), 0 0 0 2px rgba(255, 159, 10, 0.25); }
-        .frame-card.active.frame-selected { border-color: var(--accent-blue); box-shadow: inset 0 0 0 2px rgba(255, 159, 10, 0.9), 0 0 0 2px rgba(10, 132, 255, 0.3); }
+        .frame-card.active.frame-selected { border-color: #ff9f0a; box-shadow: inset 0 0 0 2px rgba(255, 159, 10, 0.9), 0 0 0 2px rgba(255, 159, 10, 0.25); }
 
         .frame-num { position: absolute; top: 3px; left: 4px; font-size: 9px; color: #000; font-weight: 800; background: rgba(255, 255, 255, 0.8); padding: 1px 4px; border-radius: 3px; pointer-events: none; }
 
@@ -506,13 +607,13 @@
         }
         .frame-copy-btn:hover { transform: scale(1.1); background: var(--accent-hover); }
 
-        .add-frame-btn {
+        .frames-track .add-frame-btn {
             min-width: 50px; height: 50px; border-radius: 50%;
             background: var(--input-bg); color: var(--text-main);
             display: flex; align-items: center; justify-content: center;
             font-size: 1.2rem; cursor: pointer; transition: all 0.2s; margin-left: 10px;
         }
-        .add-frame-btn:hover { background: var(--accent-blue); color: white; }
+        .frames-track .add-frame-btn:hover { background: var(--accent-blue); color: white; }
 
         .play-fab {
             width: 32px; height: 32px; border: 0; background: var(--accent-blue); border-radius: 50%;
@@ -566,11 +667,17 @@
         .new-animation-option span { color: var(--text-muted); font-size: .75rem; }
 
         .zoom-controls {
-            position: fixed; bottom: 200px; right: 300px;
-            background: var(--bg-panel); backdrop-filter: blur(10px);
-            border: 1px solid var(--border-panel); border-radius: 20px;
-            padding: 4px 8px; display: flex; align-items: center; gap: 8px;
-            box-shadow: var(--shadow-elevation); z-index: 15; transition: opacity 0.2s;
+            position: static;
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            box-shadow: none;
+            z-index: auto;
+            transition: opacity 0.2s;
         }
 
         .zoom-btn {
@@ -586,8 +693,64 @@
             margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--border-panel);
             border-radius: 10px; background: var(--input-bg); display: grid; gap: 3px;
         }
+        .timeline-panel.has-motion { height: 210px; padding-bottom: 6px; }
+        .timeline-panel.has-motion .timeline-frames-row { min-height: 88px; }
+        .timeline-panel.has-motion .frames-track { padding-top: 6px; padding-bottom: 6px; }
+        .movement-track-scroll {
+            display: none; height: auto; min-height: 72px; max-height: 72px; flex: 0 0 auto; overflow-x: auto; overflow-y: auto;
+            border-top: 1px solid var(--border-panel); scrollbar-width: thin;
+        }
+        body.has-motion-timeline .movement-track-scroll { display: block; }
+        .movement-track-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
+        .movement-track-scroll::-webkit-scrollbar-thumb { background: rgba(128,140,160,.5); border-radius: 999px; }
+        .movement-track-list { min-width: max-content; padding: 0 20px; }
+        .movement-track-controls {
+            min-height: 34px; display: flex; align-items: center; gap: 8px; padding: 3px 20px;
+            border-bottom: 1px solid var(--border-panel); color: var(--text-muted); font-size: .75rem;
+        }
+        .movement-track-controls .movement-selected { min-width: 150px; flex: 0 1 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .movement-key-controls { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+        .movement-key-controls .btn-ghost { width: 28px; height: 28px; padding: 0; font-size: 1rem; line-height: 1; justify-content: center; }
+        .movement-key-toggle { font-size: 1.15rem !important; font-weight: 600; }
+        .motion-track-row { display: grid; grid-auto-flow: column; grid-auto-columns: 90px; gap: 12px; height: 34px; align-items: center; }
+        .motion-track-cell {
+            width: 90px; height: 26px; border: 1px solid transparent; border-radius: 5px; background: transparent;
+            color: var(--text-muted); position: relative; cursor: pointer; padding: 0;
+        }
+        .motion-track-cell.current { border-color: var(--accent-blue); background: rgba(10,132,255,.12); }
+        .motion-track-cell.keyframe::before {
+            content: ""; width: 10px; height: 10px; position: absolute; left: 50%; top: 50%;
+            transform: translate(-50%, -50%) rotate(45deg); background: var(--accent-blue); border-radius: 2px;
+        }
+        .motion-track-cell.keyframe.curved::before { transform: translate(-50%, -50%); border-radius: 50%; }
+        .motion-track-cell.keyframe.selected::before { background: #ffcc00; }
+        .motion-track-cell:first-child::after {
+            content: attr(data-track-label); position: absolute; left: 4px; bottom: 2px;
+            font-size: 8px; line-height: 1; color: var(--text-muted); pointer-events: none;
+        }
+        body.truck-active .tools-panel { overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
         .inspector-context strong { font-size: 0.85rem; }
         .inspector-context span { color: var(--text-muted); font-size: 0.75rem; line-height: 1.35; }
+
+        .timeline-panel.has-motion { height: 210px; }
+        @media (min-width: 901px) {
+            body.has-motion-timeline .props-panel { bottom: 230px; }
+        }
+
+        #loop-mode-btn { gap: 7px; }
+        #loop-mode-btn::after {
+            content: "";
+            width: 28px;
+            height: 16px;
+            border-radius: 999px;
+            background: var(--input-bg);
+            box-shadow: inset 0 0 0 1px var(--border-panel);
+            transition: background .15s ease, box-shadow .15s ease;
+        }
+        #loop-mode-btn[aria-pressed="true"]::after {
+            background: var(--accent-blue);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16);
+        }
 
         .brush-cursor {
             position: fixed; pointer-events: none;
@@ -688,17 +851,29 @@
             .props-panel .brush-preview,
             .props-panel .color-grid,
             .props-panel #bg-color-picker,
-            .props-panel .inspector-context,
-            .props-panel #onion-settings { display: none !important; }
+            .props-panel .inspector-context { display: none !important; }
             .props-panel .layer-switch { width: 190px; }
             .props-panel .slider-row { width: 155px; }
             .props-panel .color-input-wrap { width: 52px; height: 44px; }
-            .zoom-controls { right: 20px; }
-            .timeline-controls { padding-left: 80px; padding-right: 0; }
+            .props-panel { overflow-x: auto; }
+            .timeline-controls { padding-left: 12px; padding-right: 12px; overflow-x: auto; justify-content: flex-start; }
+            .timeline-controls-wrapper { width: max-content; min-width: 100%; justify-content: flex-start; }
+            .timeline-frames-row { min-height: 88px; }
+            .frame-actions { padding-right: 8px; }
+        }
+
+        @media (max-height: 800px) and (min-width: 901px) {
+            .tools-panel { top: 80px; bottom: 240px; padding: 6px 0; gap: 3px; }
+            .tools-panel .tool-btn,
+            .tools-panel .flyout-menu .tool-btn { width: 40px; height: 40px; min-width: 40px; min-height: 40px; flex-basis: 40px; }
+            .tools-panel .divider { margin: 1px 0; }
         }
 
         @media (max-height: 700px) {
-            .tools-panel { top: 80px; bottom: 180px; }
+            .tools-panel { top: 72px; bottom: 180px; padding: 4px 0; gap: 2px; }
+            .tools-panel .tool-btn,
+            .tools-panel .flyout-menu .tool-btn { width: 34px; height: 34px; min-width: 34px; min-height: 34px; flex-basis: 34px; }
+            .tools-panel .divider { margin: 0; }
         }
 
         @media (max-width: 600px) {
@@ -724,13 +899,23 @@
             }
             .props-panel .layer-switch { width: 142px; }
             .props-panel .slider-row { width: 126px; }
-            .props-panel .prop-group:last-child { display: none; }
-            .timeline-panel { left: 10px; right: 10px; bottom: 10px; height: 120px; }
+            .timeline-panel { left: 10px; right: 10px; bottom: 10px; height: 154px; }
+            .timeline-panel.has-motion { height: 196px; }
+            .timeline-panel.has-motion .timeline-frames-row { min-height: 75px; }
+            .movement-track-scroll { min-height: 70px; max-height: 70px; }
+            .movement-track-controls { min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
+            .motion-track-row { height: 34px; }
+            .motion-track-row { grid-auto-columns: 70px; gap: 12px; }
+            .motion-track-cell { width: 70px; }
             .frame-card { min-width: 70px; height: 55px; }
-            .add-frame-btn { min-width: 40px; height: 40px; }
+            .frames-track .add-frame-btn { min-width: 40px; height: 40px; }
             .flyout-menu { left: 48px; }
-            .zoom-controls { right: 10px; bottom: 140px; }
-            .timeline-controls { padding-left: 60px; padding-right: 0; }
+            body.truck-active .flyout-menu { left: 58px; }
+            .timeline-controls { padding-left: 8px; padding-right: 8px; }
+            .timeline-controls-wrapper { gap: 3px; }
+            .timeline-controls .btn-ghost { padding-left: 7px; padding-right: 7px; }
+            .timeline-action { width: 60px; min-width: 60px; }
+            .frame-actions { gap: 4px; padding-right: 6px; }
         }
     </style>
 </head>
@@ -851,6 +1036,18 @@
                     <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('png-sequence')"><i class="fas fa-file-archive"></i> PNG frames ZIP</button>
                 </div>
             </div>
+            <div class="drawing-aids-wrapper header-drawing-aids-wrapper">
+                <button type="button" class="btn-ghost drawing-aids-toggle" id="drawing-aids-toggle" onclick="app.toggleDrawingAids()" aria-expanded="false" aria-controls="drawing-aids-menu" title="Show drawing aids">
+                    <span><i class="fas fa-sliders-h"></i> Drawing Aids</span><i class="fas fa-chevron-down" aria-hidden="true"></i>
+                </button>
+                <div class="drawing-aids-menu" id="drawing-aids-menu" role="menu" hidden>
+                    <button type="button" class="btn-ghost" id="snap-toggle" onclick="app.toggleSnapToGrid()" aria-pressed="false" title="Snap selected objects to a 10px grid"><i class="fas fa-magnet"></i> Snap</button>
+                    <button type="button" class="btn-ghost" id="grid-toggle" onclick="app.toggleGrid()" aria-pressed="false" title="Show a view-only placement grid"><i class="fas fa-th"></i> Grid</button>
+                    <button type="button" class="btn-ghost" id="symmetry-toggle" onclick="app.toggleSymmetry()" aria-pressed="false" title="Mirror freehand brush strokes across the canvas centre"><i class="fas fa-arrows-alt-h"></i> Symmetry</button>
+                    <button type="button" class="btn-ghost" id="reference-add" onclick="app.openReferenceImage()" title="Add a non-exported drawing reference"><i class="fas fa-image"></i> Reference</button>
+                    <button type="button" class="btn-ghost" id="reference-remove" onclick="app.clearReferenceImage()" style="display:none"><i class="fas fa-times"></i> Remove ref.</button>
+                </div>
+            </div>
             <button class="btn-ghost" onclick="app.openSettings()" aria-label="Canvas Settings" title="Canvas Settings"><i class="fas fa-sliders-h"></i></button>
         </div>
     </header>
@@ -858,6 +1055,9 @@
     <div class="glass-panel tools-panel">
         <button type="button" class="tool-btn" id="tool-select" onclick="app.setTool('select')" aria-label="Select tool (V)" title="Select (V)">
             <i class="fas fa-mouse-pointer"></i>
+        </button>
+        <button type="button" class="tool-btn" id="tool-truck" onclick="app.setTool('truck')" aria-label="Truck motion tool" title="Truck motion">
+            <i class="fas fa-truck-moving"></i>
         </button>
 
         <div class="tool-flyout-wrapper" id="brush-wrapper" onclick="app.toggleFlyout('brush-wrapper', 'tool-brush-anchor')">
@@ -918,13 +1118,14 @@
                 <button type="button" class="layer-option active" id="layer-ink" onclick="app.setLayer('ink')" aria-pressed="true" title="Foreground: drawn fresh on each frame (animate here)">Foreground</button>
                 <button type="button" class="layer-option" id="layer-paper" onclick="app.setLayer('shared')" aria-pressed="false" title="Background: shared across all frames (static art appears in every frame)">Background</button>
             </div>
-            <div class="prop-hint" id="layer-hint">Foreground is per-frame; Background is shared across all frames.</div>
         </div>
 
         <div class="prop-group">
             <div class="prop-label">Brush Settings</div>
             <div class="brush-preview" title="Brush size preview">
-                <div class="brush-preview-mark" id="brush-preview-mark"></div>
+                <svg class="brush-preview-curve" viewBox="0 0 300 80" role="img" aria-label="Brush stroke preview">
+                    <path class="brush-preview-mark" id="brush-preview-mark" d="M 24 49 C 76 24 107 23 151 38 S 223 57 274 24"></path>
+                </svg>
             </div>
             <div class="slider-row">
                 <i class="fas fa-circle" style="font-size:0.6rem; color:#aaa;"></i>
@@ -950,15 +1151,6 @@
                 <span id="bg-color-label" style="pointer-events:none; z-index:1; text-shadow:none;">Set Background Color</span>
             </div>
         </div>
-        <div class="prop-group">
-            <div class="prop-label">Placement</div>
-            <button type="button" class="btn-ghost" id="snap-toggle" onclick="app.toggleSnapToGrid()" aria-pressed="false" title="Snap selected objects to a 10px grid"><i class="fas fa-magnet"></i> Snap</button>
-            <button type="button" class="btn-ghost" id="grid-toggle" onclick="app.toggleGrid()" aria-pressed="false" title="Show a view-only placement grid"><i class="fas fa-th"></i> Grid</button>
-            <button type="button" class="btn-ghost" id="symmetry-toggle" onclick="app.toggleSymmetry()" aria-pressed="false" title="Mirror freehand brush strokes across the canvas centre"><i class="fas fa-arrows-alt-h"></i> Symmetry</button>
-            <button type="button" class="btn-ghost" onclick="app.openReferenceImage()" title="Add a non-exported drawing reference"><i class="fas fa-image"></i> Reference</button>
-            <button type="button" class="btn-ghost" id="reference-remove" onclick="app.clearReferenceImage()" style="display:none">Remove ref.</button>
-        </div>
-
         <div class="prop-group" id="onion-settings">
             <div class="prop-label">Onion Skin</div>
             <label class="slider-row" for="onion-count">
@@ -999,11 +1191,6 @@
             <canvas id="background-canvas" width="600" height="600"></canvas>
             <canvas id="rendering-canvas" width="600" height="600"></canvas>
         </div>
-        <div class="zoom-controls">
-            <button type="button" class="zoom-btn" onclick="app.adjustZoom(-0.1)" aria-label="Zoom out"><i class="fas fa-minus"></i></button>
-            <button type="button" class="zoom-val" id="zoom-disp" onclick="app.fitCanvas()" aria-label="Fit canvas to workspace" title="Fit canvas to workspace">100%</button>
-            <button type="button" class="zoom-btn" onclick="app.adjustZoom(0.1)" aria-label="Zoom in"><i class="fas fa-plus"></i></button>
-        </div>
     </div>
 
     <div class="glass-panel timeline-panel">
@@ -1019,19 +1206,46 @@
                 <span class="frame-position" id="frame-position" aria-live="polite">Frame 1 of 1</span>
                 <button type="button" class="btn-ghost" id="next-frame-btn" onclick="app.nextFrame()" aria-label="Next frame" title="Next frame"><i class="fas fa-step-forward"></i></button>
                 <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
-                <label class="slider-row" style="gap:4px; width:auto;" for="frame-hold" title="How many timeline ticks the current frame remains visible">
+                <label class="slider-row timeline-hold" for="frame-hold" title="How many timeline ticks the current frame remains visible">
                     <span style="font-size:0.75rem; color:var(--text-muted);">Hold</span>
-                    <input type="range" id="frame-hold" min="1" max="12" value="1" style="width:48px;" oninput="app.setFrameHold(this.value)">
+                    <input type="range" id="frame-hold" aria-label="Frame hold" min="1" max="12" value="1" oninput="app.setFrameHold(this.value)">
                     <output id="frame-hold-disp" class="slider-val">1f</output>
                 </label>
                 <button type="button" class="btn-ghost" id="loop-mode-btn" onclick="app.toggleLoopMode()" aria-label="Playback mode: loop" aria-pressed="true">Loop</button>
                 <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
-                <i class="fas fa-tachometer-alt" style="color:var(--text-muted); font-size:0.8rem;"></i>
-                <input type="range" aria-label="Playback frames per second" min="1" max="24" value="12" style="width:50px; flex: 0 0 50px; margin:0 5px;" oninput="app.setFps(this.value)">
-                <span id="fps-disp" style="width: 45px; text-align: left; font-size:0.8rem; font-variant-numeric: tabular-nums; color:var(--text-muted)">12 FPS</span>
+                <div class="timeline-fps">
+                    <i class="fas fa-tachometer-alt" style="color:var(--text-muted); font-size:0.8rem;"></i>
+                    <input id="fps-control" type="range" aria-label="Playback frames per second" min="1" max="24" value="12" oninput="app.setFps(this.value)">
+                    <span id="fps-disp" class="fps-value" style="text-align: left; font-size:0.8rem; font-variant-numeric: tabular-nums; color:var(--text-muted)">12 FPS</span>
+                </div>
+                <div class="zoom-controls" aria-label="Canvas zoom">
+                    <button type="button" class="zoom-btn" onclick="app.adjustZoom(-0.1)" aria-label="Zoom out"><i class="fas fa-minus"></i></button>
+                    <button type="button" class="zoom-val" id="zoom-disp" onclick="app.fitCanvas()" aria-label="Fit canvas to workspace" title="Fit canvas to workspace">100%</button>
+                    <button type="button" class="zoom-btn" onclick="app.adjustZoom(0.1)" aria-label="Zoom in"><i class="fas fa-plus"></i></button>
+                </div>
             </div>
+                <div class="frame-actions" aria-label="Frame actions">
+                    <button type="button" class="timeline-action primary add-frame-btn" id="timeline-add" onclick="app.addFrame()" title="Add frame"><i class="fas fa-plus"></i><span>Add</span></button>
+                    <button type="button" class="timeline-action" id="timeline-duplicate" onclick="app.duplicateSelectedFrames()" title="Duplicate selected frame(s)"><i class="far fa-copy"></i><span>Duplicate</span></button>
+                    <button type="button" class="timeline-action" id="timeline-delete" onclick="app.deleteSelectedFrames()" title="Delete selected frame(s)"><i class="fas fa-trash"></i><span>Delete</span></button>
+                    <button type="button" class="timeline-action" id="timeline-copy" onclick="app.copySelectedFrames()" title="Copy selected frame(s)"><i class="far fa-copy"></i><span>Copy</span></button>
+                    <button type="button" class="timeline-action" id="timeline-paste" onclick="app.pasteSelectedFrames()" title="Paste copied frame(s)"><i class="far fa-clipboard"></i><span>Paste</span></button>
+                </div>
         </div>
-        <div class="frames-track" id="frames-list"></div>
+        <div class="timeline-frames-row">
+            <div class="frames-track" id="frames-list"></div>
+        </div>
+        <div class="movement-track-scroll" id="movement-track-scroll" role="region" aria-label="Movement tracks">
+            <div class="movement-track-controls" id="movement-track-controls">
+                <span class="movement-selected" id="movement-selected-label">Select foreground artwork</span>
+                <div class="movement-key-controls" aria-label="Movement keyframe controls">
+                    <button type="button" class="btn-ghost" id="movement-previous-key" onclick="app.selectAdjacentMotionKey(-1)" aria-label="Previous movement key" title="Previous movement key">‹</button>
+                    <button type="button" class="btn-ghost movement-key-toggle" id="movement-add-keyframe" onclick="app.toggleMotionKeyframe()" aria-label="Add movement keyframe" title="Add keyframe at current frame">+</button>
+                    <button type="button" class="btn-ghost" id="movement-next-key" onclick="app.selectAdjacentMotionKey(1)" aria-label="Next movement key" title="Next movement key">›</button>
+                </div>
+            </div>
+            <div class="movement-track-list" id="movement-tracks"></div>
+        </div>
     </div>
 
     <script type="module" src="./src/main.js"></script>

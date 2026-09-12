@@ -59,6 +59,12 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.frames = [{ strokes: [], paperStrokes: [], hold: 1 }];
                 this.paperStrokes = [];
                 this.sharedStrokes = [];
+                this.motionTracks = [];
+                this.motionTrackCounter = 0;
+                this.truckSelectedTrackId = null;
+                this.truckEndFrame = 1;
+                this.motionKeyDrag = null;
+                this.motionDragSaved = false;
                 this.frameIndex = 0;
 
                 this.activeLayer = 'ink';
@@ -242,6 +248,35 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const workspace = document.querySelector('.workspace');
                 c.tabIndex = 0;
 
+                ['brush-wrapper', 'shape-wrapper'].forEach((wrapperId) => {
+                    const wrapper = document.getElementById(wrapperId);
+                    const menu = wrapper?.querySelector('.flyout-menu');
+                    wrapper?.addEventListener('mouseenter', () => {
+                        if (document.body.classList.contains('truck-active')) {
+                            this.portalTruckFlyout(wrapperId);
+                            this.positionTruckFlyout(wrapperId);
+                        }
+                    });
+                    wrapper?.addEventListener('mousemove', () => this.positionTruckFlyout(wrapperId));
+                    wrapper?.addEventListener('mouseleave', () => {
+                        if (!wrapper.classList.contains('expanded')) {
+                            setTimeout(() => {
+                                if (!wrapper.matches(':hover') && !menu?.matches(':hover')) this.setFlyoutExpanded(wrapperId, wrapperId === 'brush-wrapper' ? 'tool-brush-anchor' : 'tool-shape-anchor', false);
+                            }, 150);
+                        }
+                    });
+                    menu?.addEventListener('mouseleave', () => {
+                        if (!wrapper.classList.contains('expanded')) {
+                            setTimeout(() => {
+                                if (!wrapper.matches(':hover') && !menu.matches(':hover')) this.setFlyoutExpanded(wrapperId, wrapperId === 'brush-wrapper' ? 'tool-brush-anchor' : 'tool-shape-anchor', false);
+                            }, 150);
+                        }
+                    });
+                });
+                document.querySelector('.tools-panel')?.addEventListener('scroll', () => {
+                    ['brush-wrapper', 'shape-wrapper'].forEach((wrapperId) => this.positionTruckFlyout(wrapperId));
+                });
+
                 workspace?.addEventListener('wheel', (e) => {
                     if (!e.ctrlKey && !e.metaKey) return;
                     e.preventDefault();
@@ -298,6 +333,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     }
                 });
                 window.addEventListener('pointerup', (e) => {
+                    if (this.motionKeyDrag) this.finishMotionKeyDrag();
                     if (this.panStart && workspace) {
                         workspace.classList.remove('is-panning');
                         workspace.releasePointerCapture?.(e.pointerId);
@@ -321,10 +357,17 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     if (brushWrapper && !brushWrapper.contains(e.target)) this.setFlyoutExpanded('brush-wrapper', 'tool-brush-anchor', false);
                     const exportWrapper = document.getElementById('export-menu-wrapper');
                     if (exportWrapper && !exportWrapper.contains(e.target)) this.setExportMenuOpen(false);
+                    const drawingAids = document.querySelector('.drawing-aids-wrapper');
+                    if (drawingAids && !drawingAids.contains(e.target)) this.setDrawingAidsOpen(false);
                 });
 
                 document.addEventListener('keydown', (e) => {
                     if (e.key === 'Escape') {
+                        if (!document.getElementById('drawing-aids-menu')?.hidden) {
+                            e.preventDefault();
+                            this.setDrawingAidsOpen(false, true);
+                            return;
+                        }
                         if (!document.getElementById('export-menu')?.hidden) {
                             e.preventDefault();
                             this.setExportMenuOpen(false, true);
@@ -560,25 +603,23 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const alpha = type === 'highlighter' ? Math.min(1, this.opacity * 0.4) : this.opacity;
                 const color = type === 'eraser' ? 'rgba(255, 255, 255, 0.55)' : this.hexToRgba(this.brushColor, alpha);
 
-                mark.style.backgroundColor = color;
-                mark.style.border = type === 'eraser' ? '1px solid rgba(0, 0, 0, 0.65)' : 'none';
-                mark.style.boxShadow = type === 'pencil'
-                    ? `0 0 0 1px ${this.hexToRgba(this.brushColor, Math.max(0.45, alpha))}`
-                    : '0 0 0 1px rgba(255, 255, 255, 0.45), 0 0 0 2px rgba(0, 0, 0, 0.25)';
+                // The inspector is a scaled sample, so map the full 1–200
+                // brush-size range into a fitting SVG stroke width instead of
+                // using the viewport-scaled cursor size (which plateaus early).
+                const brushSize = Math.max(1, Math.min(200, Number(this.brushSize) || 1));
+                const previewStrokeWidth = 2 + ((brushSize - 1) / 199) * 32;
 
-                if (type === 'highlighter') {
-                    mark.style.width = brushPreview.previewWidth + 'px';
-                    mark.style.height = brushPreview.previewHeight + 'px';
-                    mark.style.borderRadius = '4px';
-                } else if (type === 'pencil') {
-                    mark.style.width = brushPreview.previewWidth + 'px';
-                    mark.style.height = brushPreview.previewHeight + 'px';
-                    mark.style.borderRadius = '2px';
-                } else {
-                    mark.style.width = brushPreview.previewWidth + 'px';
-                    mark.style.height = brushPreview.previewHeight + 'px';
-                    mark.style.borderRadius = '999px';
-                }
+                // Keep the compact wave preview responsive to the same brush
+                // type, color, opacity, and selected size as the canvas cursor.
+                mark.style.stroke = color;
+                mark.style.strokeWidth = previewStrokeWidth.toFixed(2);
+                mark.style.opacity = '1';
+                const lightStroke = type === 'eraser' || String(this.brushColor).toLowerCase() === '#ffffff';
+                mark.style.filter = lightStroke
+                    ? 'drop-shadow(0 0 1px rgba(0, 0, 0, 0.55))'
+                    : type === 'pencil'
+                    ? `drop-shadow(0 0 0 ${this.hexToRgba(this.brushColor, Math.max(0.45, alpha))})`
+                    : 'none';
             }
 
             getPos(e) {
@@ -662,6 +703,12 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const textSize = Math.max(12, Math.min(200, Number(document.getElementById('text-size').value) || 40));
                 const textBold = document.getElementById('text-bold').checked;
                 if (val) {
+                    if (this.editingTextObject && this.getMotionTrackForObject(this.editingTextObject)) {
+                        this.showExportNotice('Use Truck to edit movement on this artwork', true);
+                        this.closeModal('text-modal');
+                        this.editingTextObject = null;
+                        return;
+                    }
                     this.saveState();
                     if (this.editingTextObject) {
                         const textObj = this.editingTextObject;
@@ -761,6 +808,19 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     const isSelected = selected.has(index);
                     card.classList.toggle('frame-selected', isSelected);
                 });
+                this.syncFrameActions();
+            }
+
+            syncFrameActions() {
+                const duplicate = document.getElementById('timeline-duplicate');
+                const remove = document.getElementById('timeline-delete');
+                const copy = document.getElementById('timeline-copy');
+                const paste = document.getElementById('timeline-paste');
+                const hasFrames = this.frames.length > 0;
+                if (duplicate) duplicate.disabled = !hasFrames;
+                if (remove) remove.disabled = !hasFrames;
+                if (copy) copy.disabled = !hasFrames;
+                if (paste) paste.disabled = !Array.isArray(this.frameClipboard?.frames) || !this.frameClipboard.frames.length;
             }
 
             clearFrameSelection(render = true) {
@@ -804,11 +864,13 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             }
 
             copySelectedFrames() {
-                const indices = this.getSelectedFrameIndices();
+                const selected = this.getSelectedFrameIndices();
+                const indices = selected.length ? selected : [this.frameIndex];
                 if (!indices.length) return false;
                 this.frameClipboard = {
                     frames: indices.map((index) => this.cloneData(this.frames[index]))
                 };
+                this.syncFrameActions();
                 return true;
             }
 
@@ -820,6 +882,17 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const insertAt = this.frameIndex + 1;
                 const pastedFrames = this.cloneData(copiedFrames);
                 this.frames.splice(insertAt, 0, ...pastedFrames);
+                const pastedMotionIds = pastedFrames.map((frame) => new Set((frame.strokes || []).map((stroke) => stroke.motionTrackId).filter(Boolean)));
+                this.remapMotionTracksAfterInsert(insertAt, pastedFrames.length);
+                pastedFrames.forEach((frame, offset) => {
+                    const frameIndex = insertAt + offset;
+                    pastedMotionIds[offset].forEach((trackId) => {
+                        const track = this.getMotionTrack(trackId);
+                        if (track && !track.excludedFrames.includes(frameIndex)) track.excludedFrames.push(frameIndex);
+                    });
+                    (frame.strokes || []).forEach((stroke) => this.stripMotionMetadata(stroke));
+                });
+                this.motionTracks.forEach((track) => this.applyMotionTrack(track));
                 this.selectedFrameIndices = pastedFrames.map((_, offset) => insertAt + offset);
                 this.frameSelectionAnchor = insertAt;
                 this.timelineSelectionFocused = true;
@@ -944,6 +1017,443 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 return this.activeLayer === 'ink' ? frame.strokes : this.sharedStrokes;
             }
 
+            createMotionId() {
+                this.motionTrackCounter += 1;
+                return `motion-${Date.now().toString(36)}-${this.motionTrackCounter.toString(36)}`;
+            }
+
+            normalizeMotionTracks(tracks = []) {
+                if (!Array.isArray(tracks)) return [];
+                return tracks.map((raw, index) => {
+                    const fallbackId = `motion-${index + 1}`;
+                    const id = String(raw?.id || fallbackId);
+                    const legacyInterpolation = raw?.interpolation === 'curved' ? 'curved' : 'straight';
+                    const maxFrame = Math.max(0, this.frames.length - 1);
+                    const startFrame = Math.max(0, Math.min(maxFrame, Number.parseInt(raw?.startFrame, 10) || 0));
+                    const endFrame = Math.max(startFrame, Math.min(maxFrame, Number.parseInt(raw?.endFrame, 10) || startFrame));
+                    const keyframes = (Array.isArray(raw?.keyframes) ? raw.keyframes : [])
+                        .map((keyframe) => ({
+                            frame: Math.max(0, Math.min(maxFrame, Number.parseInt(keyframe?.frame, 10) || 0)),
+                            dx: Number.isFinite(Number(keyframe?.dx)) ? Number(keyframe.dx) : 0,
+                            dy: Number.isFinite(Number(keyframe?.dy)) ? Number(keyframe.dy) : 0,
+                            interpolation: keyframe?.interpolation === 'curved' || keyframe?.interpolation === 'straight'
+                                ? keyframe.interpolation
+                                : legacyInterpolation
+                        }))
+                        .filter((keyframe, keyIndex, all) => all.findIndex((candidate) => candidate.frame === keyframe.frame) === keyIndex)
+                        .sort((a, b) => a.frame - b.frame);
+                    const baseObject = this.cloneData(raw?.baseObject || raw?.object || null);
+                    if (!baseObject) return null;
+                    this.stripMotionMetadata(baseObject);
+                    return {
+                        id,
+                        objectId: String(raw?.objectId || id),
+                        layer: 'ink',
+                        startFrame,
+                        endFrame,
+                        interpolation: legacyInterpolation,
+                        stackIndex: Math.max(0, Number.parseInt(raw?.stackIndex, 10) || 0),
+                        excludedFrames: [...new Set((Array.isArray(raw?.excludedFrames) ? raw.excludedFrames : [])
+                            .map((frame) => Number.parseInt(frame, 10))
+                            .filter((frame) => Number.isInteger(frame) && frame >= startFrame && frame <= endFrame))].sort((a, b) => a - b),
+                        baseObject,
+                        keyframes: keyframes.length ? keyframes : [{ frame: startFrame, dx: 0, dy: 0, interpolation: legacyInterpolation }]
+                    };
+                }).filter(Boolean);
+            }
+
+            stripMotionMetadata(object) {
+                if (!object || typeof object !== 'object') return object;
+                delete object.motionTrackId;
+                if (object.type === 'group') (object.items || []).forEach((item) => this.stripMotionMetadata(item));
+                return object;
+            }
+
+            getMotionTrack(id) {
+                return this.motionTracks.find((track) => track.id === id) || null;
+            }
+
+            getMotionTrackForObject(object) {
+                return this.getMotionTrack(object?.motionTrackId);
+            }
+
+            getMotionTrackForSelection() {
+                if (!this.selectedObject) return null;
+                if (this.selectedObject.isGroup && !this.selectedObject.isPersistentGroup) {
+                    const trackedItem = this.selectedObject.items?.find((item) => item.stroke?.motionTrackId);
+                    return this.getMotionTrackForObject(trackedItem?.stroke);
+                }
+                const stroke = this.selectedObject.isPersistentGroup
+                    ? this.selectedObject.persistentGroupStroke
+                    : this.selectedObject.stroke;
+                return this.getMotionTrackForObject(stroke);
+            }
+
+            motionDirectEditBlocked() {
+                if (!this.getMotionTrackForSelection()) return false;
+                this.showExportNotice('Use Truck to edit movement on this artwork', true);
+                return true;
+            }
+
+            translateStrokeObject(object, dx, dy) {
+                if (!object || (!dx && !dy)) return object;
+                if (object.type === 'group') {
+                    (object.items || []).forEach((item) => this.translateStrokeObject(item, dx, dy));
+                } else if (object.type === 'text') {
+                    object.x += dx;
+                    object.y += dy;
+                } else {
+                    (object.points || []).forEach((point) => { point.x += dx; point.y += dy; });
+                }
+                if (Array.isArray(object.holes)) this.translateHoles(object, object.holes, dx, dy);
+                return object;
+            }
+
+            getMotionOffset(track, frameIndex = this.frameIndex) {
+                const keys = [...(track?.keyframes || [])].sort((a, b) => a.frame - b.frame);
+                if (!keys.length) return { dx: 0, dy: 0 };
+                if (frameIndex <= keys[0].frame) return { dx: keys[0].dx, dy: keys[0].dy };
+                if (frameIndex >= keys[keys.length - 1].frame) {
+                    const last = keys[keys.length - 1];
+                    return { dx: last.dx, dy: last.dy };
+                }
+                let rightIndex = keys.findIndex((keyframe) => keyframe.frame >= frameIndex);
+                if (rightIndex < 1) rightIndex = 1;
+                const left = keys[rightIndex - 1];
+                const right = keys[rightIndex];
+                const span = Math.max(1, right.frame - left.frame);
+                const t = Math.max(0, Math.min(1, (frameIndex - left.frame) / span));
+                const interpolation = right.interpolation || track.interpolation || 'straight';
+                if (interpolation !== 'curved' || keys.length < 3) {
+                    return {
+                        dx: left.dx + (right.dx - left.dx) * t,
+                        dy: left.dy + (right.dy - left.dy) * t
+                    };
+                }
+                const prev = keys[rightIndex - 2] || left;
+                const next = keys[rightIndex + 1] || right;
+                const cubic = (p0, p1, p2, p3) => {
+                    const c1 = p1 + (p2 - p0) / 6;
+                    const c2 = p2 - (p3 - p1) / 6;
+                    const value = (1 - t) ** 3 * p1 + 3 * (1 - t) ** 2 * t * c1 + 3 * (1 - t) * t ** 2 * c2 + t ** 3 * p2;
+                    return Number.isFinite(value) ? value : p1;
+                };
+                return {
+                    dx: cubic(prev.dx, left.dx, right.dx, next.dx),
+                    dy: cubic(prev.dy, left.dy, right.dy, next.dy)
+                };
+            }
+
+            setMotionTrackKeyframe(track, frameIndex, offset, apply = true) {
+                if (!track) return;
+                const frame = Math.max(0, Math.min(this.frames.length - 1, Number.parseInt(frameIndex, 10) || 0));
+                const next = { frame, dx: Number(offset?.dx) || 0, dy: Number(offset?.dy) || 0 };
+                const existing = track.keyframes.find((keyframe) => keyframe.frame === frame);
+                if (existing) {
+                    existing.dx = next.dx;
+                    existing.dy = next.dy;
+                } else {
+                    next.interpolation = 'straight';
+                    track.keyframes.push(next);
+                    track.keyframes.sort((a, b) => a.frame - b.frame);
+                }
+                track.startFrame = Math.min(track.startFrame, frame);
+                track.endFrame = Math.max(track.endFrame, frame);
+                if (apply) this.applyMotionTrack(track);
+            }
+
+            applyMotionTrack(track) {
+                if (!track?.baseObject) return;
+                this.frames.forEach((frame) => {
+                    frame.strokes = frame.strokes.filter((stroke) => stroke.motionTrackId !== track.id);
+                });
+                const start = Math.max(0, Math.min(this.frames.length - 1, track.startFrame));
+                const end = Math.max(start, Math.min(this.frames.length - 1, track.endFrame));
+                const excludedFrames = new Set(track.excludedFrames || []);
+                for (let frameIndex = start; frameIndex <= end; frameIndex++) {
+                    if (excludedFrames.has(frameIndex)) continue;
+                    const copy = this.cloneData(track.baseObject);
+                    const offset = this.getMotionOffset(track, frameIndex);
+                    this.translateStrokeObject(copy, offset.dx, offset.dy);
+                    copy.motionTrackId = track.id;
+                    const insertAt = Math.min(this.frames[frameIndex].strokes.length, Math.max(0, track.stackIndex || 0));
+                    this.frames[frameIndex].strokes.splice(insertAt, 0, copy);
+                }
+                if (this.truckSelectedTrackId === track.id) this.selectMotionTrack(track.id, false);
+            }
+
+            selectMotionTrack(trackId, render = true) {
+                const track = this.getMotionTrack(trackId);
+                if (!track) return false;
+                this.truckSelectedTrackId = track.id;
+                const index = this.frames[this.frameIndex]?.strokes.findIndex((stroke) => stroke.motionTrackId === track.id) ?? -1;
+                const stroke = index > -1 ? this.frames[this.frameIndex].strokes[index] : this.getMotionPreviewStroke(track);
+                if (stroke) {
+                    if (stroke.type === 'group') {
+                        const bounds = this.getStrokeBounds(stroke);
+                        this.selectedObject = {
+                            isGroup: true,
+                            isPersistentGroup: true,
+                            persistentGroupStroke: stroke,
+                            items: (stroke.items || []).map((item, itemIndex) => ({ stroke: item, layer: 'ink', index: itemIndex })),
+                            bounds,
+                            angle: stroke.angle || 0,
+                            isMotionPreview: index < 0
+                        };
+                    } else {
+                        this.selectedObject = { stroke, layer: 'ink', index, isMotionPreview: index < 0 };
+                        this.calcBounds(stroke);
+                    }
+                }
+                this.updateMotionPanel();
+                if (render) this.renderCanvas();
+                return true;
+            }
+
+            ensureFramesThrough(index) {
+                const target = Math.max(0, Number.parseInt(index, 10) || 0);
+                while (this.frames.length <= target) this.frames.push({ strokes: [], paperStrokes: [], hold: 1 });
+            }
+
+            remapMotionTracksAfterInsert(index, count = 1) {
+                this.motionTracks.forEach((track) => {
+                    if (track.startFrame >= index) track.startFrame += count;
+                    if (track.endFrame >= index) track.endFrame += count;
+                    track.keyframes.forEach((keyframe) => { if (keyframe.frame >= index) keyframe.frame += count; });
+                    track.excludedFrames = (track.excludedFrames || []).map((frame) => frame >= index ? frame + count : frame);
+                });
+            }
+
+            remapMotionTracksAfterDelete(index) {
+                const removeIds = new Set();
+                this.motionTracks.forEach((track) => {
+                    const oldStart = track.startFrame;
+                    const oldEnd = track.endFrame;
+                    if (oldStart === index && oldEnd === index) {
+                        removeIds.add(track.id);
+                        return;
+                    }
+                    track.keyframes = track.keyframes
+                        .filter((keyframe) => keyframe.frame !== index)
+                        .map((keyframe) => ({ ...keyframe, frame: keyframe.frame > index ? keyframe.frame - 1 : keyframe.frame }));
+                    track.excludedFrames = (track.excludedFrames || [])
+                        .filter((frame) => frame !== index)
+                        .map((frame) => frame > index ? frame - 1 : frame);
+                    track.startFrame = oldStart > index ? oldStart - 1 : oldStart;
+                    track.endFrame = oldEnd > index ? oldEnd - 1 : oldEnd === index ? Math.max(track.startFrame, index - 1) : oldEnd;
+                    track.startFrame = Math.max(0, Math.min(this.frames.length - 1, track.startFrame));
+                    track.endFrame = Math.max(track.startFrame, Math.min(this.frames.length - 1, track.endFrame));
+                    if (!track.keyframes.length) track.keyframes.push({ frame: track.startFrame, dx: 0, dy: 0, interpolation: track.interpolation || 'straight' });
+                });
+                this.motionTracks = this.motionTracks.filter((track) => !removeIds.has(track.id) && track.startFrame <= track.endFrame);
+                this.motionTracks.forEach((track) => this.applyMotionTrack(track));
+            }
+
+            remapMotionTracksAfterReorder(fromIndex, toIndex) {
+                const mapIndex = (index) => {
+                    if (index === fromIndex) return toIndex;
+                    if (fromIndex < toIndex && index > fromIndex && index <= toIndex) return index - 1;
+                    if (fromIndex > toIndex && index >= toIndex && index < fromIndex) return index + 1;
+                    return index;
+                };
+                this.motionTracks.forEach((track) => {
+                    const mappedStart = mapIndex(track.startFrame);
+                    const mappedEnd = mapIndex(track.endFrame);
+                    track.startFrame = Math.min(mappedStart, mappedEnd);
+                    track.endFrame = Math.max(mappedStart, mappedEnd);
+                    track.keyframes.forEach((keyframe) => { keyframe.frame = mapIndex(keyframe.frame); });
+                    track.excludedFrames = (track.excludedFrames || []).map(mapIndex);
+                    track.keyframes.sort((a, b) => a.frame - b.frame);
+                });
+                this.motionTracks.forEach((track) => this.applyMotionTrack(track));
+            }
+
+            getMotionPreviewStroke(track, frameIndex = this.frameIndex) {
+                if (!track || frameIndex >= track.startFrame && frameIndex <= track.endFrame) return null;
+                if ((track.excludedFrames || []).includes(frameIndex)) return null;
+                const copy = this.cloneData(track.baseObject);
+                const offset = this.getMotionOffset(track, frameIndex);
+                this.translateStrokeObject(copy, offset.dx, offset.dy);
+                copy.motionTrackId = track.id;
+                return copy;
+            }
+
+            startMotion() {
+                if (this.activeLayer !== 'ink') {
+                    this.showExportNotice('Truck movement is available for foreground artwork', true);
+                    return false;
+                }
+                if (!this.selectedObject) {
+                    this.showExportNotice('Select foreground artwork first', true);
+                    return false;
+                }
+                const existing = this.getMotionTrackForSelection();
+                if (existing) {
+                    this.truckSelectedTrackId = existing.id;
+                    this.updateMotionPanel();
+                    return true;
+                }
+                this.saveState();
+                const list = this.getActiveStrokeList();
+                let source;
+                let stackIndex = list.length;
+                if (this.selectedObject.isGroup && !this.selectedObject.isPersistentGroup) {
+                    const itemStrokes = this.selectedObject.items.map((item) => item.stroke);
+                    stackIndex = Math.min(...itemStrokes.map((item) => list.indexOf(item)).filter((index) => index >= 0), list.length);
+                    itemStrokes.forEach((item) => {
+                        const itemIndex = list.indexOf(item);
+                        if (itemIndex > -1) list.splice(itemIndex, 1);
+                    });
+                    source = { type: 'group', items: itemStrokes, angle: 0 };
+                } else {
+                    source = this.selectedObject.isPersistentGroup ? this.selectedObject.persistentGroupStroke : this.selectedObject.stroke;
+                    const sourceIndex = list.indexOf(source);
+                    stackIndex = sourceIndex > -1 ? sourceIndex : list.length;
+                    if (sourceIndex > -1) list.splice(sourceIndex, 1);
+                }
+                const track = {
+                    id: this.createMotionId(),
+                    objectId: this.createMotionId(),
+                    layer: 'ink',
+                    startFrame: this.frameIndex,
+                    endFrame: this.frameIndex,
+                    interpolation: 'straight',
+                    stackIndex,
+                    excludedFrames: [],
+                    baseObject: this.stripMotionMetadata(this.cloneData(source)),
+                    keyframes: [{ frame: this.frameIndex, dx: 0, dy: 0, interpolation: 'straight' }]
+                };
+                this.motionTracks.push(track);
+                this.truckSelectedTrackId = track.id;
+                this.applyMotionTrack(track);
+                this.renderUI();
+                this.renderCanvas();
+                this.saveStorage();
+                return true;
+            }
+
+            addMotionKeyframe() {
+                let track = this.getMotionTrackForSelection();
+                if (!track) return this.startMotion();
+                this.saveState();
+                const offset = this.getMotionOffset(track, this.frameIndex);
+                this.setMotionTrackKeyframe(track, this.frameIndex, offset);
+                this.selectMotionTrack(track.id);
+                this.renderUI(true);
+                this.updateThumbnails();
+                this.saveStorage();
+                return true;
+            }
+
+            toggleMotionKeyframe() {
+                const track = this.getMotionTrackForSelection();
+                const hasKey = Boolean(track?.keyframes.some((keyframe) => keyframe.frame === this.frameIndex));
+                return hasKey ? this.removeMotionKeyframe() : this.addMotionKeyframe();
+            }
+
+            selectAdjacentMotionKey(direction) {
+                const track = this.getMotionTrackForSelection();
+                if (!track) return false;
+                const keys = [...track.keyframes].sort((a, b) => a.frame - b.frame);
+                const target = direction < 0
+                    ? [...keys].reverse().find((keyframe) => keyframe.frame < this.frameIndex)
+                    : keys.find((keyframe) => keyframe.frame > this.frameIndex);
+                if (!target) return false;
+                return this.selectFrame(target.frame);
+            }
+
+            toggleMotionKeyInterpolation(trackId, frameIndex) {
+                const track = this.getMotionTrack(trackId);
+                const frame = Number.parseInt(frameIndex, 10);
+                const keyframes = [...(track?.keyframes || [])].sort((a, b) => a.frame - b.frame);
+                const keyIndex = keyframes.findIndex((keyframe) => keyframe.frame === frame);
+                if (!track || keyIndex <= 0) return false;
+                const keyframe = track.keyframes.find((candidate) => candidate.frame === frame);
+                if (!keyframe) return false;
+                const current = keyframe.interpolation || track.interpolation || 'straight';
+                const value = current === 'curved' ? 'straight' : 'curved';
+                this.saveState();
+                keyframe.interpolation = value;
+                this.applyMotionTrack(track);
+                this.selectMotionTrack(track.id, false);
+                this.renderUI(true);
+                this.renderCanvas();
+                this.updateThumbnails();
+                this.saveStorage();
+                return true;
+            }
+
+            removeMotionKeyframe() {
+                const track = this.getMotionTrackForSelection();
+                const frame = this.frameIndex;
+                if (!track || !track.keyframes.some((keyframe) => keyframe.frame === frame)) return false;
+                this.saveState();
+                if (track.keyframes.length === 1) {
+                    this.frames.forEach((currentFrame) => {
+                        currentFrame.strokes = currentFrame.strokes.map((stroke) => {
+                            if (stroke.motionTrackId !== track.id) return stroke;
+                            return this.stripMotionMetadata(stroke);
+                        });
+                    });
+                    this.motionTracks = this.motionTracks.filter((candidate) => candidate.id !== track.id);
+                    this.truckSelectedTrackId = null;
+                    if (this.selectedObject) this.selectedObject.isMotionPreview = false;
+                } else {
+                    track.keyframes = track.keyframes.filter((keyframe) => keyframe.frame !== frame);
+                    // Keep the original span so removing an endpoint holds the
+                    // remaining endpoint's position instead of deleting artwork.
+                    this.applyMotionTrack(track);
+                    this.selectMotionTrack(track.id, false);
+                }
+                this.renderUI(true);
+                this.renderCanvas();
+                this.updateThumbnails();
+                this.saveStorage();
+                return true;
+            }
+
+            setMotionKeyframe() {
+                return this.addMotionKeyframe();
+            }
+
+            setMotionEndFrame(value) {
+                const track = this.getMotionTrack(this.truckSelectedTrackId) || this.getMotionTrackForSelection();
+                if (!track) return;
+                const requested = Math.max(track.startFrame + 1, (Number.parseInt(value, 10) || track.endFrame + 1) - 1);
+                this.saveState();
+                const previousEndpoint = track.keyframes.find((keyframe) => keyframe.frame === track.endFrame) || {
+                    ...this.getMotionOffset(track, track.endFrame), frame: track.endFrame
+                };
+                this.ensureFramesThrough(requested);
+                track.endFrame = requested;
+                track.keyframes = track.keyframes.filter((keyframe) => keyframe.frame < previousEndpoint.frame && keyframe.frame <= requested);
+                track.excludedFrames = (track.excludedFrames || []).filter((frame) => frame >= track.startFrame && frame <= requested);
+                this.setMotionTrackKeyframe(track, requested, previousEndpoint, false);
+                this.applyMotionTrack(track);
+                this.selectMotionTrack(track.id);
+                this.renderUI();
+                this.renderCanvas();
+                this.saveStorage();
+            }
+
+            setMotionPath(value) {
+                const track = this.getMotionTrackForSelection() || this.getMotionTrack(this.truckSelectedTrackId);
+                if (!track) return;
+                this.saveState();
+                track.interpolation = value === 'curved' ? 'curved' : 'straight';
+                track.keyframes.forEach((keyframe, index) => {
+                    if (index > 0) keyframe.interpolation = track.interpolation;
+                });
+                this.applyMotionTrack(track);
+                this.renderUI(true);
+                this.renderCanvas();
+                this.saveStorage();
+            }
+
+            toggleMotionPreview() {
+                this.togglePlay();
+            }
+
             saveState() {
                 // Frame selection is transient UI state; any document mutation
                 // invalidates its old indexes before the history snapshot starts.
@@ -953,6 +1463,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const state = {
                     frames: this.cloneData(this.frames),
                     sharedStrokes: this.cloneData(this.sharedStrokes),
+                    motionTracks: this.cloneData(this.motionTracks),
                     frameIndex: this.frameIndex,
                     bgColor: this.selectedBgColor,
                     width: this.canvasWidth,
@@ -968,6 +1479,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const currentState = {
                     frames: this.cloneData(this.frames),
                     sharedStrokes: this.cloneData(this.sharedStrokes),
+                    motionTracks: this.cloneData(this.motionTracks),
                     frameIndex: this.frameIndex,
                     bgColor: this.selectedBgColor,
                     width: this.canvasWidth,
@@ -978,6 +1490,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const prevState = JSON.parse(this.history.pop());
                 this.frames = this.normalizeFrames(prevState.frames, prevState.paperStrokes);
                 this.sharedStrokes = this.materializeErasers(prevState.sharedStrokes || []);
+                this.motionTracks = this.normalizeMotionTracks(prevState.motionTracks || []);
                 this.frameIndex = prevState.frameIndex;
                 this.selectedBgColor = prevState.bgColor;
                 if (prevState.palette) { this.palette = prevState.palette; this.renderPalette(); }
@@ -996,6 +1509,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const currentState = {
                     frames: this.cloneData(this.frames),
                     sharedStrokes: this.cloneData(this.sharedStrokes),
+                    motionTracks: this.cloneData(this.motionTracks),
                     frameIndex: this.frameIndex,
                     bgColor: this.selectedBgColor,
                     width: this.canvasWidth,
@@ -1006,6 +1520,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const nextState = JSON.parse(this.redoStack.pop());
                 this.frames = this.normalizeFrames(nextState.frames, nextState.paperStrokes);
                 this.sharedStrokes = this.materializeErasers(nextState.sharedStrokes || []);
+                this.motionTracks = this.normalizeMotionTracks(nextState.motionTracks || []);
                 this.frameIndex = nextState.frameIndex;
                 this.selectedBgColor = nextState.bgColor;
                 if (nextState.palette) { this.palette = nextState.palette; this.renderPalette(); }
@@ -1114,9 +1629,59 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 }
                 // ── End Ctrl+Click ───────────────────────────────────────────────
 
+                if (this.tool === 'truck') {
+                    let found = this.hitTest(pos);
+                    const currentStroke = this.selectedObject?.isPersistentGroup
+                        ? this.selectedObject.persistentGroupStroke
+                        : this.selectedObject?.stroke;
+                    if (found && (!this.selectedObject || found.stroke !== currentStroke)) {
+                        if (found.isPersistentGroup) {
+                            const group = found.stroke;
+                            const bounds = this.getStrokeBounds(group);
+                            this.selectedObject = {
+                                isGroup: true,
+                                isPersistentGroup: true,
+                                persistentGroupStroke: group,
+                                items: (group.items || []).map((item, index) => ({ stroke: item, layer: 'ink', index })),
+                                bounds,
+                                angle: group.angle || 0
+                            };
+                        } else {
+                            this.selectedObject = found;
+                            this.calcBounds(found.stroke);
+                        }
+                        const foundTrack = this.getMotionTrackForSelection();
+                        this.truckSelectedTrackId = foundTrack?.id || null;
+                        if (found.isMotionPreview) this.selectedObject.isMotionPreview = true;
+                        this.updateMotionPanel();
+                        this.renderMotionTracks();
+                        this.renderCanvas();
+                    } else if (!found && (!this.selectedObject || !this.isInBounds(pos, this.selectedObject.bounds))) {
+                        this.selectedObject = null;
+                        this.truckSelectedTrackId = null;
+                        this.updateMotionPanel();
+                        this.renderMotionTracks();
+                        this.renderCanvas();
+                        return;
+                    }
+                    if (!this.selectedObject || !this.isInBounds(pos, this.selectedObject.bounds)) return;
+                    const track = this.getMotionTrackForSelection();
+                    this.truckSelectedTrackId = track?.id || null;
+                    this.dragMode = 'motion-move';
+                    this.dragStart = pos;
+                    this.dragTrack = track;
+                    this.dragStartOffset = track ? this.getMotionOffset(track, this.frameIndex) : { dx: 0, dy: 0 };
+                    this.motionDragSaved = false;
+                    return;
+                }
+
                 if (this.tool === 'bucket') {
-                    this.saveState();
                     const found = this.hitTest(pos);
+                    if (found?.stroke?.motionTrackId) {
+                        this.showExportNotice('Use Truck to edit movement on this artwork', true);
+                        return;
+                    }
+                    this.saveState();
                     if (found) {
                         found.stroke.fillColor = this.brushColor;
                         if (found.stroke.type === 'text') found.stroke.color = this.brushColor;
@@ -1318,11 +1883,47 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             onMove(pos, pressure = 0.5) {
                 if (this.isPlaying) return;
 
+                if (this.tool === 'truck') {
+                    if (this.dragMode === 'motion-move' && this.dragStart) {
+                        const { dx, dy } = this.getMoveDelta(pos);
+                        if (!dx && !dy && !this.motionDragSaved) return;
+                        if (!this.dragTrack) {
+                            if (!this.startMotion()) return;
+                            this.dragTrack = this.getMotionTrackForSelection() || this.getMotionTrack(this.truckSelectedTrackId);
+                            this.dragStartOffset = { dx: 0, dy: 0 };
+                            this.motionDragSaved = true;
+                        }
+                        if (!this.dragTrack) return;
+                        if (!this.motionDragSaved) {
+                            this.saveState();
+                            this.motionDragSaved = true;
+                        }
+                        this.setMotionTrackKeyframe(this.dragTrack, this.frameIndex, {
+                            dx: this.dragStartOffset.dx + dx,
+                            dy: this.dragStartOffset.dy + dy
+                        });
+                        this.truckSelectedTrackId = this.dragTrack.id;
+                        this.updateMotionPanel();
+                        this.renderCanvas();
+                    }
+                    return;
+                }
+
                 if (this.tool === 'select') {
                     if (this.isSelectingBox) {
                         this.selectionCurr = pos;
                         this.renderCanvas();
                         return;
+                    }
+
+                    if (this.dragMode && this.selectedObject && this.getMotionTrackForSelection()) {
+                        const { dx, dy } = this.getMoveDelta(pos);
+                        if (dx || dy) {
+                            this.dragMode = null;
+                            this.showExportNotice('Use Truck to edit movement on this artwork', true);
+                            this.renderCanvas();
+                            return;
+                        }
                     }
 
                     if (this.dragMode && this.selectedObject) {
@@ -1619,9 +2220,15 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     this.saveStorage();
                 }
                 if (this.dragMode) {
+                    const finishedDragMode = this.dragMode;
                     this.dragMode = null;
                     this.updateThumbnails();
+                    if (finishedDragMode === 'motion-move') this.renderMotionTracks();
                     this.saveStorage();
+                    this.dragTrack = null;
+                    this.dragStart = null;
+                    this.dragStartOffset = null;
+                    this.motionDragSaved = false;
                 }
                 if (this.draggedFrameIndex !== null) {
                     this.draggedFrameIndex = null;
@@ -1685,6 +2292,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const radius = Math.max(0.5, this.brushSize / 2);
                 const next = [];
                 let changed = false;
+                this.motionEraseBlocked = false;
 
                 list.forEach(stroke => {
                     const pieces = this.eraseStrokeWithSegment(stroke, from, to, radius);
@@ -1696,10 +2304,15 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     list.splice(0, list.length, ...next);
                     this.selectedObject = null;
                 }
+                if (this.motionEraseBlocked) this.showExportNotice('Use Truck to edit movement on animated artwork', true);
             }
 
             eraseStrokeWithSegment(stroke, from, to, radius, holeFrom = from, holeTo = to) {
                 if (!stroke) return [];
+                if (stroke.motionTrackId) {
+                    if (this.eraserIntersectsBounds(this.getStrokeBounds(stroke), from, to, radius)) this.motionEraseBlocked = true;
+                    return [stroke];
+                }
 
                 if (stroke.type === 'group') {
                     const keptItems = [];
@@ -1911,7 +2524,19 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     }
                     return null;
                 };
-                if (this.activeLayer === 'ink') return checkList(this.frames[this.frameIndex].strokes, 'ink');
+                if (this.activeLayer === 'ink') {
+                    const found = checkList(this.frames[this.frameIndex].strokes, 'ink');
+                    if (found) return found;
+                    if (this.tool === 'truck' && !this.isPlaying && this.activeLayer === 'ink' && this.truckSelectedTrackId) {
+                        const track = this.getMotionTrack(this.truckSelectedTrackId);
+                        const preview = this.getMotionPreviewStroke(track);
+                        if (preview) {
+                            const foundPreview = checkList([preview], 'ink');
+                            if (foundPreview) return { ...foundPreview, index: -1, isMotionPreview: true };
+                        }
+                    }
+                    return null;
+                }
                 return checkList(this.sharedStrokes, 'shared');
             }
 
@@ -2113,6 +2738,58 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
             }
 
+            drawMotionGuide(ctx) {
+                if (this.tool !== 'truck' || this.isPlaying) return;
+                const track = this.getMotionTrack(this.truckSelectedTrackId) || this.getMotionTrackForSelection();
+                if (!track) return;
+                const baseBounds = this.getStrokeBounds(track.baseObject);
+                const baseCenter = { x: baseBounds.x + baseBounds.w / 2, y: baseBounds.y + baseBounds.h / 2 };
+                const points = [];
+                const guideStart = Number(track.startFrame);
+                const guideEnd = Number(track.endFrame);
+                const guideSpan = Math.max(0, guideEnd - guideStart);
+                const guideSteps = Math.max(1, Math.ceil(guideSpan * 4));
+                for (let step = 0; step <= guideSteps; step++) {
+                    const frame = guideStart + (guideSpan * step / guideSteps);
+                    const offset = this.getMotionOffset(track, frame);
+                    points.push({ x: baseCenter.x + offset.dx, y: baseCenter.y + offset.dy });
+                }
+                if (points.length < 2) return;
+                const keyframePoints = (track.keyframes || []).map((keyframe) => ({
+                    x: baseCenter.x + keyframe.dx,
+                    y: baseCenter.y + keyframe.dy
+                }));
+                ctx.save();
+                ctx.strokeStyle = 'rgba(10, 132, 255, 0.78)';
+                ctx.lineWidth = 1.25;
+                ctx.beginPath();
+                ctx.moveTo(points[0].x, points[0].y);
+                points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+                ctx.stroke();
+                // Short perpendicular ties make the guide read as a thin train track.
+                for (let index = 0; index < points.length; index += Math.max(1, Math.floor(points.length / 8))) {
+                    const point = points[index];
+                    const before = points[Math.max(0, index - 1)];
+                    const after = points[Math.min(points.length - 1, index + 1)];
+                    const length = Math.hypot(after.x - before.x, after.y - before.y) || 1;
+                    const nx = -(after.y - before.y) / length * 4;
+                    const ny = (after.x - before.x) / length * 4;
+                    ctx.beginPath();
+                    ctx.moveTo(point.x - nx, point.y - ny);
+                    ctx.lineTo(point.x + nx, point.y + ny);
+                    ctx.stroke();
+                }
+                keyframePoints.forEach((point) => {
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+                    ctx.fillStyle = '#fff';
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(10, 132, 255, 0.9)';
+                    ctx.stroke();
+                });
+                ctx.restore();
+            }
+
             rectIntersect(r1, r2) {
                 return !(r2.x > r1.x + r1.w || r2.x + r2.w < r1.x || r2.y > r1.y + r1.h || r2.y + r2.h < r1.y);
             }
@@ -2160,6 +2837,11 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
                 ctx.globalAlpha = 1.0;
                 this.frames[this.frameIndex].strokes.forEach(s => this.drawObject(ctx, s, false, 'ink'));
+                const previewTrack = this.tool === 'truck' && !this.isPlaying && this.activeLayer === 'ink' && this.truckSelectedTrackId
+                    ? this.getMotionTrack(this.truckSelectedTrackId)
+                    : null;
+                const previewStroke = this.getMotionPreviewStroke(previewTrack);
+                if (previewStroke) this.drawObject(ctx, previewStroke, false, 'ink');
 
                 if (this.isOnion && this.frameIndex > 0 && !this.isPlaying) {
                     for (let offset = 1; offset <= this.onionFrames; offset++) {
@@ -2171,12 +2853,14 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     ctx.globalAlpha = 1.0;
                 }
 
+                this.drawMotionGuide(ctx);
+
                 if (this.selectedObject && !this.isPlaying) {
                     const list = this.getActiveStrokeList();
 
                     if (this.selectedObject.isGroup) {
                         this.drawSelectionUI(ctx);
-                    } else if (list.includes(this.selectedObject.stroke)) {
+                    } else if (list.includes(this.selectedObject.stroke) || this.selectedObject.isMotionPreview) {
                         this.drawSelectionUI(ctx);
                     } else {
                         this.selectedObject = null;
@@ -2690,8 +3374,22 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         brushAnchor.classList.remove('active');
                     }
                 }
-                this.selectedObject = null;
+                if (t !== 'truck') this.selectedObject = null;
+                document.body.classList.toggle('truck-active', t === 'truck');
+                if (t !== 'truck') {
+                    this.setFlyoutExpanded('brush-wrapper', 'tool-brush-anchor', false);
+                    this.setFlyoutExpanded('shape-wrapper', 'tool-shape-anchor', false);
+                }
+                if (t === 'truck' && this.selectedObject) {
+                    const selectedTrack = this.getMotionTrackForSelection();
+                    this.truckSelectedTrackId = selectedTrack?.id || null;
+                } else if (t === 'truck') {
+                    this.truckSelectedTrackId = null;
+                }
                 this.updateInspector();
+                this.updateMotionPanel();
+                this.renderMotionTracks();
+                this.handleResize();
                 this.renderCanvas();
                 this.updateCursorStyle();
             }
@@ -2751,6 +3449,39 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 button?.classList.toggle('active', this.symmetryEnabled);
             }
 
+            setDrawingAidsOpen(open, returnFocus = false) {
+                const menu = document.getElementById('drawing-aids-menu');
+                const toggle = document.getElementById('drawing-aids-toggle');
+                if (!menu || !toggle) return;
+                menu.hidden = !open;
+                toggle.setAttribute('aria-expanded', String(open));
+                if (open && toggle.closest('.header-drawing-aids-wrapper')) {
+                    const rect = toggle.getBoundingClientRect();
+                    const viewportWidth = Math.max(1, window.innerWidth);
+                    const menuWidth = Math.min(menu.offsetWidth || 214, Math.max(1, viewportWidth - 16));
+                    const menuHeight = Math.min(menu.offsetHeight || 220, Math.max(1, window.innerHeight - 16));
+                    const left = Math.min(
+                        Math.max(8, rect.right - menuWidth),
+                        Math.max(8, viewportWidth - menuWidth - 8)
+                    );
+                    const below = rect.bottom + 8;
+                    const top = below + menuHeight <= window.innerHeight - 8
+                        ? below
+                        : Math.max(8, rect.top - menuHeight - 8);
+                    menu.style.left = `${Math.round(left)}px`;
+                    menu.style.top = `${Math.round(top)}px`;
+                } else if (!open) {
+                    menu.style.removeProperty('left');
+                    menu.style.removeProperty('top');
+                }
+                if (returnFocus) toggle.focus();
+            }
+
+            toggleDrawingAids() {
+                const menu = document.getElementById('drawing-aids-menu');
+                this.setDrawingAidsOpen(Boolean(menu?.hidden));
+            }
+
             openReferenceImage() { document.getElementById('reference-file-input').click(); }
             loadReferenceImage(input) {
                 const file = input.files?.[0]; if (!file) return;
@@ -2808,6 +3539,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.brushColor = c;
                 document.getElementById('html-color-picker').value = c;
                 if (this.selectedObject) {
+                    if (this.motionDirectEditBlocked()) return;
                     this.saveState();
                     if (this.selectedObject.isGroup) {
                         this.selectedObject.items.forEach(item => {
@@ -2839,6 +3571,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.brushSize = parseInt(s);
                 document.getElementById('size-disp').innerText = s;
                 if (this.selectedObject) {
+                    if (this.motionDirectEditBlocked()) return;
                     this.saveState();
                     if (this.selectedObject.isGroup) {
                         this.selectedObject.items.forEach(item => { item.stroke.size = this.brushSize; });
@@ -2857,6 +3590,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.opacity = parseInt(v) / 100;
                 document.getElementById('op-disp').innerText = v;
                 if (this.selectedObject) {
+                    if (this.motionDirectEditBlocked()) return;
                     this.saveState();
                     if (this.selectedObject.isGroup) {
                         this.selectedObject.items.forEach(item => { item.stroke.opacity = this.opacity; });
@@ -2935,6 +3669,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 if (!preserveFrameSelection) this.clearFrameSelection(false);
                 this.frameIndex = nextIndex;
                 this.selectedObject = null;
+                if (this.tool === 'truck' && this.truckSelectedTrackId) this.selectMotionTrack(this.truckSelectedTrackId, false);
                 this.renderCanvas();
                 this.renderUI(true);
                 return true;
@@ -2951,13 +3686,16 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             addFrame() {
                 this.saveState();
                 this.selectedObject = null;
-                this.frames.splice(this.frameIndex + 1, 0, { strokes: [], paperStrokes: [], hold: 1 });
+                const insertAt = this.frameIndex + 1;
+                this.frames.splice(insertAt, 0, { strokes: [], paperStrokes: [], hold: 1 });
+                this.remapMotionTracksAfterInsert(insertAt);
+                this.motionTracks.forEach((track) => this.applyMotionTrack(track));
                 this.frameIndex++;
                 this.renderUI();
                 this.renderCanvas();
                 this.saveStorage();
                 setTimeout(() => {
-                    const addBtn = this.framesList.querySelector('.add-frame-btn');
+                    const addBtn = document.getElementById('timeline-add');
                     if (addBtn) addBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
                 }, 50);
             }
@@ -2973,10 +3711,48 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     frameBgColor: sourceFrame.frameBgColor,
                     hold: this.getFrameHold(sourceFrame)
                 });
+                this.remapMotionTracksAfterInsert(target + 1);
+                this.motionTracks.forEach((track) => this.applyMotionTrack(track));
                 this.frameIndex = target + 1;
                 this.renderUI();
                 this.renderCanvas();
                 this.saveStorage();
+            }
+
+            duplicateSelectedFrames() {
+                const selected = this.getSelectedFrameIndices();
+                const indices = selected.length ? selected : [this.frameIndex];
+                if (!indices.length) return false;
+                if (indices.length === 1) {
+                    this.duplicateFrame(indices[0]);
+                    return true;
+                }
+
+                this.saveState();
+                this.selectedObject = null;
+                const inserted = [];
+                indices.forEach((sourceIndex, offset) => {
+                    const target = sourceIndex + offset;
+                    const sourceFrame = this.frames[target];
+                    if (!sourceFrame) return;
+                    this.frames.splice(target + 1, 0, {
+                        strokes: this.cloneData(sourceFrame.strokes),
+                        paperStrokes: this.cloneData(this.getPaperStrokes(sourceFrame)),
+                        frameBgColor: sourceFrame.frameBgColor,
+                        hold: this.getFrameHold(sourceFrame)
+                    });
+                    this.remapMotionTracksAfterInsert(target + 1);
+                    this.motionTracks.forEach((track) => this.applyMotionTrack(track));
+                    inserted.push(target + 1);
+                });
+                this.frameIndex = inserted[inserted.length - 1] ?? this.frameIndex;
+                this.selectedFrameIndices = inserted;
+                this.frameSelectionAnchor = inserted[0] ?? null;
+                this.timelineSelectionFocused = true;
+                this.renderUI();
+                this.renderCanvas();
+                this.saveStorage();
+                return true;
             }
 
             deleteFrame(index) {
@@ -2986,9 +3762,11 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 if (this.frames.length <= 1) {
                     this.frames[0].strokes = [];
                     this.frames[0].paperStrokes = [];
+                    this.motionTracks = [];
                     this.renderCanvas();
                 } else {
                     this.frames.splice(targetIndex, 1);
+                    this.remapMotionTracksAfterDelete(targetIndex);
                     if (this.frameIndex >= this.frames.length) {
                         this.frameIndex = this.frames.length - 1;
                     } else if (this.frameIndex > targetIndex) {
@@ -2998,6 +3776,41 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.renderUI();
                 this.renderCanvas();
                 this.saveStorage();
+            }
+
+            deleteSelectedFrames() {
+                const selected = this.getSelectedFrameIndices();
+                const indices = selected.length ? selected : [this.frameIndex];
+                if (!indices.length) return false;
+
+                this.saveState();
+                this.selectedObject = null;
+                const activeIndex = this.frameIndex;
+                const removedBeforeActive = indices.filter((index) => index < activeIndex).length;
+                if (indices.length >= this.frames.length) {
+                    // Keep the document's required single blank frame when the
+                    // complete timeline is selected for deletion.
+                    while (this.frames.length > 1) {
+                        const target = this.frames.length - 1;
+                        this.frames.splice(target, 1);
+                        this.remapMotionTracksAfterDelete(target);
+                    }
+                    this.frames[0] = { strokes: [], paperStrokes: [], hold: 1 };
+                    this.motionTracks = [];
+                    this.frameIndex = 0;
+                } else {
+                    [...indices].sort((a, b) => b - a).forEach((target) => {
+                        if (target < 0 || target >= this.frames.length) return;
+                        this.frames.splice(target, 1);
+                        this.remapMotionTracksAfterDelete(target);
+                    });
+                    this.frameIndex = Math.max(0, Math.min(this.frames.length - 1, activeIndex - removedBeforeActive));
+                }
+                this.clearFrameSelection(false);
+                this.renderUI();
+                this.renderCanvas();
+                this.saveStorage();
+                return true;
             }
 
             togglePlay() {
@@ -3036,7 +3849,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             }
 
             getFpsControl() {
-                return document.querySelector('input[type="range"][oninput*="setFps"]');
+                return document.getElementById('fps-control') || document.querySelector('[oninput*="setFps"], [onchange*="setFps"]');
             }
 
             normalizeFps(value) {
@@ -3068,6 +3881,162 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.saveStorage();
             }
 
+            updateMotionPanel() {
+                const label = document.getElementById('movement-selected-label');
+                const addButton = document.getElementById('movement-add-keyframe');
+                const previousButton = document.getElementById('movement-previous-key');
+                const nextButton = document.getElementById('movement-next-key');
+                const track = this.getMotionTrackForSelection();
+                const keys = [...(track?.keyframes || [])].sort((a, b) => a.frame - b.frame);
+                const currentKey = keys.find((keyframe) => keyframe.frame === this.frameIndex);
+                if (track) {
+                    if (label) label.textContent = `Movement · frame ${this.frameIndex + 1}`;
+                } else {
+                    if (label) label.textContent = this.selectedObject ? `Selected object · frame ${this.frameIndex + 1}` : 'Select an object';
+                }
+                if (addButton) addButton.disabled = !this.selectedObject;
+                if (addButton) {
+                    addButton.textContent = currentKey ? '−' : '+';
+                    addButton.setAttribute('aria-label', currentKey ? 'Remove movement keyframe' : 'Add movement keyframe');
+                    addButton.title = currentKey ? 'Remove keyframe at current frame' : 'Add keyframe at current frame';
+                }
+                if (previousButton) {
+                    previousButton.disabled = !track || !keys.some((keyframe) => keyframe.frame < this.frameIndex);
+                }
+                if (nextButton) {
+                    nextButton.disabled = !track || !keys.some((keyframe) => keyframe.frame > this.frameIndex);
+                }
+            }
+
+            retimeMotionKeyframe(track, fromFrame, toFrame) {
+                if (!track || fromFrame === toFrame) return false;
+                const source = track.keyframes.find((keyframe) => keyframe.frame === fromFrame);
+                if (!source || track.keyframes.some((keyframe) => keyframe.frame === toFrame)) return false;
+                this.saveState();
+                track.keyframes = track.keyframes
+                    .filter((keyframe) => keyframe.frame !== fromFrame)
+                    .concat({ ...source, frame: toFrame })
+                    .sort((a, b) => a.frame - b.frame);
+                track.startFrame = track.keyframes[0].frame;
+                track.endFrame = track.keyframes[track.keyframes.length - 1].frame;
+                track.excludedFrames = (track.excludedFrames || []).filter((frame) => frame >= track.startFrame && frame <= track.endFrame);
+                this.applyMotionTrack(track);
+                this.selectMotionTrack(track.id, false);
+                this.renderUI(true);
+                this.renderCanvas();
+                this.updateThumbnails();
+                this.saveStorage();
+                return true;
+            }
+
+            finishMotionKeyDrag() {
+                const drag = this.motionKeyDrag;
+                if (!drag) return;
+                this.motionKeyDrag = null;
+                if (drag.moved) {
+                    this.suppressMotionKeyClick = true;
+                    setTimeout(() => { this.suppressMotionKeyClick = false; }, 0);
+                }
+                const track = this.getMotionTrack(drag.trackId);
+                if (drag.moved && track) this.retimeMotionKeyframe(track, drag.fromFrame, drag.targetFrame);
+            }
+
+            updateMotionTrackActiveUI() {
+                const container = document.getElementById('movement-tracks');
+                if (!container) return;
+                container.querySelectorAll('.motion-track-row').forEach((row) => {
+                    const track = this.getMotionTrack(row.dataset.trackId);
+                    row.querySelectorAll('.motion-track-cell').forEach((cell) => {
+                        const frame = Number.parseInt(cell.dataset.frame, 10);
+                        cell.classList.toggle('current', frame === this.frameIndex);
+                        cell.classList.toggle('selected', Boolean(track?.keyframes.some((key) => key.frame === frame)));
+                    });
+                });
+            }
+
+            renderMotionTracks() {
+                const container = document.getElementById('movement-tracks');
+                const scroll = document.getElementById('movement-track-scroll');
+                const panel = document.querySelector('.timeline-panel');
+                if (!container || !scroll || !panel) return;
+                container.innerHTML = '';
+                const showMotion = this.tool === 'truck';
+                const selectedTrack = this.getMotionTrackForSelection();
+                const visibleTracks = selectedTrack ? [selectedTrack] : (this.tool === 'truck' && this.selectedObject ? [null] : []);
+                panel.classList.toggle('has-motion', showMotion);
+                document.body.classList.toggle('has-motion-timeline', showMotion);
+                visibleTracks.forEach((track, trackIndex) => {
+                    const row = document.createElement('div');
+                    row.className = 'motion-track-row';
+                    row.dataset.trackId = track?.id || '';
+                    for (let frame = 0; frame < this.frames.length; frame++) {
+                        const cell = document.createElement('button');
+                        cell.type = 'button';
+                        cell.className = 'motion-track-cell';
+                        cell.dataset.frame = String(frame);
+                        cell.dataset.trackId = track?.id || '';
+                        if (frame === 0) cell.dataset.trackLabel = track ? `M${this.motionTracks.indexOf(track) + 1}` : 'New';
+                        cell.title = track ? `Movement frame ${frame + 1}` : `New movement frame ${frame + 1}`;
+                        cell.setAttribute('aria-label', track ? `Movement frame ${frame + 1}` : `New movement frame ${frame + 1}`);
+                        const keyframe = track?.keyframes.find((key) => key.frame === frame);
+                        const keyIndex = track ? [...track.keyframes].sort((a, b) => a.frame - b.frame).findIndex((key) => key.frame === frame) : -1;
+                        cell.classList.toggle('keyframe', Boolean(keyframe));
+                        cell.classList.toggle('curved', Boolean(keyframe && keyIndex > 0 && (keyframe.interpolation || track?.interpolation) === 'curved'));
+                        cell.classList.toggle('straight', Boolean(keyframe && (!cell.classList.contains('curved') || keyIndex === 0)));
+                        if (keyframe) {
+                            const interpolation = keyframe.interpolation || track?.interpolation || 'straight';
+                            cell.title = keyIndex > 0
+                                ? `Movement frame ${frame + 1} · ${interpolation} path; click to toggle, drag to retime`
+                                : `Movement frame ${frame + 1} · First key has no incoming path`;
+                        }
+                        cell.onpointerdown = (event) => {
+                            if (!track || !cell.classList.contains('keyframe')) return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            cell.setPointerCapture?.(event.pointerId);
+                            this.motionKeyDrag = {
+                                trackId: track.id,
+                                fromFrame: frame,
+                                targetFrame: frame,
+                                moved: false
+                            };
+                        };
+                        cell.onpointermove = (event) => {
+                            const drag = this.motionKeyDrag;
+                            if (!track || !drag || drag.trackId !== track.id) return;
+                            const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.motion-track-cell');
+                            if (!target || target.dataset.trackId !== track.id) return;
+                            const targetFrame = Number.parseInt(target.dataset.frame, 10);
+                            if (Number.isInteger(targetFrame)) {
+                                drag.targetFrame = targetFrame;
+                                drag.moved = drag.moved || targetFrame !== drag.fromFrame;
+                            }
+                        };
+                        cell.onpointerup = () => this.finishMotionKeyDrag();
+                        cell.onpointercancel = () => { this.motionKeyDrag = null; };
+                        cell.onclick = (event) => {
+                            event.stopPropagation();
+                            if (this.suppressMotionKeyClick) return;
+                            this.selectFrame(frame);
+                            if (track) {
+                                this.selectMotionTrack(track.id);
+                                if (keyframe && keyIndex > 0) this.toggleMotionKeyInterpolation(track.id, frame);
+                            }
+                        };
+                        row.appendChild(cell);
+                    }
+                    container.appendChild(row);
+                });
+                if (!this.motionScrollBound) {
+                    const framesTrack = this.framesList;
+                    framesTrack?.addEventListener('scroll', () => { if (scroll) scroll.scrollLeft = framesTrack.scrollLeft; });
+                    scroll.addEventListener('scroll', () => { if (framesTrack) framesTrack.scrollLeft = scroll.scrollLeft; });
+                    this.motionScrollBound = true;
+                }
+                this.updateMotionTrackActiveUI();
+                this.updateMotionPanel();
+            }
+
             renderUI(minimal = false) {
                 if (!minimal) {
                     this.framesList.innerHTML = '';
@@ -3095,11 +4064,6 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
                         this.framesList.appendChild(el);
                     });
-                    const addBtn = document.createElement('div');
-                    addBtn.className = 'add-frame-btn';
-                    addBtn.innerHTML = '+';
-                    addBtn.onclick = () => this.addFrame();
-                    this.framesList.appendChild(addBtn);
                     this.updateThumbnails();
                 } else {
                     const cards = this.framesList.querySelectorAll('.frame-card');
@@ -3115,6 +4079,8 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.updateFrameSelectionUI();
                 this.syncFramePosition();
                 this.syncTimelineSettings();
+                this.syncFrameActions();
+                this.renderMotionTracks();
             }
 
             syncTimelineSettings() {
@@ -3126,7 +4092,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 if (holdDisplay) holdDisplay.textContent = `${hold}f`;
                 if (loopButton) {
                     const isLoop = this.loopMode === 'loop';
-                    loopButton.textContent = isLoop ? 'Loop' : 'Once';
+                    loopButton.textContent = 'Loop';
                     loopButton.setAttribute('aria-label', `Playback mode: ${isLoop ? 'loop' : 'once'}`);
                     loopButton.setAttribute('aria-pressed', String(isLoop));
                 }
@@ -3156,6 +4122,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const frameToMove = this.frames[this.draggedFrameIndex];
                 this.frames.splice(this.draggedFrameIndex, 1);
                 this.frames.splice(targetIndex, 0, frameToMove);
+                this.remapMotionTracksAfterReorder(this.draggedFrameIndex, targetIndex);
 
                 if (this.frameIndex === this.draggedFrameIndex) {
                     this.frameIndex = targetIndex;
@@ -3174,6 +4141,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 cards.forEach((c, i) => c.classList.toggle('active', i === this.frameIndex));
                 this.updateFrameSelectionUI();
                 this.syncFramePosition();
+                this.updateMotionTrackActiveUI();
             }
 
             renderFrameToContext(targetCtx, frame, transparent = false) {
@@ -3233,10 +4201,11 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 if (this.saveTimer) clearTimeout(this.saveTimer);
                 this.saveTimer = setTimeout(() => {
                     const data = {
-                        version: 5,
+                        version: 6,
                         name: this.projectName,
                         frames: this.frames,
                         sharedStrokes: this.sharedStrokes,
+                        motionTracks: this.motionTracks,
                         fps: this.fps,
                         width: this.canvasWidth,
                         height: this.canvasHeight,
@@ -3286,6 +4255,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         if (data.version >= 2) {
                             this.frames = this.normalizeFrames(data.frames, data.paperStrokes);
                             this.sharedStrokes = this.materializeErasers(data.sharedStrokes || []);
+                            this.motionTracks = this.normalizeMotionTracks(data.motionTracks || []);
                             this.clearFrameSelection(false);
                             this.fps = this.normalizeFps(data.fps);
                             this.syncFpsUI();
@@ -3592,7 +4562,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
             saveProject() {
                 const data = {
-                    version: 5,
+                    version: 6,
                     name: this.projectName,
                     frames: this.frames.map(f => ({
                         strokes: f.strokes,
@@ -3601,6 +4571,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         hold: this.getFrameHold(f)
                     })),
                     sharedStrokes: this.sharedStrokes,
+                    motionTracks: this.motionTracks,
                     fps: this.fps,
                     width: this.canvasWidth,
                     height: this.canvasHeight,
@@ -3655,11 +4626,12 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             importProjectData(data) {
                 if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid project file');
                 const version = Number.parseInt(data.version, 10);
-                if (!Number.isInteger(version) || version < 2 || version > 5) throw new Error('This project version is not supported');
+                if (!Number.isInteger(version) || version < 2 || version > 6) throw new Error('This project version is not supported');
                 if (!Array.isArray(data.frames) || !data.frames.length) throw new Error('Project has no usable frames');
 
                 this.frames = this.normalizeFrames(data.frames, data.paperStrokes);
                 this.sharedStrokes = this.materializeErasers(data.sharedStrokes || []);
+                this.motionTracks = this.normalizeMotionTracks(data.motionTracks || []);
                 this.clearFrameSelection(false);
                 this.fps = this.normalizeFps(data.fps);
                 this.syncFpsUI();
@@ -3671,12 +4643,59 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.syncProjectNameUI();
                 this.renderCanvas();
                 this.saveStorage();
-                this.showExportNotice(version < 5 ? 'Project upgraded and opened' : 'Project opened');
+                this.showExportNotice(version < 6 ? 'Project upgraded and opened' : 'Project opened');
             }
 
             setFlyoutExpanded(wrapperId, anchorId, expanded) {
-                document.getElementById(wrapperId)?.classList.toggle('expanded', expanded);
+                const wrapper = document.getElementById(wrapperId);
+                wrapper?.classList.toggle('expanded', expanded);
                 document.getElementById(anchorId)?.setAttribute('aria-expanded', String(expanded));
+                if (expanded && document.body.classList.contains('truck-active')) {
+                    this.portalTruckFlyout(wrapperId);
+                    this.positionTruckFlyout(wrapperId);
+                }
+                if (!expanded) {
+                    const menu = wrapper?.querySelector('.flyout-menu') || document.querySelector(`.flyout-menu[data-flyout-wrapper="${wrapperId}"]`);
+                    if (menu) {
+                        if (menu.dataset.flyoutWrapper) wrapper?.appendChild(menu);
+                        delete menu.dataset.flyoutWrapper;
+                        menu.classList.remove('is-portal-flyout');
+                        menu.style.position = '';
+                        menu.style.left = '';
+                        menu.style.top = '';
+                    }
+                }
+            }
+
+            portalTruckFlyout(wrapperId) {
+                if (!document.body.classList.contains('truck-active')) return;
+                const wrapper = document.getElementById(wrapperId);
+                const menu = wrapper?.querySelector('.flyout-menu') || document.querySelector(`.flyout-menu[data-flyout-wrapper="${wrapperId}"]`);
+                if (!wrapper || !menu) return;
+                if (menu.parentElement !== document.body) document.body.appendChild(menu);
+                menu.dataset.flyoutWrapper = wrapperId;
+            }
+
+            positionTruckFlyout(wrapperId) {
+                const wrapper = document.getElementById(wrapperId);
+                const menu = wrapper?.querySelector('.flyout-menu') || document.querySelector(`.flyout-menu[data-flyout-wrapper="${wrapperId}"]`);
+                const tools = document.querySelector('.tools-panel');
+                if (!wrapper || !menu || !tools || !document.body.classList.contains('truck-active')) return;
+                if (menu.parentElement !== document.body) this.portalTruckFlyout(wrapperId);
+                const wrapperRect = wrapper.getBoundingClientRect();
+                const toolsRect = tools.getBoundingClientRect();
+                const menuHeight = menu.offsetHeight || 54;
+                const top = Math.max(8, Math.min(wrapperRect.top, window.innerHeight - menuHeight - 8));
+                menu.style.position = 'fixed';
+                menu.style.left = `${Math.round(toolsRect.right + 8)}px`;
+                menu.style.top = `${Math.round(top)}px`;
+                if (!menu.classList.contains('is-portal-flyout')) {
+                    requestAnimationFrame(() => {
+                        if (menu.parentElement === document.body && document.body.classList.contains('truck-active') && (wrapper.matches(':hover') || wrapper.classList.contains('expanded'))) {
+                            menu.classList.add('is-portal-flyout');
+                        }
+                    });
+                }
             }
 
             toggleFlyout(wrapperId, anchorId) {
@@ -3726,6 +4745,8 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.frames = [{ strokes: [], paperStrokes: [], hold: 1 }];
                 this.paperStrokes = [];
                 this.sharedStrokes = [];
+                this.motionTracks = [];
+                this.truckSelectedTrackId = null;
                 this.clearFrameSelection(false);
                 this.frameIndex = 0;
                 this.projectName = 'Untitled';
@@ -3744,6 +4765,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             groupSelection() {
                 // Only works when a temporary multi-select (isGroup but NOT isPersistentGroup) is active
                 if (!this.selectedObject || !this.selectedObject.isGroup || this.selectedObject.isPersistentGroup) return;
+                if (this.motionDirectEditBlocked()) return;
                 this.saveState();
 
                 const list = this.getActiveStrokeList();
@@ -3786,6 +4808,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             ungroupSelection() {
                 // Only works on a persistent group selection
                 if (!this.selectedObject || !this.selectedObject.isPersistentGroup) return;
+                if (this.motionDirectEditBlocked()) return;
                 this.saveState();
 
                 const list = this.getActiveStrokeList();
@@ -3840,6 +4863,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
             alignSelection(mode) {
                 if (!this.selectedObject?.isGroup) return;
+                if (this.motionDirectEditBlocked()) return;
                 this.saveState();
                 const bounds = this.selectedObject.bounds;
                 this.selectedObject.items.forEach((item) => {
@@ -3860,7 +4884,17 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.saveState();
                 const list = this.getActiveStrokeList();
 
-                if (this.selectedObject.isPersistentGroup) {
+                const selectedTrack = this.getMotionTrackForSelection();
+                if (selectedTrack) {
+                    this.showExportNotice('Animated movement deleted', false);
+                    this.motionTracks = this.motionTracks.filter((track) => track.id !== selectedTrack.id);
+                    this.frames.forEach((frame) => { frame.strokes = frame.strokes.filter((stroke) => stroke.motionTrackId !== selectedTrack.id); });
+                }
+
+                if (selectedTrack) {
+                    // The whole animated object is removed together so later frame edits
+                    // cannot resurrect a deleted clone.
+                } else if (this.selectedObject.isPersistentGroup) {
                     // Remove the single persistent group stroke
                     const idx = list.indexOf(this.selectedObject.persistentGroupStroke);
                     if (idx > -1) list.splice(idx, 1);
@@ -3881,6 +4915,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.renderCanvas();
                 this.saveStorage();
                 this.updateThumbnails();
+                this.renderMotionTracks();
             }
 
             copySelection() {
@@ -3904,6 +4939,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     if (this.clipboard.type === 'group') {
                         // Paste persistent group as a new group stroke
                         const newGroup = JSON.parse(JSON.stringify(this.clipboard));
+                        this.stripMotionMetadata(newGroup);
                         newGroup.items.forEach(item => {
                             if (item.type !== 'text') {
                                 item.points.forEach(p => { p.x += 20; p.y += 20; });
@@ -3926,7 +4962,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                     } else if (this.clipboard.isGroup) {
                         const newItems = [];
                         this.clipboard.items.forEach(item => {
-                            const newStroke = item.stroke;
+                            const newStroke = this.stripMotionMetadata(JSON.parse(JSON.stringify(item.stroke)));
                             if (newStroke.type !== 'text') {
                                 newStroke.points.forEach(p => { p.x += 20; p.y += 20; });
                             } else {
@@ -3942,7 +4978,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                             bounds: this.getGroupBounds(newItems)
                         };
                     } else {
-                        const newStroke = JSON.parse(JSON.stringify(this.clipboard));
+                        const newStroke = this.stripMotionMetadata(JSON.parse(JSON.stringify(this.clipboard)));
                         if (newStroke.type !== 'text') {
                             newStroke.points.forEach(p => { p.x += 20; p.y += 20; });
                         } else {

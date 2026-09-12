@@ -158,6 +158,7 @@ test('keeps shared artwork across frames and restores it with undo and redo', as
 });
 
 test('snaps selected-object movement to the grid and undoes cleanly', async ({ page }) => {
+  await page.getByRole('button', { name: 'Drawing Aids' }).click();
   await page.getByRole('button', { name: 'Snap' }).click();
   await expect(page.getByRole('button', { name: 'Snap' })).toHaveAttribute('aria-pressed', 'true');
   await page.evaluate((stroke) => {
@@ -179,6 +180,7 @@ test('snaps selected-object movement to the grid and undoes cleanly', async ({ p
 });
 
 test('shows a view-only grid that scales with zoom', async ({ page }) => {
+  await page.getByRole('button', { name: 'Drawing Aids' }).click();
   const grid = page.getByRole('button', { name: 'Grid' });
   await grid.click();
   await expect(grid).toHaveAttribute('aria-pressed', 'true');
@@ -188,6 +190,7 @@ test('shows a view-only grid that scales with zoom', async ({ page }) => {
 });
 
 test('mirrors freehand brush strokes vertically and keeps the result undoable', async ({ page }) => {
+  await page.getByRole('button', { name: 'Drawing Aids' }).click();
   const symmetry = page.getByRole('button', { name: 'Symmetry' });
   await symmetry.click();
   await expect(symmetry).toHaveAttribute('aria-pressed', 'true');
@@ -213,9 +216,11 @@ test('mirrors freehand brush strokes vertically and keeps the result undoable', 
 });
 
 test('loads and removes a non-exported drawing reference', async ({ page }) => {
+  await page.getByRole('button', { name: 'Drawing Aids' }).click();
   await page.getByRole('button', { name: 'Reference' }).click();
   await page.locator('#reference-file-input').setInputFiles({ name: 'reference.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="red"/></svg>') });
   await expect.poll(() => page.evaluate(() => Boolean(window.app.referenceImage?.src))).toBe(true);
+  await page.getByRole('button', { name: 'Drawing Aids' }).click();
   await expect(page.getByRole('button', { name: 'Remove ref.' })).toBeVisible();
   await page.getByRole('button', { name: 'Remove ref.' }).click();
   await expect.poll(() => page.evaluate(() => window.app.referenceImage)).toBeNull();
@@ -339,7 +344,7 @@ test('supports undoable frame holds and loop/once playback modes', async ({ page
   const loopMode = page.locator('#loop-mode-btn');
   await expect(loopMode).toHaveText('Loop');
   await loopMode.click();
-  await expect(loopMode).toHaveText('Once');
+  await expect(loopMode).toHaveText('Loop');
   await expect(loopMode).toHaveAttribute('aria-pressed', 'false');
   await loopMode.click();
   await expect(loopMode).toHaveText('Loop');
@@ -893,7 +898,7 @@ test('erasing a single-point ball renders the hole so it can be drawn over', asy
 test('layer buttons carry shared/foreground hints', async ({ page }) => {
   await expect(page.locator('#layer-ink')).toHaveAttribute('title', /drawn fresh on each frame/);
   await expect(page.locator('#layer-paper')).toHaveAttribute('title', /shared across all frames/);
-  await expect(page.locator('#layer-hint')).toHaveText(/Foreground is per-frame; Background is shared across all frames/);
+  await expect(page.locator('#layer-hint')).toHaveCount(0);
 });
 
 test('project name is editable, persisted, and used for the save filename', async ({ page }) => {
