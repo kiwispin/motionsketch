@@ -357,6 +357,33 @@ test('opens brush and shape flyouts without clipping the toolbar', async ({ page
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.tools-panel')).overflowX)).toBe('visible');
 });
 
+test('keeps the circular Add Frame after the thumbnails and preserves Undo paths', async ({ page }) => {
+  const trailingAdd = page.locator('#frames-list > .add-frame-btn');
+  const snapshot = () => page.evaluate(() => ({
+    frames: window.app.frames.length,
+    history: window.app.history.length,
+    cards: document.querySelectorAll('#frames-list .frame-card').length,
+    trailingAdd: document.querySelector('#frames-list').lastElementChild?.classList.contains('add-frame-btn')
+  }));
+  await expect(page.locator('#timeline-add')).toBeVisible();
+  await expect(trailingAdd).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#frames-list').lastElementChild?.classList.contains('add-frame-btn'))).toBe(true);
+
+  await trailingAdd.click();
+  await expect.poll(snapshot).toEqual({ frames: 2, history: 1, cards: 2, trailingAdd: true });
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect.poll(snapshot).toEqual({ frames: 1, history: 0, cards: 1, trailingAdd: true });
+  await page.getByRole('button', { name: 'Redo' }).click();
+  await expect.poll(snapshot).toEqual({ frames: 2, history: 1, cards: 2, trailingAdd: true });
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect.poll(snapshot).toEqual({ frames: 1, history: 0, cards: 1, trailingAdd: true });
+
+  await page.locator('#frames-list > .add-frame-btn').click();
+  await page.locator('#frames-list .frame-card').last().focus();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
+  await expect.poll(snapshot).toEqual({ frames: 1, history: 0, cards: 1, trailingAdd: true });
+});
+
 for (const viewport of [
   { name: 'desktop-768', width: 1366, height: 768 },
   { name: 'desktop-820', width: 1366, height: 820 },

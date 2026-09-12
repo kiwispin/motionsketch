@@ -200,3 +200,12 @@ Acceptance: pending user visual review.
 - Adjusted only the desktop right `.props-panel` bottom inset to `240px`, matching the existing left toolbar bottom; the existing ≤700px desktop rule uses the left toolbar’s `180px` inset and the right panel now mirrors it.
 - Top alignment, left toolbar spacing/geometry, canvas, timeline, internal scrolling, and blank Onion Skin footprint remain unchanged. Mobile horizontal inspector rules were not modified.
 - Added bottom-equality coverage for normal and Truck at desktop 1366×768/820/850/900, 1600×1000, and 1024×850. Acceptance: pending root visual review.
+
+## 2026-09-12 — Trailing Add Frame restoration and Undo verification
+
+- Restored the original circular `Add Frame` button as the final child of `#frames-list`, while retaining the existing top `#timeline-add` control and all other frame actions.
+- Confirmed the Undo display defect: `undo()` and `redo()` restored `app.frames` but called `renderUI(true)`, which only toggles active classes and left stale `.frame-card` DOM after structural frame changes (for example, model `1` frame with `2` visible cards). Changed only these two history paths to use the existing full `renderUI()` refresh.
+- Added focused coverage for trailing Add Frame followed by header Undo/Redo and keyboard Undo; model count, card count, and trailing button are now synchronized.
+- Scoped the circular button’s reset to `.frames-track .add-frame-btn` (`border:0`, `padding:0`, native appearance removed) to remove the browser bevel without changing the top rectangular Add control. Updated the Truck test to target the trailing button explicitly now that both Add controls exist.
+- Root full Chromium result before this final styling/selector correction: 77 passed, 1 selector failure; the failure was the expected ambiguous `.add-frame-btn` locator.
+- Acceptance: pending root visual review.

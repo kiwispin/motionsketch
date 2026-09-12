@@ -1498,7 +1498,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.selectedObject = null;
                 this.updateThumbnails();
                 this.renderCanvas();
-                this.renderUI(true);
+                this.renderUI();
                 this.saveStorage();
                 return true;
             }
@@ -1528,7 +1528,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.selectedObject = null;
                 this.updateThumbnails();
                 this.renderCanvas();
-                this.renderUI(true);
+                this.renderUI();
                 this.saveStorage();
                 return true;
             }
@@ -4065,6 +4065,14 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                         this.framesList.appendChild(el);
                     });
                     this.updateThumbnails();
+                    const addButton = document.createElement('button');
+                    addButton.type = 'button';
+                    addButton.className = 'add-frame-btn';
+                    addButton.setAttribute('aria-label', 'Add frame');
+                    addButton.title = 'Add frame';
+                    addButton.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i>';
+                    addButton.onclick = () => this.addFrame();
+                    this.framesList.appendChild(addButton);
                 } else {
                     const cards = this.framesList.querySelectorAll('.frame-card');
                     cards.forEach((c, i) => {

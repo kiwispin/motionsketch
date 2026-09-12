@@ -492,7 +492,7 @@ test('Truck keeps the selected ball row across frame navigation and endpoint mov
   };
   await drawDot(100, 120);
   await drawDot(220, 120);
-  await page.locator('.add-frame-btn').click();
+  await page.locator('#frames-list > .add-frame-btn').click();
   await expect.poll(() => page.evaluate(() => window.app.frames.length)).toBe(2);
   await page.locator('.frame-card').nth(0).click();
 
