@@ -5,6 +5,8 @@ import JSZip from 'jszip';
 window.gifshot = gifshot;
 
 const LONG_GIF_FRAME_THRESHOLD = 150;
+const BACKGROUND_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 
         class IDBHelper {
             constructor(dbName, storeName) {
@@ -90,6 +92,11 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.showGrid = false;
                 this.symmetryEnabled = false;
                 this.referenceImage = null;
+                this.backgroundImage = null;
+                this.backgroundImageCache = new Map();
+                this.backgroundImageDraft = null;
+                this.backgroundImageRequest = 0;
+                this.projectLoadRequest = 0;
                 this.draggedFrameIndex = null;
                 this.selectedFrameIndices = [];
                 this.frameSelectionAnchor = null;
@@ -660,6 +667,10 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             }
 
             openSettings() {
+                this.backgroundImageRequest++;
+                this.backgroundImageDraft = this.backgroundImage;
+                this.backgroundImageLoading = false;
+                this.syncBackgroundImageSettings();
                 document.getElementById('canvas-width').value = this.canvasWidth;
                 document.getElementById('canvas-height').value = this.canvasHeight;
                 this.openModal('settings-modal', 'canvas-width');
@@ -674,15 +685,109 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             }
 
             applySettings() {
+                if (this.backgroundImageLoading) return;
                 const { width, height } = this.normalizeCanvasSize(
                     document.getElementById('canvas-width').value,
                     document.getElementById('canvas-height').value
                 );
                 document.getElementById('canvas-width').value = width;
                 document.getElementById('canvas-height').value = height;
-                this.resizeCanvas(width, height);
+                if (width !== this.canvasWidth || height !== this.canvasHeight || this.backgroundImageDraft !== this.backgroundImage) {
+                    this.saveState();
+                    this.backgroundImage = this.backgroundImageDraft;
+                    this.resizeCanvas(width, height);
+                    this.renderUI();
+                    this.renderCanvas();
+                }
                 this.closeModal('settings-modal');
                 this.saveStorage();
+            }
+
+            syncBackgroundImageSettings(error = '') {
+                const image = this.backgroundImageDraft;
+                document.getElementById('background-image-set').hidden = Boolean(image);
+                document.getElementById('background-image-file').hidden = !image;
+                document.getElementById('background-image-name').textContent = image?.name || '';
+                document.getElementById('background-image-hint').textContent = this.backgroundImageLoading
+                    ? 'Loading image…' : image ? 'All frames · Fits without stretching.' : 'Behind your drawings on every frame.';
+                const errorNode = document.getElementById('background-image-error');
+                errorNode.hidden = !error;
+                errorNode.textContent = error;
+                document.getElementById('settings-apply').disabled = Boolean(this.backgroundImageLoading);
+            }
+
+            async decodeBackgroundImage(value) {
+                if (value == null) return null;
+                if (typeof value !== 'object' || typeof value.dataUrl !== 'string' ||
+                    value.dataUrl.length > Math.ceil(BACKGROUND_IMAGE_MAX_BYTES / 3) * 4 + 64 ||
+                    !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value.dataUrl)) {
+                    throw new Error('Use a PNG, JPEG or WebP background image up to 10 MB.');
+                }
+                let image = this.backgroundImageCache.get(value.dataUrl);
+                if (!image) {
+                    image = new Image();
+                    image.src = value.dataUrl;
+                    try { await image.decode(); } catch { throw new Error('This background image could not be opened.'); }
+                    if (!image.naturalWidth || !image.naturalHeight || image.naturalWidth * image.naturalHeight > BACKGROUND_IMAGE_MAX_PIXELS) {
+                        throw new Error('Background images must be 16 megapixels or smaller.');
+                    }
+                    this.backgroundImageCache.set(value.dataUrl, image);
+                }
+                return { name: String(value.name || 'Background image').slice(0, 160), dataUrl: value.dataUrl, width: image.naturalWidth, height: image.naturalHeight };
+            }
+
+            async loadBackgroundImage(input) {
+                const file = input.files?.[0];
+                input.value = '';
+                if (!file) return;
+                const request = ++this.backgroundImageRequest;
+                this.backgroundImageLoading = true;
+                this.syncBackgroundImageSettings();
+                try {
+                    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > BACKGROUND_IMAGE_MAX_BYTES) {
+                        throw new Error('Use a PNG, JPEG or WebP background image up to 10 MB.');
+                    }
+                    const dataUrl = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = () => reject(new Error('Could not read the background image.'));
+                        reader.readAsDataURL(file);
+                    });
+                    const image = await this.decodeBackgroundImage({ name: file.name, dataUrl });
+                    if (request !== this.backgroundImageRequest) return;
+                    this.backgroundImageDraft = image;
+                    this.backgroundImageLoading = false;
+                    this.syncBackgroundImageSettings();
+                } catch (error) {
+                    if (request !== this.backgroundImageRequest) return;
+                    this.backgroundImageLoading = false;
+                    this.syncBackgroundImageSettings(error.message);
+                }
+            }
+
+            removeBackgroundImage() {
+                this.backgroundImageRequest++;
+                this.backgroundImageLoading = false;
+                this.backgroundImageDraft = null;
+                this.syncBackgroundImageSettings();
+            }
+
+            getBackgroundImagePlacement() {
+                const image = this.backgroundImage;
+                if (!image) return null;
+                const scale = Math.min(this.canvasWidth / image.width, this.canvasHeight / image.height);
+                const width = image.width * scale, height = image.height * scale;
+                return { x: (this.canvasWidth - width) / 2, y: (this.canvasHeight - height) / 2, width, height };
+            }
+
+            drawBackgroundImage(context) {
+                const image = this.backgroundImageCache.get(this.backgroundImage?.dataUrl);
+                const placement = this.getBackgroundImagePlacement();
+                if (!image || !placement) return;
+                context.save();
+                context.globalAlpha = 1;
+                context.drawImage(image, placement.x, placement.y, placement.width, placement.height);
+                context.restore();
             }
 
             openTextModal(pos, textObject = null) {
@@ -1461,6 +1566,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 if (this.history.length > 20) this.history.shift();
                 this.redoStack = [];
                 const state = {
+                    backgroundImage: this.backgroundImage,
                     frames: this.cloneData(this.frames),
                     sharedStrokes: this.cloneData(this.sharedStrokes),
                     motionTracks: this.cloneData(this.motionTracks),
@@ -1477,6 +1583,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 if (this.history.length === 0) return false;
                 this.clearFrameSelection(false);
                 const currentState = {
+                    backgroundImage: this.backgroundImage,
                     frames: this.cloneData(this.frames),
                     sharedStrokes: this.cloneData(this.sharedStrokes),
                     motionTracks: this.cloneData(this.motionTracks),
@@ -1488,6 +1595,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 };
                 this.redoStack.push(JSON.stringify(currentState));
                 const prevState = JSON.parse(this.history.pop());
+                this.backgroundImage = prevState.backgroundImage || null;
                 this.frames = this.normalizeFrames(prevState.frames, prevState.paperStrokes);
                 this.sharedStrokes = this.materializeErasers(prevState.sharedStrokes || []);
                 this.motionTracks = this.normalizeMotionTracks(prevState.motionTracks || []);
@@ -1507,6 +1615,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 if (this.redoStack.length === 0) return false;
                 this.clearFrameSelection(false);
                 const currentState = {
+                    backgroundImage: this.backgroundImage,
                     frames: this.cloneData(this.frames),
                     sharedStrokes: this.cloneData(this.sharedStrokes),
                     motionTracks: this.cloneData(this.motionTracks),
@@ -1518,6 +1627,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 };
                 this.history.push(JSON.stringify(currentState));
                 const nextState = JSON.parse(this.redoStack.pop());
+                this.backgroundImage = nextState.backgroundImage || null;
                 this.frames = this.normalizeFrames(nextState.frames, nextState.paperStrokes);
                 this.sharedStrokes = this.materializeErasers(nextState.sharedStrokes || []);
                 this.motionTracks = this.normalizeMotionTracks(nextState.motionTracks || []);
@@ -2827,6 +2937,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.currentRenderBgColor = bgColor;
                 bgCtx.fillStyle = bgColor;
                 bgCtx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
+                this.drawBackgroundImage(bgCtx);
                 if (this.referenceImage?.complete) { bgCtx.save(); bgCtx.globalAlpha = 0.35; const scale = Math.min(this.canvasWidth / this.referenceImage.width, this.canvasHeight / this.referenceImage.height); const width = this.referenceImage.width * scale, height = this.referenceImage.height * scale; bgCtx.drawImage(this.referenceImage, (this.canvasWidth - width) / 2, (this.canvasHeight - height) / 2, width, height); bgCtx.restore(); }
                 bgCtx.globalAlpha = 1.0;
                 this.sharedStrokes.forEach(s => this.drawObject(bgCtx, s, false, 'shared'));
@@ -4172,6 +4283,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 if (!transparent) {
                     targetCtx.fillStyle = bgColor;
                     targetCtx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
+                    this.drawBackgroundImage(targetCtx);
                 }
                 targetCtx.globalAlpha = 1.0;
                 this.sharedStrokes.forEach(s => this.drawObject(targetCtx, s, false, 'shared'));
@@ -4209,7 +4321,8 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 if (this.saveTimer) clearTimeout(this.saveTimer);
                 this.saveTimer = setTimeout(() => {
                     const data = {
-                        version: 6,
+                        version: 7,
+                        backgroundImage: this.backgroundImage,
                         name: this.projectName,
                         frames: this.frames,
                         sharedStrokes: this.sharedStrokes,
@@ -4256,11 +4369,16 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             }
 
             async loadStorage() {
+                const request = ++this.projectLoadRequest;
                 try {
                     const jsonStr = await this.db.get('currentProject');
+                    if (request !== this.projectLoadRequest) return;
                     if (jsonStr) {
                         const data = JSON.parse(jsonStr);
                         if (data.version >= 2) {
+                            const backgroundImage = await this.decodeBackgroundImage(data.backgroundImage);
+                            if (request !== this.projectLoadRequest) return;
+                            this.backgroundImage = backgroundImage;
                             this.frames = this.normalizeFrames(data.frames, data.paperStrokes);
                             this.sharedStrokes = this.materializeErasers(data.sharedStrokes || []);
                             this.motionTracks = this.normalizeMotionTracks(data.motionTracks || []);
@@ -4339,7 +4457,9 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const frame = this.frames[this.frameIndex];
                 const background = frame.frameBgColor || this.selectedBgColor;
                 const content = [...this.sharedStrokes, ...this.getPaperStrokes(frame), ...frame.strokes].map(render).join('');
-                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${this.canvasWidth}" height="${this.canvasHeight}" viewBox="0 0 ${this.canvasWidth} ${this.canvasHeight}"><defs>${maskDefs.join('')}</defs><rect width="100%" height="100%" fill="${background}"/>${content}</svg>`;
+                const placement = this.getBackgroundImagePlacement();
+                const imageMarkup = placement ? `<image href="${escape(this.backgroundImage.dataUrl)}" x="${placement.x}" y="${placement.y}" width="${placement.width}" height="${placement.height}"/>` : '';
+                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${this.canvasWidth}" height="${this.canvasHeight}" viewBox="0 0 ${this.canvasWidth} ${this.canvasHeight}"><defs>${maskDefs.join('')}</defs><rect width="100%" height="100%" fill="${background}"/>${imageMarkup}${content}</svg>`;
                 const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
                 const link = document.createElement('a'); link.href = url; link.download = `${this.getExportBaseName()}-frame-${String(this.frameIndex + 1).padStart(3, '0')}.svg`; link.click(); URL.revokeObjectURL(url);
                 this.showExportNotice('SVG exported');
@@ -4570,7 +4690,8 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
             saveProject() {
                 const data = {
-                    version: 6,
+                    version: 7,
+                    backgroundImage: this.backgroundImage,
                     name: this.projectName,
                     frames: this.frames.map(f => ({
                         strokes: f.strokes,
@@ -4615,10 +4736,10 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 const file = el.files[0];
                 if (!file) return;
                 const reader = new FileReader();
-                reader.onload = (e) => {
+                reader.onload = async (e) => {
                     try {
                         const data = JSON.parse(e.target.result);
-                        this.importProjectData(data);
+                        await this.importProjectData(data);
                     } catch (err) {
                         this.showExportNotice(err instanceof SyntaxError ? 'Invalid project file' : (err.message || 'Invalid project file'), true);
                     }
@@ -4634,8 +4755,21 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
             importProjectData(data) {
                 if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid project file');
                 const version = Number.parseInt(data.version, 10);
-                if (!Number.isInteger(version) || version < 2 || version > 6) throw new Error('This project version is not supported');
+                if (!Number.isInteger(version) || version < 2 || version > 7) throw new Error('This project version is not supported');
                 if (!Array.isArray(data.frames) || !data.frames.length) throw new Error('Project has no usable frames');
+
+                const request = ++this.projectLoadRequest;
+                if (data.backgroundImage != null) {
+                    return this.decodeBackgroundImage(data.backgroundImage).then(image => {
+                        if (request === this.projectLoadRequest) this.applyImportedProject(data, version, image);
+                    });
+                }
+                this.applyImportedProject(data, version, null);
+            }
+
+            applyImportedProject(data, version, backgroundImage) {
+                this.backgroundImage = backgroundImage;
+                this.backgroundImageRequest++;
 
                 this.frames = this.normalizeFrames(data.frames, data.paperStrokes);
                 this.sharedStrokes = this.materializeErasers(data.sharedStrokes || []);
@@ -4651,7 +4785,7 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.syncProjectNameUI();
                 this.renderCanvas();
                 this.saveStorage();
-                this.showExportNotice(version < 6 ? 'Project upgraded and opened' : 'Project opened');
+                this.showExportNotice(version < 7 ? 'Project upgraded and opened' : 'Project opened');
             }
 
             setFlyoutExpanded(wrapperId, anchorId, expanded) {
@@ -4742,6 +4876,11 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
 
             requestNewAnimation() { this.openModal('custom-modal', 'custom-modal'); }
             closeModal(id) {
+                if (id === 'settings-modal') {
+                    this.backgroundImageRequest++;
+                    this.backgroundImageDraft = null;
+                    this.backgroundImageLoading = false;
+                }
                 const modal = document.getElementById(id || 'custom-modal');
                 modal.style.display = 'none';
                 modal.setAttribute('aria-hidden', 'true');
@@ -4749,6 +4888,11 @@ const LONG_GIF_FRAME_THRESHOLD = 150;
                 this.modalReturnFocus?.focus();
             }
             confirmNewAnimation(width = 600, height = 600) {
+                this.projectLoadRequest++;
+                this.backgroundImageRequest++;
+                this.backgroundImage = null;
+                this.backgroundImageDraft = null;
+                this.backgroundImageCache.clear();
                 this.closeModal();
                 this.frames = [{ strokes: [], paperStrokes: [], hold: 1 }];
                 this.paperStrokes = [];

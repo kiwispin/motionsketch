@@ -661,6 +661,15 @@
         .modal-input-group { margin-bottom: 20px; display: flex; gap: 10px; justify-content: center; }
         .modal-input { background: var(--input-bg); border: 1px solid var(--border-panel); color: var(--text-main); padding: 8px; border-radius: 6px; width: 80px; text-align: center; }
         .modal-label { font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px; }
+        .background-image-settings { margin-bottom: 20px; }
+        .background-image-settings [hidden] { display: none !important; }
+        .background-image-settings button { min-height: 40px; }
+        #background-image-set { width: 100%; justify-content: center; background: var(--input-bg); }
+        .background-image-file { padding: 12px; border: 1px solid var(--border-panel); border-radius: 8px; }
+        #background-image-name { display: block; overflow-wrap: anywhere; margin-bottom: 10px; }
+        .background-image-actions { display: flex; justify-content: center; gap: 8px; }
+        .background-image-hint { font-size: .8rem; color: var(--text-muted); margin: 10px 0 0; }
+        #background-image-error { color: #ff6961; margin: 10px 0 0; font-size: .85rem; }
         .new-animation-options { display: grid; gap: 8px; margin: 18px 0; text-align: left; }
         .new-animation-option { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border-panel); border-radius: 10px; background: var(--input-bg); color: var(--text-main); cursor: pointer; font: inherit; }
         .new-animation-option:hover { border-color: var(--accent-blue); background: rgba(10, 132, 255, 0.12); }
@@ -1011,9 +1020,22 @@
                     <input type="number" id="canvas-height" class="modal-input" value="600" min="64" max="2048" step="1">
                 </div>
             </div>
+            <div class="background-image-settings">
+                <input type="file" id="background-image-input" accept="image/png,image/jpeg,image/webp" hidden onchange="app.loadBackgroundImage(this)">
+                <button type="button" class="btn-ghost" id="background-image-set" onclick="document.getElementById('background-image-input').click()"><i class="fas fa-image" aria-hidden="true"></i> Set Background Image</button>
+                <div class="background-image-file" id="background-image-file" hidden>
+                    <span id="background-image-name" aria-label="Selected background image"></span>
+                    <div class="background-image-actions">
+                        <button type="button" class="btn-ghost" onclick="document.getElementById('background-image-input').click()">Replace</button>
+                        <button type="button" class="btn-ghost" id="background-image-remove" onclick="app.removeBackgroundImage()">Remove</button>
+                    </div>
+                </div>
+                <p class="background-image-hint" id="background-image-hint">Behind your drawings on every frame.</p>
+                <p id="background-image-error" role="alert" hidden></p>
+            </div>
             <div class="modal-btns">
                 <button class="btn-ghost" onclick="app.closeModal('settings-modal')">Cancel</button>
-                <button class="btn-primary" onclick="app.applySettings()">Apply</button>
+                <button class="btn-primary" id="settings-apply" onclick="app.applySettings()">Apply</button>
             </div>
         </div>
     </div>
