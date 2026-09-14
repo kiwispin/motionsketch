@@ -154,3 +154,53 @@ test('does not route C/V away from a text input', async ({ page }) => {
     projectName: document.getElementById('project-name').value
   }))).toEqual({ frameClipboard: null, projectName: 'Untitled' });
 });
+
+for (const modifier of ['Control', 'Meta']) {
+  test(`${modifier} paste keeps copied artwork after frame navigation even with an older frame clipboard`, async ({ page }) => {
+    await seedFrames(page, 8);
+    await page.locator('.frame-card').nth(0).click();
+    await page.keyboard.press(`${modifier}+c`);
+    await page.locator('.frame-card').nth(6).click();
+    await page.evaluate(() => {
+      app.selectedObject = { stroke: app.frames[6].strokes[0], layer: 'ink' };
+      app.canvas.focus();
+    });
+    await page.keyboard.press(`${modifier}+c`);
+    const originalPosition = await page.evaluate(() => ({ x: app.clipboard.x, y: app.clipboard.y }));
+    await page.locator('.frame-card').nth(7).click();
+    await page.keyboard.press(`${modifier}+v`);
+    expect(await page.evaluate(() => ({ x: app.frames[7].strokes.at(-1).x, y: app.frames[7].strokes.at(-1).y }))).toEqual(originalPosition);
+    expect(await page.evaluate(() => ({ frames: app.frames.length, text: app.frames[7].strokes.map(s => s.text) })))
+      .toEqual({ frames: 8, text: ['ink-7', 'ink-6'] });
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    expect(await page.evaluate(() => app.frames[7].strokes.length)).toBe(1);
+    // A subsequent whole-frame copy deliberately changes the paste target type.
+    await page.locator('.frame-card').nth(6).click();
+    await page.keyboard.press(`${modifier}+c`);
+    await page.locator('.frame-card').nth(7).click();
+    await page.keyboard.press(`${modifier}+v`);
+    expect(await page.evaluate(() => ({ frames: app.frames.length, text: app.frames[8].strokes[0].text })))
+      .toEqual({ frames: 9, text: 'ink-6' });
+  });
+}
+
+test('group paste preserves cross-frame coordinates and holes but offsets same-frame duplicates', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const mark = { type: 'brush', color: '#ffffff', size: 8, points: [{ x: 50, y: 550, p: .5 }], holes: [[{ x: 49, y: 549 }, { x: 51, y: 549 }, { x: 50, y: 551 }]] };
+    const group = { type: 'group', items: [mark], angle: 0 };
+    app.frames = [{ strokes: [group], paperStrokes: [], hold: 1 }, { strokes: [], paperStrokes: [], hold: 1 }];
+    app.frameIndex = 0;
+    app.selectedObject = { isPersistentGroup: true, persistentGroupStroke: group };
+    app.copySelection();
+    app.pasteSelection();
+    const same = structuredClone(app.frames[0].strokes.at(-1).items[0]);
+    app.selectFrame(1);
+    app.pasteSelection();
+    const other = structuredClone(app.frames[1].strokes[0].items[0]);
+    return { original: mark, same, other };
+  });
+  expect(result.other.points).toEqual(result.original.points);
+  expect(result.other.holes).toEqual(result.original.holes);
+  expect(result.same.points[0]).toMatchObject({ x: 70, y: 570 });
+  expect(result.same.holes[0][0]).toEqual({ x: 69, y: 569 });
+});

@@ -399,21 +399,23 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     const hasCommandModifier = e.ctrlKey || e.metaKey;
                     const hasToolModifier = hasCommandModifier || e.altKey;
 
-                    // Timeline frame copy/paste is routed by the focused surface. A
-                    // focused timeline card owns C/V; a focused canvas owns the artwork
-                    // clipboard. Inputs were returned from above so text entry is safe.
+                    // Copy follows the focused surface; paste follows the last successful
+                    // copy, so choosing a destination frame does not switch clipboards.
+                    // Explicit frame toolbar actions still use the frame clipboard.
                     if (hasCommandModifier) {
-                        if ((key === 'c' || key === 'v') && this.isTimelineCommandContext(target)) {
-                            if (key === 'c') this.copySelectedFrames();
-                            else this.pasteSelectedFrames();
+                        if (key === 'v') {
+                            const frames = this.lastCopiedContent === 'frames' ||
+                                (!this.lastCopiedContent && this.isTimelineCommandContext(target));
+                            const pasted = frames ? this.pasteSelectedFrames() : this.pasteSelection();
+                            if (pasted) e.preventDefault();
+                            return;
+                        }
+                        if (key === 'c' && this.isTimelineCommandContext(target)) {
+                            this.copySelectedFrames();
                             e.preventDefault();
                             return;
                         }
                         if (key === 'c' && this.copySelection()) {
-                            e.preventDefault();
-                            return;
-                        }
-                        if (key === 'v' && this.pasteSelection()) {
                             e.preventDefault();
                             return;
                         }
@@ -975,6 +977,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.frameClipboard = {
                     frames: indices.map((index) => this.cloneData(this.frames[index]))
                 };
+                this.lastCopiedContent = 'frames';
                 this.syncFrameActions();
                 return true;
             }
@@ -5079,11 +5082,14 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 } else {
                     this.clipboard = JSON.parse(JSON.stringify(this.selectedObject.stroke));
                 }
+                this.lastCopiedContent = 'artwork';
+                this.artworkClipboardSourceFrame = this.frames[this.frameIndex];
                 return true;
             }
 
             pasteSelection() {
                 if (!this.clipboard) return false;
+                const offset = !this.artworkClipboardSourceFrame || this.artworkClipboardSourceFrame === this.frames[this.frameIndex] ? 20 : 0;
                 {
                     this.saveState();
                     const list = this.getActiveStrokeList();
@@ -5094,11 +5100,11 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         this.stripMotionMetadata(newGroup);
                         newGroup.items.forEach(item => {
                             if (item.type !== 'text') {
-                                item.points.forEach(p => { p.x += 20; p.y += 20; });
+                                item.points.forEach(p => { p.x += offset; p.y += offset; });
                             } else {
-                                item.x += 20; item.y += 20;
+                                item.x += offset; item.y += offset;
                             }
-                            this.translateHoles(item, item.holes, 20, 20);
+                            this.translateHoles(item, item.holes, offset, offset);
                         });
                         list.push(newGroup);
                         const bounds = this.getStrokeBounds(newGroup);
@@ -5116,11 +5122,11 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         this.clipboard.items.forEach(item => {
                             const newStroke = this.stripMotionMetadata(JSON.parse(JSON.stringify(item.stroke)));
                             if (newStroke.type !== 'text') {
-                                newStroke.points.forEach(p => { p.x += 20; p.y += 20; });
+                                newStroke.points.forEach(p => { p.x += offset; p.y += offset; });
                             } else {
-                                newStroke.x += 20; newStroke.y += 20;
+                                newStroke.x += offset; newStroke.y += offset;
                             }
-                            this.translateHoles(newStroke, newStroke.holes, 20, 20);
+                            this.translateHoles(newStroke, newStroke.holes, offset, offset);
                             list.push(newStroke);
                             newItems.push({ stroke: newStroke, layer: this.activeLayer });
                         });
@@ -5132,11 +5138,11 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     } else {
                         const newStroke = this.stripMotionMetadata(JSON.parse(JSON.stringify(this.clipboard)));
                         if (newStroke.type !== 'text') {
-                            newStroke.points.forEach(p => { p.x += 20; p.y += 20; });
+                            newStroke.points.forEach(p => { p.x += offset; p.y += offset; });
                         } else {
-                            newStroke.x += 20; newStroke.y += 20;
+                            newStroke.x += offset; newStroke.y += offset;
                         }
-                        this.translateHoles(newStroke, newStroke.holes, 20, 20);
+                        this.translateHoles(newStroke, newStroke.holes, offset, offset);
                         list.push(newStroke);
                         this.selectedObject = { stroke: newStroke, layer: this.activeLayer };
                         this.calcBounds(newStroke);
