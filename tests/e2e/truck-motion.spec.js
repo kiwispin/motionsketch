@@ -590,6 +590,12 @@ test('Duplicating the last frame reveals the Add Frame control', async ({ page }
   await seedFrames(page, 12);
 
   await page.locator('#frames-list .frame-card').last().locator('.frame-copy-btn').click();
+  const feedback = await page.evaluate(() => ({
+    addPulsing: document.querySelector('#frames-list .add-frame-btn')?.classList.contains('frame-added-pulse') || false,
+    addedFramePulsing: document.querySelector('#frames-list .frame-card:last-of-type')?.classList.contains('frame-added') || false
+  }));
+  expect(feedback.addPulsing).toBe(true);
+  expect(feedback.addedFramePulsing).toBe(true);
   await expect.poll(() => page.evaluate(() => {
     const frames = window.app.framesList;
     return Math.round(frames.scrollLeft) >= Math.round(Math.max(0, frames.scrollWidth - frames.clientWidth));
@@ -604,9 +610,7 @@ test('Duplicating the last frame reveals the Add Frame control', async ({ page }
       frameCount: window.app.frames.length,
       scrollLeft: frames.scrollLeft,
       maxScroll: Math.max(0, frames.scrollWidth - frames.clientWidth),
-      addVisible: Boolean(addRect && addRect.left >= framesRect.left && addRect.right <= framesRect.right),
-      addPulsing: addFrame?.classList.contains('frame-added-pulse') || false,
-      addedFramePulsing: frames.querySelector('.frame-card:last-of-type')?.classList.contains('frame-added') || false
+      addVisible: Boolean(addRect && addRect.left >= framesRect.left && addRect.right <= framesRect.right)
     };
   });
 
@@ -614,8 +618,6 @@ test('Duplicating the last frame reveals the Add Frame control', async ({ page }
   expect(metrics.frameIndex).toBe(12);
   expect(metrics.scrollLeft).toBe(metrics.maxScroll);
   expect(metrics.addVisible).toBe(true);
-  expect(metrics.addPulsing).toBe(true);
-  expect(metrics.addedFramePulsing).toBe(true);
 });
 
 test('Truck movement keyframes stay aligned with thumbnails across the full scroll range', async ({ page }) => {

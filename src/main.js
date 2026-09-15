@@ -3924,7 +3924,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.frameAddPulseTimer = setTimeout(() => {
                     addButton.classList.remove('frame-added-pulse');
                     this.frameAddPulseTimer = null;
-                }, 800);
+                }, 1000);
             }
 
             animateAddedFrame(index) {
