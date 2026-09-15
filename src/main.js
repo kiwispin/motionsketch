@@ -3899,22 +3899,56 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
             }
 
             duplicateFrame(index) {
-                this.saveState();
-                this.selectedObject = null;
                 const target = index !== undefined ? index : this.frameIndex;
                 const sourceFrame = this.frames[target];
+                if (!sourceFrame) return false;
+                const insertAt = target + 1;
+                const sourceTrackIds = [...new Set((sourceFrame.strokes || [])
+                    .map((stroke) => stroke?.motionTrackId)
+                    .filter(Boolean))];
+                const selectedTrackId = this.tool === 'truck'
+                    ? (this.getMotionTrackForSelection()?.id || this.truckSelectedTrackId)
+                    : null;
+                const frameScrollLeft = this.framesList?.scrollLeft || 0;
+
+                this.saveState();
                 this.frames.splice(target + 1, 0, {
                     strokes: this.cloneData(sourceFrame.strokes),
                     paperStrokes: this.cloneData(this.getPaperStrokes(sourceFrame)),
                     frameBgColor: sourceFrame.frameBgColor,
                     hold: this.getFrameHold(sourceFrame)
                 });
-                this.remapMotionTracksAfterInsert(target + 1);
+                this.remapMotionTracksAfterInsert(insertAt);
+
+                // A duplicated frame must retain animated artwork. The generated
+                // motion copy is rebuilt from its track, so when the duplicate is
+                // made directly after a track's endpoint, extend that span first;
+                // otherwise applyMotionTrack removes the clone and leaves the new
+                // frame empty.
+                sourceTrackIds.forEach((trackId) => {
+                    const track = this.getMotionTrack(trackId);
+                    if (!track || target < track.startFrame || target > track.endFrame) return;
+                    if (track.endFrame < insertAt) track.endFrame = insertAt;
+                });
                 this.motionTracks.forEach((track) => this.applyMotionTrack(track));
-                this.frameIndex = target + 1;
+                this.frameIndex = insertAt;
+
+                // Keep Truck's selected movement row attached to the duplicated
+                // object instead of leaving a stale selection from the source
+                // frame (or making the movement timeline disappear).
+                this.selectedObject = null;
+                if (this.tool === 'truck' && selectedTrackId && this.getMotionTrack(selectedTrackId)) {
+                    this.truckSelectedTrackId = selectedTrackId;
+                    this.selectMotionTrack(selectedTrackId, false);
+                } else if (this.tool !== 'truck') {
+                    this.truckSelectedTrackId = null;
+                }
                 this.renderUI();
+                if (this.framesList) this.framesList.scrollLeft = frameScrollLeft;
+                this.syncMotionTimelineScroll(this.framesList);
                 this.renderCanvas();
                 this.saveStorage();
+                return true;
             }
 
             duplicateSelectedFrames() {
@@ -3926,6 +3960,12 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     return true;
                 }
 
+                const selectedTrackId = this.tool === 'truck'
+                    ? (this.getMotionTrackForSelection()?.id || this.truckSelectedTrackId)
+                    : null;
+                const frameScrollLeft = this.framesList?.scrollLeft || 0;
+                const sourceTrackTargets = [];
+
                 this.saveState();
                 this.selectedObject = null;
                 const inserted = [];
@@ -3933,21 +3973,40 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     const target = sourceIndex + offset;
                     const sourceFrame = this.frames[target];
                     if (!sourceFrame) return;
+                    const insertAt = target + 1;
+                    sourceTrackTargets.push({
+                        frame: insertAt,
+                        trackIds: [...new Set((sourceFrame.strokes || [])
+                            .map((stroke) => stroke?.motionTrackId)
+                            .filter(Boolean))]
+                    });
                     this.frames.splice(target + 1, 0, {
                         strokes: this.cloneData(sourceFrame.strokes),
                         paperStrokes: this.cloneData(this.getPaperStrokes(sourceFrame)),
                         frameBgColor: sourceFrame.frameBgColor,
                         hold: this.getFrameHold(sourceFrame)
                     });
-                    this.remapMotionTracksAfterInsert(target + 1);
-                    this.motionTracks.forEach((track) => this.applyMotionTrack(track));
-                    inserted.push(target + 1);
+                    this.remapMotionTracksAfterInsert(insertAt);
+                    inserted.push(insertAt);
                 });
+                sourceTrackTargets.forEach(({ frame, trackIds }) => trackIds.forEach((trackId) => {
+                    const track = this.getMotionTrack(trackId);
+                    if (track && track.endFrame < frame) track.endFrame = frame;
+                }));
+                this.motionTracks.forEach((track) => this.applyMotionTrack(track));
                 this.frameIndex = inserted[inserted.length - 1] ?? this.frameIndex;
+                if (this.tool === 'truck' && selectedTrackId && this.getMotionTrack(selectedTrackId)) {
+                    this.truckSelectedTrackId = selectedTrackId;
+                    this.selectMotionTrack(selectedTrackId, false);
+                } else if (this.tool !== 'truck') {
+                    this.truckSelectedTrackId = null;
+                }
                 this.selectedFrameIndices = inserted;
                 this.frameSelectionAnchor = inserted[0] ?? null;
                 this.timelineSelectionFocused = true;
                 this.renderUI();
+                if (this.framesList) this.framesList.scrollLeft = frameScrollLeft;
+                this.syncMotionTimelineScroll(this.framesList);
                 this.renderCanvas();
                 this.saveStorage();
                 return true;
@@ -4170,6 +4229,27 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.motionScrollSyncing = false;
             }
 
+            syncMotionTimelineLayout() {
+                const framesTrack = this.framesList;
+                const movementList = document.getElementById('movement-tracks');
+                if (!framesTrack || !movementList) return;
+
+                const frameStyles = getComputedStyle(framesTrack);
+                const sampleCard = framesTrack.querySelector('.frame-card');
+                const addFrame = framesTrack.querySelector('.add-frame-btn');
+                const gap = Number.parseFloat(frameStyles.columnGap || frameStyles.gap) || 0;
+                const cellWidth = sampleCard?.getBoundingClientRect().width || 90;
+                const addMargin = addFrame ? Number.parseFloat(getComputedStyle(addFrame).marginLeft) || 0 : 0;
+                const addWidth = addFrame?.getBoundingClientRect().width || 0;
+
+                // Both strips use the same left padding, cell width, and gap.
+                // Mirror the trailing Add Frame footprint in the movement row
+                // so both scroll ranges are identical at the far right.
+                movementList.style.setProperty('--movement-cell-width', `${cellWidth}px`);
+                movementList.style.setProperty('--movement-cell-gap', `${gap}px`);
+                movementList.style.setProperty('--movement-track-end-space', `${addFrame ? gap + addMargin + addWidth : 0}px`);
+            }
+
             renderMotionTracks() {
                 const container = document.getElementById('movement-tracks');
                 const scroll = document.getElementById('movement-track-scroll');
@@ -4182,6 +4262,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.motionScrollActive = showMotion && visibleTracks.length > 0;
                 panel.classList.toggle('has-motion', showMotion);
                 document.body.classList.toggle('has-motion-timeline', showMotion);
+                this.syncMotionTimelineLayout();
                 visibleTracks.forEach((track, trackIndex) => {
                     const row = document.createElement('div');
                     row.className = 'motion-track-row';

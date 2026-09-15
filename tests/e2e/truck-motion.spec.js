@@ -531,6 +531,101 @@ test('Truck keeps the selected ball row across frame navigation and endpoint mov
   await expect.poll(() => page.evaluate((id) => window.app.getMotionTrack(id)?.keyframes.map((key) => key.frame), selectedSecondId)).toEqual([0, 1]);
 });
 
+test('Truck frame duplication keeps animated artwork, selection, and movement position', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => window.app && Array.isArray(window.app.frames));
+  await seedFrames(page, 8);
+
+  const canvas = page.locator('#rendering-canvas');
+  const box = await canvas.boundingBox();
+  await page.mouse.click(box.x + 120 * box.width / 600, box.y + 120 * box.height / 600);
+  await page.locator('#tool-truck').click();
+  await page.locator('#movement-add-keyframe').click();
+
+  const before = await page.evaluate(() => {
+    const app = window.app;
+    const track = app.motionTracks[0];
+    app.framesList.scrollLeft = Math.min(160, app.framesList.scrollWidth - app.framesList.clientWidth);
+    app.framesList.dispatchEvent(new Event('scroll'));
+    return {
+      trackId: track.id,
+      scrollLeft: app.framesList.scrollLeft,
+      frameIndex: app.frameIndex,
+      endFrame: track.endFrame
+    };
+  });
+
+  await page.locator('#frames-list .frame-card').nth(2).locator('.frame-copy-btn').click();
+  await expect.poll(() => page.evaluate(() => {
+    const app = window.app;
+    const track = app.motionTracks[0];
+    return {
+      frames: app.frames.length,
+      frameIndex: app.frameIndex,
+      endFrame: track?.endFrame,
+      keys: track?.keyframes.map((key) => key.frame),
+      currentTagged: app.frames[3]?.strokes.some((stroke) => stroke.motionTrackId === track?.id),
+      selectedTrack: app.getMotionTrackForSelection()?.id || null,
+      rowId: document.querySelector('.motion-track-row')?.dataset.trackId || null,
+      frameScroll: app.framesList.scrollLeft,
+      movementScroll: document.getElementById('movement-track-scroll')?.scrollLeft || 0
+    };
+  })).toEqual({
+    frames: 9,
+    frameIndex: 3,
+    endFrame: 3,
+    keys: [2],
+    currentTagged: true,
+    selectedTrack: before.trackId,
+    rowId: before.trackId,
+    frameScroll: before.scrollLeft,
+    movementScroll: before.scrollLeft
+  });
+});
+
+test('Truck movement keyframes stay aligned with thumbnails across the full scroll range', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.waitForFunction(() => window.app && Array.isArray(window.app.frames));
+  await seedFrames(page, 40);
+
+  const canvas = page.locator('#rendering-canvas');
+  const box = await canvas.boundingBox();
+  await page.mouse.click(box.x + 120 * box.width / 600, box.y + 120 * box.height / 600);
+  await page.locator('#tool-truck').click();
+  await page.locator('#movement-add-keyframe').click();
+
+  const metrics = await page.evaluate(() => {
+    const app = window.app;
+    const frames = app.framesList;
+    const movement = document.getElementById('movement-track-scroll');
+    const maxFrames = frames.scrollWidth - frames.clientWidth;
+    const maxMovement = movement.scrollWidth - movement.clientWidth;
+    frames.scrollLeft = maxFrames;
+    frames.dispatchEvent(new Event('scroll'));
+    const syncedAtEnd = {
+      frameScroll: frames.scrollLeft,
+      movementScroll: movement.scrollLeft,
+      maxFrames,
+      maxMovement
+    };
+    const frameCard = frames.querySelector('.frame-card:last-of-type');
+    const movementCell = document.querySelector('.motion-track-cell:last-child');
+    const frameRect = frameCard?.getBoundingClientRect();
+    const movementRect = movementCell?.getBoundingClientRect();
+    return {
+      syncedAtEnd,
+      centerDelta: frameRect && movementRect
+        ? Math.abs((frameRect.left + frameRect.width / 2) - (movementRect.left + movementRect.width / 2))
+        : Infinity
+    };
+  });
+
+  expect(metrics.syncedAtEnd.maxFrames).toBe(metrics.syncedAtEnd.maxMovement);
+  expect(metrics.syncedAtEnd.frameScroll).toBe(metrics.syncedAtEnd.movementScroll);
+  expect(metrics.centerDelta).toBeLessThanOrEqual(0.5);
+});
+
 test('Truck creates a single lazy key on drag, ignores clicks, and undoes to the original ball', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.app && Array.isArray(window.app.frames));

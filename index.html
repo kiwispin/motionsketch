@@ -713,7 +713,14 @@
         body.has-motion-timeline .movement-track-scroll { display: block; }
         .movement-track-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
         .movement-track-scroll::-webkit-scrollbar-thumb { background: rgba(128,140,160,.5); border-radius: 999px; }
-        .movement-track-list { min-width: max-content; padding: 0 20px; }
+        /* Match the movement row's columns to the thumbnail strip. The extra
+           end space mirrors the trailing Add Frame control so the final
+           keyframe never drifts when the two tracks are scrolled together. */
+        .movement-track-list {
+            min-width: max-content;
+            padding: 0 20px;
+            padding-right: calc(20px + var(--movement-track-end-space, 0px));
+        }
         .movement-track-controls {
             min-height: 34px; display: flex; align-items: center; gap: 8px; padding: 3px 20px;
             border-bottom: 1px solid var(--border-panel); color: var(--text-muted); font-size: .75rem;
@@ -722,9 +729,16 @@
         .movement-key-controls { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
         .movement-key-controls .btn-ghost { width: 28px; height: 28px; padding: 0; font-size: 1rem; line-height: 1; justify-content: center; }
         .movement-key-toggle { font-size: 1.15rem !important; font-weight: 600; }
-        .motion-track-row { display: grid; grid-auto-flow: column; grid-auto-columns: 90px; gap: 12px; height: 34px; align-items: center; }
+        .motion-track-row {
+            display: grid;
+            grid-auto-flow: column;
+            grid-auto-columns: var(--movement-cell-width, 90px);
+            gap: var(--movement-cell-gap, 12px);
+            height: 34px;
+            align-items: center;
+        }
         .motion-track-cell {
-            width: 90px; height: 26px; border: 1px solid transparent; border-radius: 5px; background: transparent;
+            width: var(--movement-cell-width, 90px); height: 26px; border: 1px solid transparent; border-radius: 5px; background: transparent;
             color: var(--text-muted); position: relative; cursor: pointer; padding: 0;
         }
         .motion-track-cell.current { border-color: var(--accent-blue); background: rgba(10,132,255,.12); }
