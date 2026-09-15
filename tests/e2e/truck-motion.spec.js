@@ -583,6 +583,41 @@ test('Truck frame duplication keeps animated artwork, selection, and movement po
   });
 });
 
+test('Duplicating the last frame reveals the Add Frame control', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.waitForFunction(() => window.app && Array.isArray(window.app.frames));
+  await seedFrames(page, 12);
+
+  await page.locator('#frames-list .frame-card').last().locator('.frame-copy-btn').click();
+  await expect.poll(() => page.evaluate(() => {
+    const frames = window.app.framesList;
+    return Math.round(frames.scrollLeft) >= Math.round(Math.max(0, frames.scrollWidth - frames.clientWidth));
+  })).toBe(true);
+  const metrics = await page.evaluate(() => {
+    const frames = window.app.framesList;
+    const addFrame = frames.querySelector('.add-frame-btn');
+    const framesRect = frames.getBoundingClientRect();
+    const addRect = addFrame?.getBoundingClientRect();
+    return {
+      frameIndex: window.app.frameIndex,
+      frameCount: window.app.frames.length,
+      scrollLeft: frames.scrollLeft,
+      maxScroll: Math.max(0, frames.scrollWidth - frames.clientWidth),
+      addVisible: Boolean(addRect && addRect.left >= framesRect.left && addRect.right <= framesRect.right),
+      addPulsing: addFrame?.classList.contains('frame-added-pulse') || false,
+      addedFramePulsing: frames.querySelector('.frame-card:last-of-type')?.classList.contains('frame-added') || false
+    };
+  });
+
+  expect(metrics.frameCount).toBe(13);
+  expect(metrics.frameIndex).toBe(12);
+  expect(metrics.scrollLeft).toBe(metrics.maxScroll);
+  expect(metrics.addVisible).toBe(true);
+  expect(metrics.addPulsing).toBe(true);
+  expect(metrics.addedFramePulsing).toBe(true);
+});
+
 test('Truck movement keyframes stay aligned with thumbnails across the full scroll range', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
@@ -624,6 +659,47 @@ test('Truck movement keyframes stay aligned with thumbnails across the full scro
   expect(metrics.syncedAtEnd.maxFrames).toBe(metrics.syncedAtEnd.maxMovement);
   expect(metrics.syncedAtEnd.frameScroll).toBe(metrics.syncedAtEnd.movementScroll);
   expect(metrics.centerDelta).toBeLessThanOrEqual(0.5);
+});
+
+test('Truck movement controls stay pinned and the keyframe row stays inside the panel', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.waitForFunction(() => window.app && Array.isArray(window.app.frames));
+  await seedFrames(page, 40);
+
+  const canvas = await page.locator('#rendering-canvas').boundingBox();
+  await page.mouse.click(canvas.x + 120 * canvas.width / 600, canvas.y + 120 * canvas.height / 600);
+  await page.locator('#tool-truck').click();
+  await page.locator('#movement-add-keyframe').click();
+
+  const metrics = await page.evaluate(() => {
+    const app = window.app;
+    const frames = app.framesList;
+    const movement = document.getElementById('movement-track-scroll');
+    const controls = document.getElementById('movement-track-controls');
+    const list = document.getElementById('movement-tracks');
+    const maxFrames = frames.scrollWidth - frames.clientWidth;
+    frames.scrollLeft = maxFrames;
+    frames.dispatchEvent(new Event('scroll'));
+    const movementRect = movement.getBoundingClientRect();
+    const controlsRect = controls.getBoundingClientRect();
+    const listRect = list.getBoundingClientRect();
+    return {
+      movementLeft: movementRect.left,
+      movementRight: movementRect.right,
+      controlsLeft: controlsRect.left,
+      controlsRight: controlsRect.right,
+      listBottom: listRect.bottom,
+      movementBottom: movementRect.bottom,
+      movementScroll: movement.scrollLeft,
+      frameScroll: frames.scrollLeft
+    };
+  });
+
+  expect(metrics.controlsLeft).toBeCloseTo(metrics.movementLeft, 0);
+  expect(metrics.controlsRight).toBeCloseTo(metrics.movementRight, 0);
+  expect(metrics.listBottom).toBeLessThanOrEqual(metrics.movementBottom);
+  expect(metrics.movementScroll).toBe(metrics.frameScroll);
 });
 
 test('Truck creates a single lazy key on drag, ignores clicks, and undoes to the original ball', async ({ page }) => {

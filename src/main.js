@@ -87,6 +87,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.quickLineActive = false;
                 this.quickLineDelay = 550;
                 this.quickLineMinDistance = 12;
+                this.frameAddPulseTimer = null;
+                this.frameAddedTimer = null;
 
                 this.selectedObject = null;
                 this.selectedBgColor = '#ffffff';
@@ -3898,6 +3900,47 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 }, 50);
             }
 
+            revealTimelineEnd() {
+                const frames = this.framesList;
+                if (!frames) return;
+                const end = Math.max(0, frames.scrollWidth - frames.clientWidth);
+                if (typeof frames.scrollTo === 'function') {
+                    // Let the user see the strip move across to the new frame,
+                    // while the scroll listener keeps the movement row in lockstep.
+                    frames.scrollTo({ left: end, behavior: 'smooth' });
+                } else {
+                    frames.scrollLeft = end;
+                }
+            }
+
+            pulseAddFrameButton() {
+                const addButton = this.framesList?.querySelector('.add-frame-btn');
+                if (!addButton) return;
+                clearTimeout(this.frameAddPulseTimer);
+                addButton.classList.remove('frame-added-pulse');
+                // Force a reflow so consecutive duplications restart the pulse.
+                void addButton.offsetWidth;
+                addButton.classList.add('frame-added-pulse');
+                this.frameAddPulseTimer = setTimeout(() => {
+                    addButton.classList.remove('frame-added-pulse');
+                    this.frameAddPulseTimer = null;
+                }, 800);
+            }
+
+            animateAddedFrame(index) {
+                const card = this.framesList?.querySelectorAll('.frame-card')?.[index];
+                if (!card) return;
+                clearTimeout(this.frameAddedTimer);
+                card.classList.remove('frame-added');
+                // Force a reflow so repeated duplications restart the entrance cue.
+                void card.offsetWidth;
+                card.classList.add('frame-added');
+                this.frameAddedTimer = setTimeout(() => {
+                    card.classList.remove('frame-added');
+                    this.frameAddedTimer = null;
+                }, 760);
+            }
+
             duplicateFrame(index) {
                 const target = index !== undefined ? index : this.frameIndex;
                 const sourceFrame = this.frames[target];
@@ -3910,6 +3953,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     ? (this.getMotionTrackForSelection()?.id || this.truckSelectedTrackId)
                     : null;
                 const frameScrollLeft = this.framesList?.scrollLeft || 0;
+                const duplicateWasLastFrame = target === this.frames.length - 1;
 
                 this.saveState();
                 this.frames.splice(target + 1, 0, {
@@ -3944,7 +3988,15 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     this.truckSelectedTrackId = null;
                 }
                 this.renderUI();
-                if (this.framesList) this.framesList.scrollLeft = frameScrollLeft;
+                if (this.framesList) {
+                    // Duplicating the last frame creates the new end of the
+                    // timeline. Reveal it together with the Add Frame button;
+                    // duplicates elsewhere preserve the user's scroll position.
+                    if (duplicateWasLastFrame) this.revealTimelineEnd();
+                    else this.framesList.scrollLeft = frameScrollLeft;
+                }
+                this.animateAddedFrame(insertAt);
+                if (duplicateWasLastFrame) this.pulseAddFrameButton();
                 this.syncMotionTimelineScroll(this.framesList);
                 this.renderCanvas();
                 this.saveStorage();
@@ -3964,6 +4016,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     ? (this.getMotionTrackForSelection()?.id || this.truckSelectedTrackId)
                     : null;
                 const frameScrollLeft = this.framesList?.scrollLeft || 0;
+                const duplicateWasLastFrame = indices.includes(this.frames.length - 1);
                 const sourceTrackTargets = [];
 
                 this.saveState();
@@ -4005,7 +4058,12 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.frameSelectionAnchor = inserted[0] ?? null;
                 this.timelineSelectionFocused = true;
                 this.renderUI();
-                if (this.framesList) this.framesList.scrollLeft = frameScrollLeft;
+                if (this.framesList) {
+                    if (duplicateWasLastFrame) this.revealTimelineEnd();
+                    else this.framesList.scrollLeft = frameScrollLeft;
+                }
+                this.animateAddedFrame(inserted[inserted.length - 1]);
+                if (duplicateWasLastFrame) this.pulseAddFrameButton();
                 this.syncMotionTimelineScroll(this.framesList);
                 this.renderCanvas();
                 this.saveStorage();

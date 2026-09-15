@@ -615,6 +615,23 @@
             font-size: 1.2rem; cursor: pointer; transition: all 0.2s; margin-left: 10px;
         }
         .frames-track .add-frame-btn:hover { background: var(--accent-blue); color: white; }
+        @keyframes frame-added-pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0, 122, 255, 0); }
+            32% { transform: scale(1.18); box-shadow: 0 0 0 10px rgba(0, 122, 255, .3), 0 0 28px rgba(0, 122, 255, .58); }
+            62% { transform: scale(1.04); box-shadow: 0 0 0 4px rgba(0, 122, 255, .16), 0 0 18px rgba(0, 122, 255, .34); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0, 122, 255, 0); }
+        }
+        .frames-track .add-frame-btn.frame-added-pulse { animation: frame-added-pulse .9s ease-out; }
+        @keyframes frame-added-card {
+            0% { opacity: .55; transform: translateX(16px) translateY(-2px) scale(.82); filter: brightness(1.35); box-shadow: 0 0 0 0 rgba(0, 122, 255, 0); }
+            45% { opacity: 1; transform: translateX(0) translateY(-2px) scale(1.08); filter: brightness(1.12); box-shadow: 0 0 0 5px rgba(0, 122, 255, .34), 0 0 26px rgba(0, 122, 255, .55); }
+            100% { opacity: 1; transform: translateX(0) translateY(-2px) scale(1); filter: none; box-shadow: 0 2px 5px rgba(0, 0, 0, .1); }
+        }
+        .frame-card.frame-added { animation: frame-added-card .72s cubic-bezier(.2, .8, .25, 1); }
+        @media (prefers-reduced-motion: reduce) {
+            .frames-track .add-frame-btn.frame-added-pulse,
+            .frame-card.frame-added { animation: none; outline: 2px solid var(--accent-blue); outline-offset: 3px; }
+        }
 
         .play-fab {
             width: 32px; height: 32px; border: 0; background: var(--accent-blue); border-radius: 50%;
@@ -703,11 +720,14 @@
             margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--border-panel);
             border-radius: 10px; background: var(--input-bg); display: grid; gap: 3px;
         }
-        .timeline-panel.has-motion { height: 210px; padding-bottom: 6px; }
+        /* Give the movement strip enough room for both its fixed controls and
+           the keyframe row.  The extra pixels keep the row from being clipped
+           by the panel's rounded bottom edge. */
+        .timeline-panel.has-motion { height: 222px; padding-bottom: 6px; }
         .timeline-panel.has-motion .timeline-frames-row { min-height: 88px; }
         .timeline-panel.has-motion .frames-track { padding-top: 6px; padding-bottom: 6px; }
         .movement-track-scroll {
-            display: none; height: auto; min-height: 72px; max-height: 72px; flex: 0 0 auto; overflow-x: auto; overflow-y: auto;
+            display: none; height: auto; min-height: 80px; max-height: 80px; flex: 0 0 auto; overflow-x: auto; overflow-y: auto;
             border-top: 1px solid var(--border-panel); scrollbar-width: thin;
         }
         body.has-motion-timeline .movement-track-scroll { display: block; }
@@ -722,8 +742,12 @@
             padding-right: calc(20px + var(--movement-track-end-space, 0px));
         }
         .movement-track-controls {
-            min-height: 34px; display: flex; align-items: center; gap: 8px; padding: 3px 20px;
-            border-bottom: 1px solid var(--border-panel); color: var(--text-muted); font-size: .75rem;
+            /* The movement strip shares the thumbnail scroller's horizontal
+               position.  Keep its label and keyframe controls pinned to the
+               viewport so they never disappear while the frames move. */
+            position: sticky; top: 0; left: 0; z-index: 4; box-sizing: border-box;
+            width: 100%; min-width: 100%; min-height: 34px; display: flex; align-items: center; gap: 8px; padding: 3px 20px;
+            border-bottom: 1px solid var(--border-panel); background: var(--input-bg); color: var(--text-muted); font-size: .75rem;
         }
         .movement-track-controls .movement-selected { min-width: 150px; flex: 0 1 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .movement-key-controls { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
@@ -756,7 +780,7 @@
         .inspector-context strong { font-size: 0.85rem; }
         .inspector-context span { color: var(--text-muted); font-size: 0.75rem; line-height: 1.35; }
 
-        .timeline-panel.has-motion { height: 210px; }
+        .timeline-panel.has-motion { height: 222px; }
         @media (min-width: 901px) {
             body.has-motion-timeline .props-panel { bottom: 230px; }
         }
@@ -906,11 +930,13 @@
         }
 
         @media (min-width: 901px) {
-            .props-panel,
-            body.has-motion-timeline .props-panel { bottom: 240px; }
+            .props-panel { bottom: 240px; }
+            body.has-motion-timeline .tools-panel,
+            body.has-motion-timeline .props-panel { bottom: 252px; }
         }
 
         @media (max-height: 700px) and (min-width: 901px) {
+            body.has-motion-timeline .tools-panel,
             .props-panel,
             body.has-motion-timeline .props-panel { bottom: 180px; }
         }
@@ -939,9 +965,9 @@
             .props-panel .layer-switch { width: 142px; }
             .props-panel .slider-row { width: 126px; }
             .timeline-panel { left: 10px; right: 10px; bottom: 10px; height: 154px; }
-            .timeline-panel.has-motion { height: 196px; }
+            .timeline-panel.has-motion { height: 208px; }
             .timeline-panel.has-motion .timeline-frames-row { min-height: 75px; }
-            .movement-track-scroll { min-height: 70px; max-height: 70px; }
+            .movement-track-scroll { min-height: 80px; max-height: 80px; }
             .movement-track-controls { min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
             .motion-track-row { height: 34px; }
             .motion-track-row { grid-auto-columns: 70px; gap: 12px; }
