@@ -64,9 +64,13 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.motionTracks = [];
                 this.motionTrackCounter = 0;
                 this.truckSelectedTrackId = null;
+                this.motionScrollBound = false;
+                this.motionScrollSyncing = false;
+                this.motionScrollActive = false;
                 this.truckEndFrame = 1;
                 this.motionKeyDrag = null;
                 this.motionDragSaved = false;
+                this.motionDirectEditDirty = false;
                 this.frameIndex = 0;
 
                 this.activeLayer = 'ink';
@@ -810,12 +814,6 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 const textSize = Math.max(12, Math.min(200, Number(document.getElementById('text-size').value) || 40));
                 const textBold = document.getElementById('text-bold').checked;
                 if (val) {
-                    if (this.editingTextObject && this.getMotionTrackForObject(this.editingTextObject)) {
-                        this.showExportNotice('Use Truck to edit movement on this artwork', true);
-                        this.closeModal('text-modal');
-                        this.editingTextObject = null;
-                        return;
-                    }
                     this.saveState();
                     if (this.editingTextObject) {
                         const textObj = this.editingTextObject;
@@ -825,6 +823,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         textObj.width = m.width;
                         textObj.height = textSize;
                         if (this.selectedObject && this.selectedObject.stroke === textObj) this.calcBounds(textObj);
+                        this.commitMotionArtworkEdits();
                     } else {
                         this.ctx.font = `${textBold ? 'bold ' : ''}${textSize}px sans-serif`;
                         const m = this.ctx.measureText(val);
@@ -1197,8 +1196,89 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 return this.getMotionTrackForObject(stroke);
             }
 
+            getMotionTrackEntriesForSelection() {
+                const entries = [];
+                const add = (stroke) => {
+                    const track = this.getMotionTrackForObject(stroke);
+                    if (!track || entries.some((entry) => entry.track.id === track.id)) return;
+                    entries.push({ track, stroke });
+                };
+                if (!this.selectedObject) return entries;
+                if (this.selectedObject.isPersistentGroup) add(this.selectedObject.persistentGroupStroke);
+                if (this.selectedObject.isGroup) {
+                    (this.selectedObject.items || []).forEach((item) => add(item.stroke));
+                } else {
+                    add(this.selectedObject.stroke);
+                }
+                return entries;
+            }
+
+            refreshMotionSelectionStroke(track) {
+                if (!track || !this.selectedObject) return;
+                const frameStrokes = this.frames[this.frameIndex]?.strokes || [];
+                const stroke = frameStrokes.find((candidate) => candidate.motionTrackId === track.id)
+                    || this.getMotionPreviewStroke(track);
+                if (!stroke) return;
+
+                if (this.selectedObject.isPersistentGroup && this.selectedObject.persistentGroupStroke?.motionTrackId === track.id) {
+                    this.selectedObject.persistentGroupStroke = stroke;
+                    this.selectedObject.items = (stroke.items || []).map((item, index) => ({ stroke: item, layer: 'ink', index }));
+                    this.selectedObject.bounds = this.getStrokeBounds(stroke);
+                    this.selectedObject.angle = stroke.angle || 0;
+                } else if (this.selectedObject.isGroup) {
+                    const item = this.selectedObject.items.find((candidate) => candidate.stroke?.motionTrackId === track.id);
+                    if (item) item.stroke = stroke;
+                    this.selectedObject.bounds = this.getGroupBounds(this.selectedObject.items);
+                } else if (this.selectedObject.stroke?.motionTrackId === track.id) {
+                    this.selectedObject.stroke = stroke;
+                    this.calcBounds(stroke);
+                }
+            }
+
+            commitMotionArtworkEdits() {
+                if (this.tool === 'truck' || !this.selectedObject) return false;
+                const entries = this.getMotionTrackEntriesForSelection();
+                if (!entries.length) return false;
+
+                entries.forEach(({ track, stroke }) => {
+                    const base = this.cloneData(stroke);
+                    const offset = this.getMotionOffset(track, this.frameIndex);
+                    this.translateStrokeObject(base, -offset.dx, -offset.dy);
+                    this.stripMotionMetadata(base);
+                    track.baseObject = base;
+                });
+                entries.forEach(({ track }) => {
+                    this.applyMotionTrack(track);
+                    this.refreshMotionSelectionStroke(track);
+                });
+                this.updateGroupToolbar();
+                this.saveStorage();
+                return true;
+            }
+
+            bakeMotionTracksForSelection() {
+                const entries = this.getMotionTrackEntriesForSelection();
+                if (!entries.length) return false;
+                return this.bakeMotionTracksByIds(entries.map(({ track }) => track.id));
+            }
+
+            bakeMotionTracksByIds(trackIds) {
+                const ids = new Set((trackIds || []).filter(Boolean));
+                if (!ids.size) return false;
+                this.frames.forEach((frame) => {
+                    (frame.strokes || []).forEach((stroke) => {
+                        if (ids.has(stroke?.motionTrackId)) this.stripMotionMetadata(stroke);
+                    });
+                });
+                this.motionTracks = this.motionTracks.filter((track) => !ids.has(track.id));
+                if (ids.has(this.truckSelectedTrackId)) this.truckSelectedTrackId = null;
+                return true;
+            }
+
             motionDirectEditBlocked() {
-                if (!this.getMotionTrackForSelection()) return false;
+                // Truck is the movement editor. Select remains the artwork editor,
+                // even when the selected artwork also has a motion track.
+                if (this.tool !== 'truck' || !this.getMotionTrackForSelection()) return false;
                 this.showExportNotice('Use Truck to edit movement on this artwork', true);
                 return true;
             }
@@ -1287,7 +1367,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     const insertAt = Math.min(this.frames[frameIndex].strokes.length, Math.max(0, track.stackIndex || 0));
                     this.frames[frameIndex].strokes.splice(insertAt, 0, copy);
                 }
-                if (this.truckSelectedTrackId === track.id) this.selectMotionTrack(track.id, false);
+                if (this.tool === 'truck' && this.truckSelectedTrackId === track.id) this.selectMotionTrack(track.id, false);
             }
 
             selectMotionTrack(trackId, render = true) {
@@ -1790,11 +1870,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 
                 if (this.tool === 'bucket') {
                     const found = this.hitTest(pos);
-                    if (found?.stroke?.motionTrackId) {
-                        this.showExportNotice('Use Truck to edit movement on this artwork', true);
-                        return;
-                    }
                     this.saveState();
+                    if (found?.stroke?.motionTrackId) this.bakeMotionTracksByIds([found.stroke.motionTrackId]);
                     if (found) {
                         found.stroke.fillColor = this.brushColor;
                         if (found.stroke.type === 'text') found.stroke.color = this.brushColor;
@@ -1838,6 +1915,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                             this.saveState();
                             this.dragMode = handle;
                             this.dragStart = pos;
+                            this.motionDirectEditDirty = false;
 
                             if (this.selectedObject.isGroup) {
                                 this.dragOriginalBounds = { ...this.selectedObject.bounds };
@@ -1882,6 +1960,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                             this.saveState();
                             this.dragMode = 'move';
                             this.dragStart = pos;
+                            this.motionDirectEditDirty = false;
                             this.dragOriginalBounds = { ...this.selectedObject.bounds };
 
                             if (this.selectedObject.isGroup) {
@@ -1949,6 +2028,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         }
                         this.dragMode = 'move';
                         this.dragStart = pos;
+                        this.motionDirectEditDirty = false;
                     } else {
                         this.isSelectingBox = true;
                         this.selectionStart = pos;
@@ -2027,16 +2107,6 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         this.selectionCurr = pos;
                         this.renderCanvas();
                         return;
-                    }
-
-                    if (this.dragMode && this.selectedObject && this.getMotionTrackForSelection()) {
-                        const { dx, dy } = this.getMoveDelta(pos);
-                        if (dx || dy) {
-                            this.dragMode = null;
-                            this.showExportNotice('Use Truck to edit movement on this artwork', true);
-                            this.renderCanvas();
-                            return;
-                        }
                     }
 
                     if (this.dragMode && this.selectedObject) {
@@ -2154,6 +2224,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                                 this.selectedObject.bounds = { x: newX, y: newY, w: newW, h: newH };
                             }
                             this.renderCanvas();
+                            this.motionDirectEditDirty = true;
                             return;
                         }
 
@@ -2230,6 +2301,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                             this.scaleHoles(stroke, this.dragOriginalHoles, bounds, { x: newX, y: newY, w: newW, h: newH });
                         }
                         this.calcBounds(this.selectedObject.stroke);
+                        this.motionDirectEditDirty = true;
                         this.renderCanvas();
                     }
                     return;
@@ -2334,6 +2406,9 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 }
                 if (this.dragMode) {
                     const finishedDragMode = this.dragMode;
+                    if (finishedDragMode !== 'motion-move' && this.motionDirectEditDirty) {
+                        this.commitMotionArtworkEdits();
+                    }
                     this.dragMode = null;
                     this.updateThumbnails();
                     if (finishedDragMode === 'motion-move') this.renderMotionTracks();
@@ -2342,6 +2417,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     this.dragStart = null;
                     this.dragStartOffset = null;
                     this.motionDragSaved = false;
+                    this.motionDirectEditDirty = false;
                 }
                 if (this.draggedFrameIndex !== null) {
                     this.draggedFrameIndex = null;
@@ -2405,7 +2481,14 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 const radius = Math.max(0.5, this.brushSize / 2);
                 const next = [];
                 let changed = false;
-                this.motionEraseBlocked = false;
+
+                // Erasing is an artwork edit, not a movement edit. Bake any
+                // animated artwork the gesture touches into its existing frames
+                // before applying the erase so the edit is retained safely.
+                const touchedTracks = [...new Set(list
+                    .filter((stroke) => stroke?.motionTrackId && this.eraserIntersectsBounds(this.getStrokeBounds(stroke), from, to, radius))
+                    .map((stroke) => stroke.motionTrackId))];
+                if (touchedTracks.length) this.bakeMotionTracksByIds(touchedTracks);
 
                 list.forEach(stroke => {
                     const pieces = this.eraseStrokeWithSegment(stroke, from, to, radius);
@@ -2417,13 +2500,11 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     list.splice(0, list.length, ...next);
                     this.selectedObject = null;
                 }
-                if (this.motionEraseBlocked) this.showExportNotice('Use Truck to edit movement on animated artwork', true);
             }
 
             eraseStrokeWithSegment(stroke, from, to, radius, holeFrom = from, holeTo = to) {
                 if (!stroke) return [];
                 if (stroke.motionTrackId) {
-                    if (this.eraserIntersectsBounds(this.getStrokeBounds(stroke), from, to, radius)) this.motionEraseBlocked = true;
                     return [stroke];
                 }
 
@@ -3664,6 +3745,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         this.selectedObject.stroke.color = c;
                         if (this.selectedObject.stroke.fillColor) this.selectedObject.stroke.fillColor = c;
                     }
+                    this.commitMotionArtworkEdits();
                     this.renderCanvas();
                     this.saveStorage();
                 }
@@ -3694,6 +3776,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         this.selectedObject.stroke.size = this.brushSize;
                         this.calcBounds(this.selectedObject.stroke);
                     }
+                    this.commitMotionArtworkEdits();
                     this.renderCanvas();
                     this.saveStorage();
                 }
@@ -3711,6 +3794,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     } else {
                         this.selectedObject.stroke.opacity = this.opacity;
                     }
+                    this.commitMotionArtworkEdits();
                     this.renderCanvas();
                     this.saveStorage();
                 }
@@ -4068,6 +4152,24 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 });
             }
 
+            syncMotionTimelineScroll(source) {
+                const framesTrack = this.framesList;
+                const movementScroll = document.getElementById('movement-track-scroll');
+                if (!framesTrack || !movementScroll || !this.motionScrollActive || this.motionScrollSyncing) return;
+
+                const sharedMax = Math.max(0, Math.min(
+                    framesTrack.scrollWidth - framesTrack.clientWidth,
+                    movementScroll.scrollWidth - movementScroll.clientWidth
+                ));
+                const requested = source ? source.scrollLeft : framesTrack.scrollLeft;
+                const nextScroll = Math.max(0, Math.min(requested, sharedMax));
+
+                this.motionScrollSyncing = true;
+                if (framesTrack.scrollLeft !== nextScroll) framesTrack.scrollLeft = nextScroll;
+                if (movementScroll.scrollLeft !== nextScroll) movementScroll.scrollLeft = nextScroll;
+                this.motionScrollSyncing = false;
+            }
+
             renderMotionTracks() {
                 const container = document.getElementById('movement-tracks');
                 const scroll = document.getElementById('movement-track-scroll');
@@ -4077,6 +4179,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 const showMotion = this.tool === 'truck';
                 const selectedTrack = this.getMotionTrackForSelection();
                 const visibleTracks = selectedTrack ? [selectedTrack] : (this.tool === 'truck' && this.selectedObject ? [null] : []);
+                this.motionScrollActive = showMotion && visibleTracks.length > 0;
                 panel.classList.toggle('has-motion', showMotion);
                 document.body.classList.toggle('has-motion-timeline', showMotion);
                 visibleTracks.forEach((track, trackIndex) => {
@@ -4143,15 +4246,20 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 });
                 if (!this.motionScrollBound) {
                     const framesTrack = this.framesList;
-                    framesTrack?.addEventListener('scroll', () => { if (scroll) scroll.scrollLeft = framesTrack.scrollLeft; });
-                    scroll.addEventListener('scroll', () => { if (framesTrack) framesTrack.scrollLeft = scroll.scrollLeft; });
+                    framesTrack?.addEventListener('scroll', () => this.syncMotionTimelineScroll(framesTrack));
+                    scroll.addEventListener('scroll', () => this.syncMotionTimelineScroll(scroll));
                     this.motionScrollBound = true;
                 }
+                // The movement row may be shown after the frame strip has already
+                // been scrolled. Establish the shared position immediately instead
+                // of waiting for the next user scroll event.
+                this.syncMotionTimelineScroll();
                 this.updateMotionTrackActiveUI();
                 this.updateMotionPanel();
             }
 
             renderUI(minimal = false) {
+                const frameScrollLeft = this.framesList.scrollLeft;
                 if (!minimal) {
                     this.framesList.innerHTML = '';
                     this.frames.forEach((f, i) => {
@@ -4187,12 +4295,13 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     addButton.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i>';
                     addButton.onclick = () => this.addFrame();
                     this.framesList.appendChild(addButton);
+                    this.framesList.scrollLeft = frameScrollLeft;
                 } else {
                     const cards = this.framesList.querySelectorAll('.frame-card');
                     cards.forEach((c, i) => {
                         if (i === this.frameIndex) {
                             c.classList.add('active');
-                            c.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                            c.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
                         } else {
                             c.classList.remove('active');
                         }
@@ -4922,6 +5031,10 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 if (!this.selectedObject || !this.selectedObject.isGroup || this.selectedObject.isPersistentGroup) return;
                 if (this.motionDirectEditBlocked()) return;
                 this.saveState();
+                // A group is a structural artwork edit. Bake any animated copies
+                // in this selection into their existing frames before regrouping,
+                // so the old tracks cannot later regenerate duplicate objects.
+                this.bakeMotionTracksForSelection();
 
                 const list = this.getActiveStrokeList();
 
@@ -4965,6 +5078,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 if (!this.selectedObject || !this.selectedObject.isPersistentGroup) return;
                 if (this.motionDirectEditBlocked()) return;
                 this.saveState();
+                this.bakeMotionTracksForSelection();
 
                 const list = this.getActiveStrokeList();
                 const grp = this.selectedObject.persistentGroupStroke;

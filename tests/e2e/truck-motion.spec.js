@@ -633,6 +633,54 @@ test('Truck drag updates an existing key and adds a new-frame key without changi
   }, ids)).toBe(true);
 });
 
+test('Select edits and groups animated artwork without a Truck warning', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => window.app && Array.isArray(window.app.frames));
+  await seedFrames(page, 4, [{ x: 120, y: 120 }, { x: 220, y: 120 }]);
+  await page.evaluate(() => {
+    window.app.frames[2].strokes.forEach((stroke) => { stroke.size = 40; });
+    window.app.renderCanvas();
+  });
+  await page.evaluate(() => {
+    const app = window.app;
+    const original = app.onMove.bind(app);
+    app.onMove = (pos, pressure) => {
+      if (app.tool === 'select' && app.dragMode) console.log('select move', pos, app.dragStart, app.getMoveDelta(pos), app.dragMode);
+      return original(pos, pressure);
+    };
+  });
+
+  const canvas = page.locator('#rendering-canvas');
+  let box = await canvas.boundingBox();
+  await page.mouse.click(box.x + 120 * box.width / 600, box.y + 120 * box.height / 600);
+  await page.locator('#tool-truck').click();
+  await page.locator('#movement-add-keyframe').click();
+  const trackId = await page.evaluate(() => window.app.motionTracks[0].id);
+
+  await page.locator('#tool-select').click();
+  box = await canvas.boundingBox();
+  await page.mouse.click(box.x + 120 * box.width / 600, box.y + 120 * box.height / 600);
+  await dragSelectedObject(page, 30, 20);
+  await expect.poll(() => page.evaluate((id) => {
+    const track = window.app.getMotionTrack(id);
+    const stroke = track?.baseObject;
+    return Boolean(track && stroke && Math.abs(stroke.points[0].x - 150) < 1 && Math.abs(stroke.points[0].y - 140) < 1);
+  }, trackId)).toBe(true);
+
+  box = await canvas.boundingBox();
+  await page.keyboard.down('Control');
+  await page.mouse.click(box.x + 220 * box.width / 600, box.y + 120 * box.height / 600);
+  await page.keyboard.up('Control');
+  await expect.poll(() => page.evaluate(() => Boolean(window.app.selectedObject?.isGroup))).toBe(true);
+  await page.locator('#btn-group').click();
+  await expect.poll(() => page.evaluate(() => ({
+    group: window.app.frames[2].strokes.some((stroke) => stroke.type === 'group'),
+    tracks: window.app.motionTracks.length
+  }))).toEqual({ group: true, tracks: 0 });
+  const notice = await page.locator('#save-indicator').textContent();
+  expect(notice || '').not.toContain('Use Truck');
+});
+
 for (const viewport of [
   { name: 'desktop', width: 1280, height: 800 },
   { name: 'mobile-breakpoint', width: 600, height: 800 }
