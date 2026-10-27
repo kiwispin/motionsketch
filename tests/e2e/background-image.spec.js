@@ -173,6 +173,23 @@ test('Cancel invalidates an in-flight image load', async ({ page }) => {
   await expect(page.locator('#background-image-set')).toBeVisible();
 });
 
+test('undo history references the image instead of copying it or frame thumbnails', async ({ page }) => {
+  await install(page);
+  const result = await page.evaluate(() => {
+    app.frames[0].strokes.push({ type: 'brush', brushType: 'brush', color: '#0000ff', size: 20, opacity: 1, points: [{ x: 300, y: 300, p: .5 }] });
+    app.updateThumbnails();
+    const thumb = app.frames[0].thumb;
+    app.saveState();
+    app.frames[0].strokes = [];
+    const entry = app.history.at(-1);
+    const copied = entry.json.includes(app.backgroundImage.dataUrl) || entry.json.includes('"thumb"');
+    const sameImage = entry.backgroundImage === app.backgroundImage;
+    app.undo();
+    return { copied, sameImage, strokes: app.frames[0].strokes.length, image: Boolean(app.backgroundImage), thumbRestored: app.frames[0].thumb === thumb };
+  });
+  expect(result).toEqual({ copied: false, sameImage: true, strokes: 1, image: true, thumbRestored: true });
+});
+
 test('keeps drawn artwork above the image, including eraser holes and transparent export', async ({ page }) => {
   await install(page);
   const result = await page.evaluate(() => {

@@ -1663,82 +1663,60 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.togglePlay();
             }
 
+            // Background images are replaced, never edited in place, so a snapshot
+            // keeps a reference to the current one instead of copying its data.
+            // Frame thumbnails are left out because undo and redo redraw them.
+            captureHistoryState() {
+                const json = JSON.stringify({
+                    frames: this.frames,
+                    motionTracks: this.motionTracks,
+                    frameIndex: this.frameIndex,
+                    bgColor: this.selectedBgColor,
+                    width: this.canvasWidth,
+                    height: this.canvasHeight,
+                    palette: this.palette
+                }, (key, value) => (key === 'thumb' ? undefined : value));
+                return { json, backgroundImage: this.backgroundImage };
+            }
+
+            restoreHistoryState(entry) {
+                const state = JSON.parse(entry.json);
+                this.backgroundImage = entry.backgroundImage || null;
+                this.frames = this.normalizeFrames(state.frames);
+                this.motionTracks = this.normalizeMotionTracks(state.motionTracks || []);
+                this.frameIndex = state.frameIndex;
+                this.selectedBgColor = state.bgColor;
+                if (state.palette) { this.palette = state.palette; this.renderPalette(); }
+                if (state.width && state.height) this.resizeCanvas(state.width, state.height);
+                this.selectedObject = null;
+                this.updateThumbnails();
+                this.renderCanvas();
+                this.renderUI();
+                this.saveStorage();
+            }
+
             saveState() {
                 // Frame selection is transient UI state; any document mutation
                 // invalidates its old indexes before the history snapshot starts.
                 this.clearFrameSelection();
                 if (this.history.length > 20) this.history.shift();
                 this.redoStack = [];
-                const state = {
-                    backgroundImage: this.backgroundImage,
-                    frames: this.cloneData(this.frames),
-                    motionTracks: this.cloneData(this.motionTracks),
-                    frameIndex: this.frameIndex,
-                    bgColor: this.selectedBgColor,
-                    width: this.canvasWidth,
-                    height: this.canvasHeight,
-                    palette: this.palette
-                };
-                this.history.push(JSON.stringify(state));
+                this.history.push(this.captureHistoryState());
             }
 
             undo() {
                 if (this.history.length === 0) return false;
                 this.clearFrameSelection(false);
-                const currentState = {
-                    backgroundImage: this.backgroundImage,
-                    frames: this.cloneData(this.frames),
-                    motionTracks: this.cloneData(this.motionTracks),
-                    frameIndex: this.frameIndex,
-                    bgColor: this.selectedBgColor,
-                    width: this.canvasWidth,
-                    height: this.canvasHeight,
-                    palette: this.palette
-                };
-                this.redoStack.push(JSON.stringify(currentState));
-                const prevState = JSON.parse(this.history.pop());
-                this.backgroundImage = prevState.backgroundImage || null;
-                this.frames = this.normalizeFrames(prevState.frames, prevState.paperStrokes, prevState.sharedStrokes);
-                this.motionTracks = this.normalizeMotionTracks(prevState.motionTracks || []);
-                this.frameIndex = prevState.frameIndex;
-                this.selectedBgColor = prevState.bgColor;
-                if (prevState.palette) { this.palette = prevState.palette; this.renderPalette(); }
-                if (prevState.width && prevState.height) this.resizeCanvas(prevState.width, prevState.height);
-                this.selectedObject = null;
-                this.updateThumbnails();
-                this.renderCanvas();
-                this.renderUI();
-                this.saveStorage();
+                this.redoStack.push(this.captureHistoryState());
+                this.restoreHistoryState(this.history.pop());
                 return true;
             }
 
             redo() {
                 if (this.redoStack.length === 0) return false;
                 this.clearFrameSelection(false);
-                const currentState = {
-                    backgroundImage: this.backgroundImage,
-                    frames: this.cloneData(this.frames),
-                    motionTracks: this.cloneData(this.motionTracks),
-                    frameIndex: this.frameIndex,
-                    bgColor: this.selectedBgColor,
-                    width: this.canvasWidth,
-                    height: this.canvasHeight,
-                    palette: this.palette
-                };
-                this.history.push(JSON.stringify(currentState));
-                const nextState = JSON.parse(this.redoStack.pop());
-                this.backgroundImage = nextState.backgroundImage || null;
-                this.frames = this.normalizeFrames(nextState.frames, nextState.paperStrokes, nextState.sharedStrokes);
-                this.motionTracks = this.normalizeMotionTracks(nextState.motionTracks || []);
-                this.frameIndex = nextState.frameIndex;
-                this.selectedBgColor = nextState.bgColor;
-                if (nextState.palette) { this.palette = nextState.palette; this.renderPalette(); }
-                if (nextState.width && nextState.height) this.resizeCanvas(nextState.width, nextState.height);
-                this.selectedObject = null;
-                this.updateThumbnails();
-                this.renderCanvas();
-                this.renderUI();
-                this.saveStorage();
+                this.history.push(this.captureHistoryState());
+                this.restoreHistoryState(this.redoStack.pop());
                 return true;
             }
 
