@@ -121,40 +121,41 @@ test('keeps navigation controls separate from undoable artwork', async ({ page }
   await expect.poll(() => page.evaluate(() => window.app.frames[0].strokes.length)).toBe(1);
 });
 
-test('keeps shared artwork across frames and restores it with undo and redo', async ({ page }) => {
+test('keeps background artwork per frame and restores it with undo and redo', async ({ page }) => {
   await page.getByRole('button', { name: 'Background' }).click();
   await expect(page.getByRole('button', { name: 'Background' })).toHaveAttribute('aria-pressed', 'true');
 
   await page.evaluate((stroke) => {
     window.app.saveState();
-    window.app.sharedStrokes.push(structuredClone(stroke));
+    window.app.getActiveStrokeList().push(structuredClone(stroke));
     window.app.renderCanvas();
     window.app.addFrame();
   }, rectangle);
 
+  const backgrounds = () => page.evaluate(() => ({
+    frames: window.app.frames.length,
+    paper: window.app.frames.map((frame) => frame.paperStrokes.length)
+  }));
   await expect.poll(() => page.evaluate(() => ({
     frame: window.app.frameIndex,
-    frames: window.app.frames.length,
-    shared: window.app.sharedStrokes.length,
     frameStrokes: window.app.frames[1].strokes.length
-  }))).toEqual({ frame: 1, frames: 2, shared: 1, frameStrokes: 0 });
+  }))).toEqual({ frame: 1, frameStrokes: 0 });
+  // New frames start with a blank background; Duplicate is how a background is kept.
+  await expect.poll(backgrounds).toEqual({ frames: 2, paper: [1, 0] });
 
   await page.getByRole('button', { name: 'Undo' }).click();
   await page.getByRole('button', { name: 'Undo' }).click();
-  await expect.poll(() => page.evaluate(() => ({ frames: window.app.frames.length, shared: window.app.sharedStrokes.length })))
-    .toEqual({ frames: 1, shared: 0 });
+  await expect.poll(backgrounds).toEqual({ frames: 1, paper: [0] });
 
   await page.getByRole('button', { name: 'Redo' }).click();
   await page.getByRole('button', { name: 'Redo' }).click();
-  await expect.poll(() => page.evaluate(() => ({ frames: window.app.frames.length, shared: window.app.sharedStrokes.length })))
-    .toEqual({ frames: 2, shared: 1 });
+  await expect.poll(backgrounds).toEqual({ frames: 2, paper: [1, 0] });
 
   await page.evaluate(() => window.app.saveStorage());
   await page.waitForTimeout(1_200);
   await page.reload();
   await page.waitForFunction(() => window.app && window.app.frames);
-  await expect.poll(() => page.evaluate(() => ({ frames: window.app.frames.length, shared: window.app.sharedStrokes.length })))
-    .toEqual({ frames: 2, shared: 1 });
+  await expect.poll(backgrounds).toEqual({ frames: 2, paper: [1, 0] });
 });
 
 test('snaps selected-object movement to the grid and undoes cleanly', async ({ page }) => {
@@ -951,9 +952,9 @@ test('erasing a single-point ball renders the hole so it can be drawn over', asy
   expect(data.insideErase).toEqual([255, 255, 255, 255]);
 });
 
-test('layer buttons carry shared/foreground hints', async ({ page }) => {
+test('layer buttons carry per-frame foreground/background hints', async ({ page }) => {
   await expect(page.locator('#layer-ink')).toHaveAttribute('title', /drawn fresh on each frame/);
-  await expect(page.locator('#layer-paper')).toHaveAttribute('title', /shared across all frames/);
+  await expect(page.locator('#layer-paper')).toHaveAttribute('title', /on this frame/);
   await expect(page.locator('#layer-hint')).toHaveCount(0);
 });
 

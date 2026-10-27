@@ -178,7 +178,7 @@ test('keeps drawn artwork above the image, including eraser holes and transparen
   const result = await page.evaluate(() => {
     const stroke = { type: 'brush', brushType: 'brush', color: '#0000ff', size: 100, opacity: 1, points: [{ x: 300, y: 300, p: .5 }],
       holes: [[{ x: 290, y: 290 }, { x: 310, y: 290 }, { x: 310, y: 310 }, { x: 290, y: 310 }]] };
-    app.sharedStrokes = [stroke];
+    app.frames[0].paperStrokes = [stroke];
     app.renderCanvas();
     const canvas = document.createElement('canvas'); canvas.width = 600; canvas.height = 600;
     const ctx = canvas.getContext('2d');

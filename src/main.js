@@ -60,7 +60,6 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.framesList = document.getElementById('frames-list');
                 this.frames = [{ strokes: [], paperStrokes: [], hold: 1 }];
                 this.paperStrokes = [];
-                this.sharedStrokes = [];
                 this.motionTracks = [];
                 this.motionTrackCounter = 0;
                 this.truckSelectedTrackId = null;
@@ -1082,8 +1081,12 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 }));
             }
 
-            normalizeFrames(frames, legacyPaperStrokes = []) {
+            normalizeFrames(frames, legacyPaperStrokes = [], legacySharedStrokes = []) {
                 const sourceFrames = Array.isArray(frames) && frames.length ? frames : [{ strokes: [] }];
+                // Background art used to be one list shared by every frame. Each frame
+                // now owns its background, so older shared art is copied into every
+                // frame beneath that frame's own background art.
+                const shared = Array.isArray(legacySharedStrokes) ? legacySharedStrokes : [];
                 return sourceFrames.map((frame, index) => {
                     const paperSource = Array.isArray(frame.paperStrokes)
                         ? frame.paperStrokes
@@ -1092,7 +1095,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         ...frame,
                         hold: Math.max(1, Math.min(12, Number.parseInt(frame.hold, 10) || 1)),
                         strokes: this.materializeErasers(Array.isArray(frame.strokes) ? frame.strokes : []),
-                        paperStrokes: this.materializeErasers(paperSource)
+                        paperStrokes: this.materializeErasers([...this.cloneData(shared), ...paperSource])
                     };
                 });
             }
@@ -1139,7 +1142,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 
             getActiveStrokeList() {
                 const frame = this.frames[this.frameIndex];
-                return this.activeLayer === 'ink' ? frame.strokes : this.sharedStrokes;
+                return this.activeLayer === 'ink' ? frame.strokes : frame.paperStrokes;
             }
 
             createMotionId() {
@@ -1669,7 +1672,6 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 const state = {
                     backgroundImage: this.backgroundImage,
                     frames: this.cloneData(this.frames),
-                    sharedStrokes: this.cloneData(this.sharedStrokes),
                     motionTracks: this.cloneData(this.motionTracks),
                     frameIndex: this.frameIndex,
                     bgColor: this.selectedBgColor,
@@ -1686,7 +1688,6 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 const currentState = {
                     backgroundImage: this.backgroundImage,
                     frames: this.cloneData(this.frames),
-                    sharedStrokes: this.cloneData(this.sharedStrokes),
                     motionTracks: this.cloneData(this.motionTracks),
                     frameIndex: this.frameIndex,
                     bgColor: this.selectedBgColor,
@@ -1697,8 +1698,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.redoStack.push(JSON.stringify(currentState));
                 const prevState = JSON.parse(this.history.pop());
                 this.backgroundImage = prevState.backgroundImage || null;
-                this.frames = this.normalizeFrames(prevState.frames, prevState.paperStrokes);
-                this.sharedStrokes = this.materializeErasers(prevState.sharedStrokes || []);
+                this.frames = this.normalizeFrames(prevState.frames, prevState.paperStrokes, prevState.sharedStrokes);
                 this.motionTracks = this.normalizeMotionTracks(prevState.motionTracks || []);
                 this.frameIndex = prevState.frameIndex;
                 this.selectedBgColor = prevState.bgColor;
@@ -1718,7 +1718,6 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 const currentState = {
                     backgroundImage: this.backgroundImage,
                     frames: this.cloneData(this.frames),
-                    sharedStrokes: this.cloneData(this.sharedStrokes),
                     motionTracks: this.cloneData(this.motionTracks),
                     frameIndex: this.frameIndex,
                     bgColor: this.selectedBgColor,
@@ -1729,8 +1728,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.history.push(JSON.stringify(currentState));
                 const nextState = JSON.parse(this.redoStack.pop());
                 this.backgroundImage = nextState.backgroundImage || null;
-                this.frames = this.normalizeFrames(nextState.frames, nextState.paperStrokes);
-                this.sharedStrokes = this.materializeErasers(nextState.sharedStrokes || []);
+                this.frames = this.normalizeFrames(nextState.frames, nextState.paperStrokes, nextState.sharedStrokes);
                 this.motionTracks = this.normalizeMotionTracks(nextState.motionTracks || []);
                 this.frameIndex = nextState.frameIndex;
                 this.selectedBgColor = nextState.bgColor;
@@ -2778,7 +2776,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     }
                     return null;
                 }
-                return checkList(this.sharedStrokes, 'shared');
+                return checkList(this.getPaperStrokes(), 'paper');
             }
 
             strokeHit(stroke, pos) {
@@ -3071,7 +3069,6 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.drawBackgroundImage(bgCtx);
                 if (this.referenceImage?.complete) { bgCtx.save(); bgCtx.globalAlpha = 0.35; const scale = Math.min(this.canvasWidth / this.referenceImage.width, this.canvasHeight / this.referenceImage.height); const width = this.referenceImage.width * scale, height = this.referenceImage.height * scale; bgCtx.drawImage(this.referenceImage, (this.canvasWidth - width) / 2, (this.canvasHeight - height) / 2, width, height); bgCtx.restore(); }
                 bgCtx.globalAlpha = 1.0;
-                this.sharedStrokes.forEach(s => this.drawObject(bgCtx, s, false, 'shared'));
                 this.getPaperStrokes().forEach(s => this.drawObject(bgCtx, s, false, 'paper'));
                 this.currentRenderBgColor = null;
 
@@ -3647,9 +3644,9 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
             setLayer(l) {
                 this.activeLayer = l;
                 document.getElementById('layer-ink').classList.toggle('active', l === 'ink');
-                document.getElementById('layer-paper').classList.toggle('active', l === 'shared');
+                document.getElementById('layer-paper').classList.toggle('active', l === 'paper');
                 document.getElementById('layer-ink').setAttribute('aria-pressed', String(l === 'ink'));
-                document.getElementById('layer-paper').setAttribute('aria-pressed', String(l === 'shared'));
+                document.getElementById('layer-paper').setAttribute('aria-pressed', String(l === 'paper'));
                 this.selectedObject = null;
                 this.updateInspector();
                 this.renderCanvas();
@@ -4569,7 +4566,6 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     this.drawBackgroundImage(targetCtx);
                 }
                 targetCtx.globalAlpha = 1.0;
-                this.sharedStrokes.forEach(s => this.drawObject(targetCtx, s, false, 'shared'));
                 this.getPaperStrokes(frame).forEach(s => this.drawObject(targetCtx, s, false, 'paper'));
                 targetCtx.restore();
 
@@ -4608,7 +4604,6 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         backgroundImage: this.backgroundImage,
                         name: this.projectName,
                         frames: this.frames,
-                        sharedStrokes: this.sharedStrokes,
                         motionTracks: this.motionTracks,
                         fps: this.fps,
                         width: this.canvasWidth,
@@ -4662,8 +4657,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                             const backgroundImage = await this.decodeBackgroundImage(data.backgroundImage);
                             if (request !== this.projectLoadRequest) return;
                             this.backgroundImage = backgroundImage;
-                            this.frames = this.normalizeFrames(data.frames, data.paperStrokes);
-                            this.sharedStrokes = this.materializeErasers(data.sharedStrokes || []);
+                            this.frames = this.normalizeFrames(data.frames, data.paperStrokes, data.sharedStrokes);
                             this.motionTracks = this.normalizeMotionTracks(data.motionTracks || []);
                             this.clearFrameSelection(false);
                             this.fps = this.normalizeFps(data.fps);
@@ -4739,7 +4733,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 };
                 const frame = this.frames[this.frameIndex];
                 const background = frame.frameBgColor || this.selectedBgColor;
-                const content = [...this.sharedStrokes, ...this.getPaperStrokes(frame), ...frame.strokes].map(render).join('');
+                const content = [...this.getPaperStrokes(frame), ...frame.strokes].map(render).join('');
                 const placement = this.getBackgroundImagePlacement();
                 const imageMarkup = placement ? `<image href="${escape(this.backgroundImage.dataUrl)}" x="${placement.x}" y="${placement.y}" width="${placement.width}" height="${placement.height}"/>` : '';
                 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${this.canvasWidth}" height="${this.canvasHeight}" viewBox="0 0 ${this.canvasWidth} ${this.canvasHeight}"><defs>${maskDefs.join('')}</defs><rect width="100%" height="100%" fill="${background}"/>${imageMarkup}${content}</svg>`;
@@ -4982,7 +4976,6 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         frameBgColor: f.frameBgColor,
                         hold: this.getFrameHold(f)
                     })),
-                    sharedStrokes: this.sharedStrokes,
                     motionTracks: this.motionTracks,
                     fps: this.fps,
                     width: this.canvasWidth,
@@ -5054,8 +5047,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.backgroundImage = backgroundImage;
                 this.backgroundImageRequest++;
 
-                this.frames = this.normalizeFrames(data.frames, data.paperStrokes);
-                this.sharedStrokes = this.materializeErasers(data.sharedStrokes || []);
+                this.frames = this.normalizeFrames(data.frames, data.paperStrokes, data.sharedStrokes);
                 this.motionTracks = this.normalizeMotionTracks(data.motionTracks || []);
                 this.clearFrameSelection(false);
                 this.fps = this.normalizeFps(data.fps);
@@ -5179,7 +5171,6 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.closeModal();
                 this.frames = [{ strokes: [], paperStrokes: [], hold: 1 }];
                 this.paperStrokes = [];
-                this.sharedStrokes = [];
                 this.motionTracks = [];
                 this.truckSelectedTrackId = null;
                 this.clearFrameSelection(false);
@@ -5340,11 +5331,9 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     if (idx > -1) list.splice(idx, 1);
                 } else if (this.selectedObject.isGroup) {
                     const itemsToRemove = new Set(this.selectedObject.items.map(i => i.stroke));
-                    if (this.activeLayer === 'ink') {
-                        this.frames[this.frameIndex].strokes = this.frames[this.frameIndex].strokes.filter(s => !itemsToRemove.has(s));
-                    } else {
-                        this.sharedStrokes = this.sharedStrokes.filter(s => !itemsToRemove.has(s));
-                    }
+                    const frame = this.frames[this.frameIndex];
+                    const key = this.activeLayer === 'ink' ? 'strokes' : 'paperStrokes';
+                    frame[key] = frame[key].filter(s => !itemsToRemove.has(s));
                 } else {
                     const idx = list.indexOf(this.selectedObject.stroke);
                     if (idx > -1) list.splice(idx, 1);

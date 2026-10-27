@@ -39,7 +39,6 @@ const seedFrames = async (page, count = 5) => {
       hold: index + 1
     }));
     window.app.frameIndex = 0;
-    window.app.sharedStrokes = [{ type: 'text', text: 'shared', x: 10, y: 20, width: 50, height: 24, sx: 1, sy: 1, color: '#000000', size: 24, bold: false, opacity: 1, angle: 0, points: [] }];
     window.app.fps = 17;
     window.app.clearFrameSelection(false);
     window.app.renderUI();
@@ -97,7 +96,6 @@ test('routes timeline C/V to ordered deep frame copies and one undo step', async
     backgrounds: window.app.frames.slice(3, 5).map((frame) => frame.frameBgColor),
     holds: window.app.frames.slice(3, 5).map((frame) => frame.hold),
     fps: window.app.fps,
-    shared: window.app.sharedStrokes[0].text,
     historyDelta: window.app.history.length,
     selected: window.app.getSelectedFrameIndices(),
     active: window.app.frameIndex
@@ -107,7 +105,6 @@ test('routes timeline C/V to ordered deep frame copies and one undo step', async
   expect(pasted.backgrounds).toEqual(['#111111', '#333333']);
   expect(pasted.holds).toEqual([1, 3]);
   expect(pasted.fps).toBe(17);
-  expect(pasted.shared).toBe('shared');
   expect(pasted.historyDelta).toBe(historyBeforePaste + 1);
   expect(pasted.selected).toEqual([3, 4]);
   expect(pasted.active).toBe(2);
