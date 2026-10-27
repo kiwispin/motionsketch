@@ -334,6 +334,17 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     c.setPointerCapture(e.pointerId);
                     start(e);
                 });
+                // Select can begin a marquee in the empty workspace around the canvas,
+                // so a box can be dragged over everything. Touch keeps scrolling.
+                workspace?.addEventListener('pointerdown', (e) => {
+                    if (e.target !== workspace || this.tool !== 'select' || e.button !== 0 || e.pointerType === 'touch') return;
+                    if (e.offsetX >= workspace.clientWidth || e.offsetY >= workspace.clientHeight) return;
+                    e.preventDefault();
+                    this.clearFrameSelection();
+                    c.focus({ preventScroll: true });
+                    workspace.setPointerCapture?.(e.pointerId);
+                    start(e);
+                });
                 c.addEventListener('dblclick', (e) => {
                     if (this.tool !== 'select') return;
                     const found = this.hitTest(this.getPos(e));
@@ -431,6 +442,11 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         }
                         if ((key === 'y' || (key === 'z' && e.shiftKey)) && this.redo()) {
                             e.preventDefault();
+                            return;
+                        }
+                        if (key === 'a') {
+                            e.preventDefault();
+                            this.selectAll();
                             return;
                         }
                         if (key === 'g') {
@@ -2358,6 +2374,55 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 }
             }
 
+            selectStrokes(predicate) {
+                const items = [];
+                this.getActiveStrokeList().forEach((stroke, index) => {
+                    if (predicate(stroke)) items.push({ stroke, layer: this.activeLayer, index });
+                });
+                if (items.length === 1) {
+                    this.selectedObject = items[0];
+                    this.calcBounds(items[0].stroke);
+                } else if (items.length > 1) {
+                    this.selectedObject = {
+                        isGroup: true,
+                        items,
+                        bounds: this.getGroupBounds(items),
+                        angle: 0
+                    };
+                }
+                return items.length;
+            }
+
+            selectAll() {
+                if (this.isPlaying) return false;
+                if (this.tool !== 'select') this.setTool('select');
+                this.selectedObject = null;
+                const count = this.selectStrokes(() => true);
+                this.renderCanvas();
+                return count > 0;
+            }
+
+            updateSelectionMarquee() {
+                const marquee = document.getElementById('selection-marquee');
+                if (!marquee) return;
+                if (!this.isSelectingBox) {
+                    marquee.hidden = true;
+                    return;
+                }
+                // Drawn over the workspace rather than on the canvas so the box stays
+                // visible when it is dragged beyond the canvas edge.
+                const rect = this.canvas.getBoundingClientRect();
+                const scaleX = rect.width / this.canvasWidth;
+                const scaleY = rect.height / this.canvasHeight;
+                const x = Math.min(this.selectionStart.x, this.selectionCurr.x);
+                const y = Math.min(this.selectionStart.y, this.selectionCurr.y);
+                marquee.style.left = `${rect.left + x * scaleX}px`;
+                marquee.style.top = `${rect.top + y * scaleY}px`;
+                marquee.style.width = `${Math.abs(this.selectionCurr.x - this.selectionStart.x) * scaleX}px`;
+                marquee.style.height = `${Math.abs(this.selectionCurr.y - this.selectionStart.y) * scaleY}px`;
+                marquee.hidden = false;
+            }
+
             onUp() {
                 if (this.isSelectingBox) {
                     this.isSelectingBox = false;
@@ -2369,27 +2434,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     const selBox = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 
                     if (selBox.w > 2 || selBox.h > 2) {
-                        const items = [];
-                        const list = this.getActiveStrokeList();
-
-                        list.forEach((stroke, i) => {
-                            const b = this.getStrokeBounds(stroke);
-                            if (this.rectIntersect(selBox, b)) {
-                                items.push({ stroke, layer: this.activeLayer, index: i });
-                            }
-                        });
-
-                        if (items.length === 1) {
-                            this.selectedObject = items[0];
-                            this.calcBounds(items[0].stroke);
-                        } else if (items.length > 1) {
-                            this.selectedObject = {
-                                isGroup: true,
-                                items: items,
-                                bounds: this.getGroupBounds(items),
-                                angle: 0
-                            };
-                        }
+                        this.selectStrokes((stroke) => this.rectIntersect(selBox, this.getStrokeBounds(stroke)));
                     }
                     this.renderCanvas();
                 }
@@ -3064,20 +3109,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     }
                 }
 
-                if (this.isSelectingBox) {
-                    ctx.save();
-                    ctx.strokeStyle = '#0A84FF';
-                    ctx.lineWidth = 1;
-                    ctx.setLineDash([5, 5]);
-                    const x = Math.min(this.selectionStart.x, this.selectionCurr.x);
-                    const y = Math.min(this.selectionStart.y, this.selectionCurr.y);
-                    const w = Math.abs(this.selectionCurr.x - this.selectionStart.x);
-                    const h = Math.abs(this.selectionCurr.y - this.selectionStart.y);
-                    ctx.strokeRect(x, y, w, h);
-                    ctx.fillStyle = 'rgba(10, 132, 255, 0.1)';
-                    ctx.fillRect(x, y, w, h);
-                    ctx.restore();
-                }
+                this.updateSelectionMarquee();
 
                 // Update floating group toolbar
                 this.updateGroupToolbar();

@@ -101,6 +101,8 @@
             aspect-ratio: 1/1;
             margin: 50px;
         }
+        .selection-marquee { position: fixed; pointer-events: none; z-index: 10; border: 1px dashed #0A84FF; background: rgba(10, 132, 255, 0.1); }
+        .selection-marquee[hidden] { display: none; }
         .canvas-wrapper.show-grid::after { content:""; position:absolute; inset:0; pointer-events:none; z-index:4; border-radius:4px; background-image:linear-gradient(to right,rgba(10,132,255,.16) 1px,transparent 1px),linear-gradient(to bottom,rgba(10,132,255,.16) 1px,transparent 1px); background-size:var(--grid-size,10px) var(--grid-size,10px); }
 
         canvas {
@@ -1274,6 +1276,7 @@
             <canvas id="background-canvas" width="600" height="600"></canvas>
             <canvas id="rendering-canvas" width="600" height="600"></canvas>
         </div>
+        <div class="selection-marquee" id="selection-marquee" hidden></div>
     </div>
 
     <div class="glass-panel timeline-panel">
