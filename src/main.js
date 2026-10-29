@@ -1748,38 +1748,54 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
             // Background images are replaced, never edited in place, so a snapshot
             // keeps a reference to the current one instead of copying its data.
             // Frame thumbnails are left out because undo and redo redraw them.
+            // Frames are stored as one JSON string each. A frame that has not changed
+            // since the previous snapshot reuses that snapshot's string, so undo
+            // memory grows with the frames an edit touches rather than with the
+            // whole project (a heavy 27-frame project used ~12 MB per edit).
             captureHistoryState() {
+                const withoutThumbs = (key, value) => (key === 'thumb' ? undefined : value);
+                const known = new Map((this.lastHistoryFrames || []).map((json) => [json, json]));
+                const frames = this.frames.map((frame) => {
+                    const json = JSON.stringify(frame, withoutThumbs);
+                    return known.get(json) ?? json;
+                });
+                this.lastHistoryFrames = frames;
                 const json = JSON.stringify({
-                    frames: this.frames,
                     motionTracks: this.motionTracks,
                     frameIndex: this.frameIndex,
                     bgColor: this.selectedBgColor,
                     width: this.canvasWidth,
                     height: this.canvasHeight,
                     palette: this.palette
-                }, (key, value) => (key === 'thumb' ? undefined : value));
-                return { json, backgroundImage: this.backgroundImage };
+                });
+                return { frames, json, backgroundImage: this.backgroundImage };
             }
 
-            restoreHistoryState(entry) {
+            // current is the snapshot of the state being left. Frames identical in
+            // both keep their objects (and thumbnails); only changed frames are parsed.
+            restoreHistoryState(entry, current) {
                 const state = JSON.parse(entry.json);
-                // Keep thumbnails of frames this step does not change, as long as
-                // nothing that affects every frame's look changes with it.
-                const frameKey = (frame) => JSON.stringify([frame.strokes, frame.paperStrokes, frame.frameBgColor || null]);
-                const thumbs = new Map();
-                if (this.backgroundImage === (entry.backgroundImage || null) && this.selectedBgColor === state.bgColor &&
-                    this.canvasWidth === state.width && this.canvasHeight === state.height) {
-                    this.frames.forEach((frame) => { if (frame.thumb) thumbs.set(frameKey(frame), frame.thumb); });
-                }
+                const sameLook = this.backgroundImage === (entry.backgroundImage || null) && this.selectedBgColor === state.bgColor &&
+                    this.canvasWidth === state.width && this.canvasHeight === state.height;
+                const unchanged = new Map();
+                current.frames.forEach((json, index) => {
+                    if (!unchanged.has(json)) unchanged.set(json, []);
+                    unchanged.get(json).push(this.frames[index]);
+                });
                 this.backgroundImage = entry.backgroundImage || null;
-                this.frames = this.normalizeFrames(state.frames);
+                this.frames = entry.frames.map((json) => {
+                    // Identical frames each need their own object, so one is used once.
+                    const frame = unchanged.get(json)?.shift();
+                    if (!frame) return this.normalizeFrames([JSON.parse(json)])[0];
+                    if (!sameLook) delete frame.thumb;
+                    return frame;
+                });
                 this.motionTracks = this.normalizeMotionTracks(state.motionTracks || []);
                 this.frameIndex = state.frameIndex;
                 this.selectedBgColor = state.bgColor;
                 if (state.palette) { this.palette = state.palette; this.renderPalette(); }
                 if (state.width && state.height) this.resizeCanvas(state.width, state.height);
                 this.selectedObject = null;
-                if (thumbs.size) this.frames.forEach((frame) => { frame.thumb = thumbs.get(frameKey(frame)); });
                 this.renderCanvas();
                 this.renderUI();
                 this.saveStorage();
@@ -1797,16 +1813,18 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
             undo() {
                 if (this.history.length === 0) return false;
                 this.clearFrameSelection(false);
-                this.redoStack.push(this.captureHistoryState());
-                this.restoreHistoryState(this.history.pop());
+                const current = this.captureHistoryState();
+                this.redoStack.push(current);
+                this.restoreHistoryState(this.history.pop(), current);
                 return true;
             }
 
             redo() {
                 if (this.redoStack.length === 0) return false;
                 this.clearFrameSelection(false);
-                this.history.push(this.captureHistoryState());
-                this.restoreHistoryState(this.redoStack.pop());
+                const current = this.captureHistoryState();
+                this.history.push(current);
+                this.restoreHistoryState(this.redoStack.pop(), current);
                 return true;
             }
 

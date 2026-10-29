@@ -182,7 +182,8 @@ test('undo history references the image instead of copying it or frame thumbnail
     app.saveState();
     app.frames[0].strokes = [];
     const entry = app.history.at(-1);
-    const copied = entry.json.includes(app.backgroundImage.dataUrl) || entry.json.includes('"thumb"');
+    const stored = [entry.json, ...entry.frames].join('');
+    const copied = stored.includes(app.backgroundImage.dataUrl) || stored.includes('"thumb"');
     const sameImage = entry.backgroundImage === app.backgroundImage;
     app.undo();
     return { copied, sameImage, strokes: app.frames[0].strokes.length, image: Boolean(app.backgroundImage), thumbRestored: app.frames[0].thumb === thumb };
