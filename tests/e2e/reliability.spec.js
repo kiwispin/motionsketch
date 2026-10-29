@@ -449,8 +449,8 @@ test('bucket-fills the canvas with a real shape that the eraser can carve into',
 
   await expect.poll(() => page.evaluate(() => {
     const fill = window.app.frames[0].strokes.find((s) => s.type === 'rect' && s.fillColor);
-    return { exists: Boolean(fill), holes: fill ? fill.holes.length : 0 };
-  })).toEqual({ exists: true, holes: 2 });
+    return { exists: Boolean(fill), holes: fill ? fill.holes.length : 0, sweepPoints: fill?.holes[0]?.path?.length };
+  })).toEqual({ exists: true, holes: 1, sweepPoints: 2 });
 });
 
 test('eraser keeps an outline intact and removes only its requested footprint', async ({ page }) => {
@@ -742,8 +742,7 @@ test('eraser honors one and two pixel sizes without widening the cutout', async 
         }
       }
       const hole = window.app.frames[0].strokes[0].holes[0];
-      const xs = hole.map(point => point.x);
-      return { size, diameter: Math.max(...xs) - Math.min(...xs), outsideChanges };
+      return { size, diameter: hole.r * 2, outsideChanges };
     });
   });
   expect(measurements[0].diameter).toBeCloseTo(1, 5);

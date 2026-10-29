@@ -160,7 +160,8 @@ test('keeps resized brush selectable and preserves a canvas-space eraser hole', 
   expect(result.hit).toBe(true);
   expect(result.scale.sy).toBeCloseTo(0.5, 8);
   expect(result.holes).toHaveLength(1);
-  expect(result.holes[0].length).toBeGreaterThan(10);
+  const holePoint = result.resizedPoints[1];
+  expect(result.holes[0]).toEqual({ r: 8, path: [{ x: Math.round(holePoint.x * 100) / 100, y: Math.round(holePoint.y * 100) / 100 }] });
   expect(result.points).toEqual(result.resizedPoints);
 });
 

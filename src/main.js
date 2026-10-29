@@ -1048,14 +1048,91 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
             }
 
-            transformHoles(holes, transform) {
-                if (!Array.isArray(holes) || !holes.length) return holes;
-                return holes.map(hole => hole.map(point => transform(point)));
+            // An eraser hole is either a polygon (an array of points) or a sweep,
+            // { r, path }: the eraser circle of radius r dragged along path. A drag
+            // stores one sweep point per pointer move instead of a 26-point outline
+            // per move, which let heavy erasing grow projects past what the browser
+            // could hold in memory.
+            isSweepHole(hole) {
+                return Boolean(hole && !Array.isArray(hole) && Array.isArray(hole.path));
             }
 
-            setTransformedHoles(stroke, sourceHoles, transform) {
+            roundHolePoint(point) {
+                return { x: Math.round(point.x * 100) / 100, y: Math.round(point.y * 100) / 100 };
+            }
+
+            sweepToPolygons(hole) {
+                const path = hole.path;
+                if (path.length === 1) return [this.buildEraserHole(path[0], path[0], hole.r)];
+                return path.slice(1).map((point, index) => this.buildEraserHole(path[index], point, hole.r));
+            }
+
+            addEraserHole(stroke, from, to, radius) {
+                if (!stroke.holes) stroke.holes = [];
+                const r = Math.round(radius * 100) / 100;
+                const start = this.roundHolePoint(from);
+                const end = this.roundHolePoint(to);
+                const last = stroke.holes[stroke.holes.length - 1];
+                // Consecutive moves of one eraser drag continue the same sweep.
+                if (this.isSweepHole(last) && last.r === r) {
+                    const tail = last.path[last.path.length - 1];
+                    if (tail.x === start.x && tail.y === start.y) {
+                        if (end.x !== start.x || end.y !== start.y) last.path.push(end);
+                        return;
+                    }
+                }
+                stroke.holes.push({ r, path: end.x === start.x && end.y === start.y ? [start] : [start, end] });
+            }
+
+            // Older projects stored every eraser move as a 26-point capsule outline.
+            // Rebuild those as sweeps (exactly the same shape) and join the moves of
+            // each drag; anything that is not an untouched capsule stays a polygon.
+            capsuleFromHole(hole) {
+                if (!Array.isArray(hole) || hole.length !== 26 || !hole.every(point => Number.isFinite(point?.x) && Number.isFinite(point?.y))) return null;
+                const from = { x: (hole[0].x + hole[12].x) / 2, y: (hole[0].y + hole[12].y) / 2 };
+                const to = { x: (hole[13].x + hole[25].x) / 2, y: (hole[13].y + hole[25].y) / 2 };
+                const r = Math.hypot(hole[0].x - hole[12].x, hole[0].y - hole[12].y) / 2;
+                const tolerance = Math.max(0.05, r * 0.01);
+                const onArcs = hole.every((point, index) => {
+                    const center = index <= 12 ? from : to;
+                    return Math.abs(Math.hypot(point.x - center.x, point.y - center.y) - r) <= tolerance;
+                });
+                return onArcs ? { from, to, r } : null;
+            }
+
+            compactEraserHoles(holes) {
+                const holder = { holes: [] };
+                holes.forEach(hole => {
+                    const capsule = this.capsuleFromHole(hole);
+                    if (capsule) this.addEraserHole(holder, capsule.from, capsule.to, capsule.r);
+                    else holder.holes.push(hole);
+                });
+                return holder.holes;
+            }
+
+            compactStrokeHoles(stroke) {
+                if (!stroke || typeof stroke !== 'object') return stroke;
+                if (Array.isArray(stroke.items)) stroke.items.forEach(item => this.compactStrokeHoles(item));
+                if (Array.isArray(stroke.holes) && stroke.holes.some(hole => Array.isArray(hole))) {
+                    stroke.holes = this.compactEraserHoles(stroke.holes);
+                }
+                return stroke;
+            }
+
+            transformHoles(holes, transform, scale = null) {
+                if (!Array.isArray(holes) || !holes.length) return holes;
+                const uniform = !scale || Math.abs(Math.abs(scale.x) - Math.abs(scale.y)) < 1e-9;
+                return holes.flatMap(hole => {
+                    if (!this.isSweepHole(hole)) return [hole.map(point => transform(point))];
+                    // A circle only stays a circle under uniform scaling.
+                    if (!uniform) return this.sweepToPolygons(hole).map(polygon => polygon.map(point => transform(point)));
+                    return [{ r: hole.r * (scale ? Math.abs(scale.x) : 1), path: hole.path.map(point => this.roundHolePoint(transform(point))) }];
+                });
+            }
+
+            setTransformedHoles(stroke, sourceHoles, transform, scale = null) {
                 if (!Array.isArray(sourceHoles) || !sourceHoles.length) return;
-                stroke.holes = this.transformHoles(sourceHoles, transform);
+                stroke.holes = this.transformHoles(sourceHoles, transform, scale);
             }
 
             translateHoles(stroke, sourceHoles, dx, dy) {
@@ -1078,7 +1155,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.setTransformedHoles(stroke, sourceHoles, point => ({
                     x: newBounds.x + (point.x - oldBounds.x) * scaleX,
                     y: newBounds.y + (point.y - oldBounds.y) * scaleY
-                }));
+                }), { x: scaleX, y: scaleY });
             }
 
             normalizeFrames(frames, legacyPaperStrokes = [], legacySharedStrokes = []) {
@@ -1094,8 +1171,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     return {
                         ...frame,
                         hold: Math.max(1, Math.min(12, Number.parseInt(frame.hold, 10) || 1)),
-                        strokes: this.materializeErasers(Array.isArray(frame.strokes) ? frame.strokes : []),
-                        paperStrokes: this.materializeErasers([...this.cloneData(shared), ...paperSource])
+                        strokes: this.materializeErasers(Array.isArray(frame.strokes) ? frame.strokes : []).map(stroke => this.compactStrokeHoles(stroke)),
+                        paperStrokes: this.materializeErasers([...this.cloneData(shared), ...paperSource]).map(stroke => this.compactStrokeHoles(stroke))
                     };
                 });
             }
@@ -2548,8 +2625,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     const textSegment = this.inverseRotateSegment(stroke, from, to);
                     if (!this.eraserIntersectsBounds(this.getStrokeBounds(stroke), textSegment.from, textSegment.to, radius)) return [stroke];
                     const next = this.cloneData(stroke);
-                    if (!next.holes) next.holes = [];
-                    next.holes.push(this.buildEraserHole(holeFrom, holeTo, radius));
+                    this.addEraserHole(next, holeFrom, holeTo, radius);
                     return [next];
                 }
 
@@ -2583,8 +2659,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 // a hole, so a thick or translucent stroke cannot remove a whole
                 // stored segment just because its centerline was touched.
                 const next = this.cloneData(stroke);
-                if (!next.holes) next.holes = [];
-                next.holes.push(this.buildEraserHole(holeFrom, holeTo, radius));
+                this.addEraserHole(next, holeFrom, holeTo, radius);
                 return [next];
             }
 
@@ -3115,42 +3190,151 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 return result;
             }
 
-            drawObjectWithEraserHoles(ctx, obj, simpleMode, layerName) {
-                if (!this.eraserCanvas) {
-                    this.eraserCanvas = document.createElement('canvas');
-                    this.eraserCtx = this.eraserCanvas.getContext('2d');
-                }
-                if (this.eraserCanvas.width !== this.canvasWidth || this.eraserCanvas.height !== this.canvasHeight) {
-                    this.eraserCanvas.width = this.canvasWidth;
-                    this.eraserCanvas.height = this.canvasHeight;
-                }
+            // Expects a destination-out context. A round-capped, round-joined stroke
+            // along a sweep covers exactly the union of the eraser circle along its
+            // path. Sweeps of one radius are cut in a single stroke and dots in a
+            // single fill, since each separate destination-out draw is costly.
+            // When box is given, parts of holes that cannot reach it are skipped;
+            // a long eraser drag is stored on every stroke it touched.
+            cutEraserHoles(ctx, holes, box = null) {
+                const reaches = (minX, minY, maxX, maxY) => !box ||
+                    (maxX >= box.x - 1 && minX <= box.x + box.w + 1 && maxY >= box.y - 1 && minY <= box.y + box.h + 1);
+                ctx.fillStyle = 'rgba(0,0,0,1)';
+                ctx.strokeStyle = 'rgba(0,0,0,1)';
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                const sweepsByRadius = new Map();
+                const dots = [];
+                holes.forEach(hole => {
+                    if (this.isSweepHole(hole)) {
+                        if (hole.path.length === 1) dots.push(hole);
+                        else if (hole.path.length > 1) {
+                            if (!sweepsByRadius.has(hole.r)) sweepsByRadius.set(hole.r, []);
+                            sweepsByRadius.get(hole.r).push(hole);
+                        }
+                        return;
+                    }
+                    if (!hole || !hole.length) return;
+                    if (box) {
+                        const b = this.getPointBounds(hole);
+                        if (!reaches(b.x, b.y, b.x + b.w, b.y + b.h)) return;
+                    }
+                    ctx.beginPath();
+                    ctx.moveTo(hole[0].x, hole[0].y);
+                    for (let i = 1; i < hole.length; i++) ctx.lineTo(hole[i].x, hole[i].y);
+                    ctx.closePath();
+                    ctx.fill();
+                });
 
-                const isolatedCtx = this.eraserCtx;
+                sweepsByRadius.forEach((sweeps, r) => {
+                    ctx.beginPath();
+                    let any = false;
+                    sweeps.forEach(({ path }) => {
+                        let drawing = false;
+                        for (let i = 1; i < path.length; i++) {
+                            const a = path[i - 1], b = path[i];
+                            if (!reaches(Math.min(a.x, b.x) - r, Math.min(a.y, b.y) - r, Math.max(a.x, b.x) + r, Math.max(a.y, b.y) + r)) {
+                                drawing = false;
+                                continue;
+                            }
+                            if (!drawing) ctx.moveTo(a.x, a.y);
+                            ctx.lineTo(b.x, b.y);
+                            drawing = true;
+                            any = true;
+                        }
+                    });
+                    if (!any) return;
+                    ctx.lineWidth = r * 2;
+                    ctx.stroke();
+                });
+
+                ctx.beginPath();
+                let anyDot = false;
+                dots.forEach(({ path: [point], r }) => {
+                    if (!reaches(point.x - r, point.y - r, point.x + r, point.y + r)) return;
+                    ctx.moveTo(point.x + r, point.y);
+                    ctx.arc(point.x, point.y, r, 0, Math.PI * 2);
+                    anyDot = true;
+                });
+                if (anyDot) ctx.fill();
+            }
+
+            // A pixel box that contains everything drawObject can paint for a plain
+            // stroke, so the isolated hole pass only touches that area. Returns null
+            // for objects that are not cheap to bound (text), which use the whole canvas.
+            getStrokePaintBox(stroke) {
+                if (stroke.type === 'text' || stroke.type === 'group' || !stroke.points?.length) return null;
+                const brushScale = this.getBrushScale(stroke);
+                const reach = (stroke.size || 1) * Math.max(1, Math.abs(stroke.sx || 1), Math.abs(stroke.sy || 1), Math.abs(brushScale.x), Math.abs(brushScale.y)) + 4;
+                const pointSets = [stroke.points];
+                if (stroke.symmetric && stroke.type === 'brush') pointSets.push(this.getMirroredStroke(stroke).points);
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                pointSets.forEach(points => {
+                    const b = this.getPointBounds(points);
+                    const corners = [
+                        { x: b.x - reach, y: b.y - reach }, { x: b.x + b.w + reach, y: b.y - reach },
+                        { x: b.x + b.w + reach, y: b.y + b.h + reach }, { x: b.x - reach, y: b.y + b.h + reach }
+                    ];
+                    // drawObject rotates a stroke about the centre of its points.
+                    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+                    const cos = Math.cos(stroke.angle || 0), sin = Math.sin(stroke.angle || 0);
+                    corners.forEach(({ x, y }) => {
+                        const rx = cx + (x - cx) * cos - (y - cy) * sin;
+                        const ry = cy + (x - cx) * sin + (y - cy) * cos;
+                        minX = Math.min(minX, rx); maxX = Math.max(maxX, rx);
+                        minY = Math.min(minY, ry); maxY = Math.max(maxY, ry);
+                    });
+                });
+                if (![minX, minY, maxX, maxY].every(Number.isFinite)) return null;
+                const x = Math.max(0, Math.floor(minX)), y = Math.max(0, Math.floor(minY));
+                const w = Math.min(this.canvasWidth, Math.ceil(maxX)) - x, h = Math.min(this.canvasHeight, Math.ceil(maxY)) - y;
+                return { x, y, w: Math.max(0, w), h: Math.max(0, h) };
+            }
+
+            drawObjectWithEraserHoles(ctx, obj, simpleMode, layerName) {
+                const box = this.getStrokePaintBox(obj) || { x: 0, y: 0, w: this.canvasWidth, h: this.canvasHeight };
+                if (!box.w || !box.h) return;
+                // The stroke is drawn into a scratch canvas that only reaches as far
+                // as its box: erasing on a canvas-sized scratch made every cut process
+                // the whole canvas, which took most of a second per redraw on heavily
+                // erased frames. Drawing is not shifted, because Firefox and WebKit
+                // antialias curves slightly differently after a translation.
+                const isolatedCtx = this.getEraserScratch(box.x + box.w, box.y + box.h);
                 isolatedCtx.save();
+                isolatedCtx.setTransform(1, 0, 0, 1, 0, 0);
                 isolatedCtx.globalCompositeOperation = 'source-over';
                 isolatedCtx.globalAlpha = 1;
-                isolatedCtx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+                isolatedCtx.clearRect(box.x, box.y, box.w, box.h);
                 this.drawObject(isolatedCtx, obj, simpleMode, layerName, false);
 
                 isolatedCtx.globalCompositeOperation = 'destination-out';
                 isolatedCtx.globalAlpha = 1;
-                isolatedCtx.fillStyle = 'rgba(0,0,0,1)';
-                this.collectEraserHoles(obj).forEach(hole => {
-                    if (!hole || !hole.length) return;
-                    isolatedCtx.beginPath();
-                    isolatedCtx.moveTo(hole[0].x, hole[0].y);
-                    for (let i = 1; i < hole.length; i++) isolatedCtx.lineTo(hole[i].x, hole[i].y);
-                    isolatedCtx.closePath();
-                    isolatedCtx.fill();
-                });
+                this.cutEraserHoles(isolatedCtx, this.collectEraserHoles(obj), box);
                 isolatedCtx.restore();
 
                 ctx.save();
                 const targetAlpha = ctx.globalAlpha;
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.globalAlpha = targetAlpha;
-                ctx.drawImage(this.eraserCanvas, 0, 0);
+                ctx.drawImage(isolatedCtx.canvas, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h);
                 ctx.restore();
+            }
+
+            getEraserScratch(width, height) {
+                // Sizes are rounded up so a handful of canvases serve every stroke.
+                const w = Math.ceil(width / 64) * 64;
+                const h = Math.ceil(height / 64) * 64;
+                if (!this.eraserScratch) this.eraserScratch = new Map();
+                const key = `${w}x${h}`;
+                let scratch = this.eraserScratch.get(key);
+                if (!scratch) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    scratch = canvas.getContext('2d');
+                    this.eraserScratch.set(key, scratch);
+                }
+                return scratch;
             }
 
             drawGroupWithEraserHoles(ctx, group, simpleMode, layerName) {
@@ -3198,15 +3382,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         childCtx.save();
                         childCtx.globalCompositeOperation = 'destination-out';
                         childCtx.globalAlpha = 1;
-                        childCtx.fillStyle = 'rgba(0,0,0,1)';
-                        this.collectEraserHoles(item).forEach(hole => {
-                            if (!hole || !hole.length) return;
-                            childCtx.beginPath();
-                            childCtx.moveTo(hole[0].x, hole[0].y);
-                            for (let i = 1; i < hole.length; i++) childCtx.lineTo(hole[i].x, hole[i].y);
-                            childCtx.closePath();
-                            childCtx.fill();
-                        });
+                        this.cutEraserHoles(childCtx, this.collectEraserHoles(item));
                         childCtx.restore();
                     }
                     groupCtx.drawImage(this.childEraserCanvas, 0, 0);
@@ -4675,7 +4851,11 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 const withHoles = (object, output) => {
                     if (!object.holes || !object.holes.length) return output;
                     const id = `eraser-mask-${maskIndex++}`;
-                    const holes = object.holes.map(hole => `<polygon points="${hole.map((point) => `${point.x},${point.y}`).join(' ')}" fill="black"/>`).join('');
+                    const holes = object.holes.map(hole => {
+                        if (!this.isSweepHole(hole)) return `<polygon points="${hole.map((point) => `${point.x},${point.y}`).join(' ')}" fill="black"/>`;
+                        if (hole.path.length === 1) return `<circle cx="${hole.path[0].x}" cy="${hole.path[0].y}" r="${hole.r}" fill="black"/>`;
+                        return `<polyline points="${hole.path.map((point) => `${point.x},${point.y}`).join(' ')}" fill="none" stroke="black" stroke-width="${hole.r * 2}" stroke-linecap="round" stroke-linejoin="round"/>`;
+                    }).join('');
                     maskDefs.push(`<mask id="${id}" maskUnits="userSpaceOnUse"><rect width="${this.canvasWidth}" height="${this.canvasHeight}" fill="white"/>${holes}</mask>`);
                     return `<g mask="url(#${id})">${output}</g>`;
                 };
