@@ -720,6 +720,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     this.backgroundImage = this.backgroundImageDraft;
                     this.resizeCanvas(width, height);
                     this.renderUI();
+                    this.updateThumbnails();
                     this.renderCanvas();
                 }
                 this.closeModal('settings-modal');
@@ -865,6 +866,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         list.push(textObj);
                     }
                     this.renderCanvas();
+                    this.queueEditedThumbnails();
                     this.saveStorage();
                 }
                 this.closeModal('text-modal');
@@ -1015,6 +1017,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         if (track && !track.excludedFrames.includes(frameIndex)) track.excludedFrames.push(frameIndex);
                     });
                     (frame.strokes || []).forEach((stroke) => this.stripMotionMetadata(stroke));
+                    // Canvas settings may have changed since copying; draw it fresh.
+                    delete frame.thumb;
                 });
                 this.motionTracks.forEach((track) => this.applyMotionTrack(track));
                 this.selectedFrameIndices = pastedFrames.map((_, offset) => insertAt + offset);
@@ -1733,6 +1737,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.applyMotionTrack(track);
                 this.renderUI(true);
                 this.renderCanvas();
+                this.queueEditedThumbnails();
                 this.saveStorage();
             }
 
@@ -1758,6 +1763,14 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 
             restoreHistoryState(entry) {
                 const state = JSON.parse(entry.json);
+                // Keep thumbnails of frames this step does not change, as long as
+                // nothing that affects every frame's look changes with it.
+                const frameKey = (frame) => JSON.stringify([frame.strokes, frame.paperStrokes, frame.frameBgColor || null]);
+                const thumbs = new Map();
+                if (this.backgroundImage === (entry.backgroundImage || null) && this.selectedBgColor === state.bgColor &&
+                    this.canvasWidth === state.width && this.canvasHeight === state.height) {
+                    this.frames.forEach((frame) => { if (frame.thumb) thumbs.set(frameKey(frame), frame.thumb); });
+                }
                 this.backgroundImage = entry.backgroundImage || null;
                 this.frames = this.normalizeFrames(state.frames);
                 this.motionTracks = this.normalizeMotionTracks(state.motionTracks || []);
@@ -1766,7 +1779,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 if (state.palette) { this.palette = state.palette; this.renderPalette(); }
                 if (state.width && state.height) this.resizeCanvas(state.width, state.height);
                 this.selectedObject = null;
-                this.updateThumbnails();
+                if (thumbs.size) this.frames.forEach((frame) => { frame.thumb = thumbs.get(frameKey(frame)); });
                 this.renderCanvas();
                 this.renderUI();
                 this.saveStorage();
@@ -1967,7 +1980,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                             sx: 1, sy: 1,
                             angle: 0
                         });
-                        this.updateThumbnails();
+                        this.updateThumbnails([this.frameIndex]);
                         this.renderCanvas();
                     }
                     this.saveStorage();
@@ -2501,7 +2514,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     this.quickLineActive = false;
                     this.currentStroke = null;
                     this.renderCanvas();
-                    this.updateThumbnails();
+                    this.updateThumbnails([this.frameIndex]);
                     this.saveStorage();
                 }
                 if (this.dragMode) {
@@ -2510,7 +2523,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         this.commitMotionArtworkEdits();
                     }
                     this.dragMode = null;
-                    this.updateThumbnails();
+                    this.updateEditedThumbnails();
                     if (finishedDragMode === 'motion-move') this.renderMotionTracks();
                     this.saveStorage();
                     this.dragTrack = null;
@@ -3932,6 +3945,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     }
                     this.commitMotionArtworkEdits();
                     this.renderCanvas();
+                    this.queueEditedThumbnails();
                     this.saveStorage();
                 }
                 this.updateCursorStyle();
@@ -3963,6 +3977,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     }
                     this.commitMotionArtworkEdits();
                     this.renderCanvas();
+                    this.queueEditedThumbnails();
                     this.saveStorage();
                 }
                 this.updateCursorStyle();
@@ -3981,6 +3996,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     }
                     this.commitMotionArtworkEdits();
                     this.renderCanvas();
+                    this.queueEditedThumbnails();
                     this.saveStorage();
                 }
                 this.updateCursorStyle();
@@ -4608,7 +4624,10 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 
                         this.framesList.appendChild(el);
                     });
-                    this.updateThumbnails();
+                    // Frames keep their thumbnails, so only draw missing ones. Adding,
+                    // removing or moving frames can re-place animated copies, so
+                    // projects with motion tracks redraw them all.
+                    this.updateThumbnails(this.motionTracks.length ? null : this.frames.flatMap((frame, index) => (frame.thumb ? [] : [index])));
                     const addButton = document.createElement('button');
                     addButton.type = 'button';
                     addButton.className = 'add-frame-btn';
@@ -4734,20 +4753,46 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.currentRenderBgColor = null;
             }
 
-            updateThumbnails() {
+            // Redraws the given frame indexes, or every frame when none are given.
+            // Each thumbnail renders the whole frame, so heavy projects took
+            // seconds when every edit redrew all of them.
+            updateThumbnails(indices = null) {
+                const targets = indices ?? this.frames.map((_, index) => index);
+                if (!targets.length) return;
                 const tCanvas = document.createElement('canvas');
                 tCanvas.width = 120; tCanvas.height = 120;
                 const tCtx = tCanvas.getContext('2d');
                 const scale = 120 / this.canvasWidth;
                 tCtx.scale(scale, scale);
 
-                this.frames.forEach((f, i) => {
-                    this.renderFrameToContext(tCtx, f);
-                    f.thumb = tCanvas.toDataURL();
-                });
-
                 const imgs = this.framesList.querySelectorAll('.frame-card img');
-                imgs.forEach((img, i) => { if (this.frames[i]) img.src = this.frames[i].thumb; });
+                targets.forEach((index) => {
+                    const frame = this.frames[index];
+                    if (!frame) return;
+                    this.renderFrameToContext(tCtx, frame);
+                    frame.thumb = tCanvas.toDataURL();
+                    if (imgs[index]) imgs[index].src = frame.thumb;
+                });
+            }
+
+            // An artwork edit changes only the current frame, unless the project has
+            // animated artwork: motion tracks place copies across frames.
+            updateEditedThumbnails() {
+                this.updateThumbnails(this.motionTracks.length ? null : [this.frameIndex]);
+            }
+
+            // Same as updateEditedThumbnails, but waits until edits that repeat
+            // quickly (style sliders) settle. Frames are tracked by object so the
+            // queue survives frames being added or removed meanwhile.
+            queueEditedThumbnails() {
+                if (!this.pendingThumbnailFrames) this.pendingThumbnailFrames = new Set();
+                (this.motionTracks.length ? this.frames : [this.frames[this.frameIndex]]).forEach((frame) => this.pendingThumbnailFrames.add(frame));
+                clearTimeout(this.thumbnailTimer);
+                this.thumbnailTimer = setTimeout(() => {
+                    const pending = this.pendingThumbnailFrames;
+                    this.pendingThumbnailFrames = new Set();
+                    this.updateThumbnails(this.frames.flatMap((frame, index) => (pending.has(frame) ? [index] : [])));
+                }, 250);
             }
 
             saveStorage() {
@@ -5390,7 +5435,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.renderCanvas();
                 this.updateGroupToolbar();
                 this.saveStorage();
-                this.updateThumbnails();
+                this.updateEditedThumbnails();
             }
 
             ungroupSelection() {
@@ -5414,7 +5459,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.renderCanvas();
                 this.updateGroupToolbar();
                 this.saveStorage();
-                this.updateThumbnails();
+                this.updateEditedThumbnails();
             }
 
             updateGroupToolbar() {
@@ -5465,7 +5510,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     this.translateHoles(item.stroke, item.stroke.holes, dx, dy);
                 });
                 this.selectedObject.bounds = this.getGroupBounds(this.selectedObject.items);
-                this.renderCanvas(); this.updateThumbnails(); this.saveStorage();
+                this.renderCanvas(); this.updateEditedThumbnails(); this.saveStorage();
             }
 
             deleteSelected() {
@@ -5501,7 +5546,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.dragMode = null;
                 this.renderCanvas();
                 this.saveStorage();
-                this.updateThumbnails();
+                this.updateThumbnails(selectedTrack ? null : [this.frameIndex]);
                 this.renderMotionTracks();
             }
 
@@ -5581,7 +5626,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     }
                     this.renderCanvas();
                     this.saveStorage();
-                    this.updateThumbnails();
+                    this.updateEditedThumbnails();
                 }
                 return true;
             }
