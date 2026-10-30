@@ -718,6 +718,7 @@ test('Truck creates a single lazy key on drag, ignores clicks, and undoes to the
     await page.mouse.up();
   };
   await drawDot(120, 120);
+  const drawnAt = await page.evaluate(() => ({ ...window.app.frames[0].strokes[0].points[0] }));
   await page.locator('#tool-select').click();
   let box = await page.locator('#rendering-canvas').boundingBox();
   await page.mouse.click(box.x + 120 * box.width / 600, box.y + 120 * box.height / 600);
@@ -751,12 +752,13 @@ test('Truck creates a single lazy key on drag, ignores clicks, and undoes to the
     keys: window.app.motionTracks[0].keyframes.map((key) => ({ ...key }))
   }))).toEqual(afterDrag);
 
+  // Undo puts the ball back exactly where it was drawn.
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect.poll(() => page.evaluate(() => ({
     tracks: window.app.motionTracks.length,
     points: window.app.frames[0].strokes.map((stroke) => stroke.points[0]),
     history: window.app.history.length
-  }))).toEqual({ tracks: before.tracks, points: [{ x: 120, y: 120, p: 0.5 }], history: before.history });
+  }))).toEqual({ tracks: before.tracks, points: [drawnAt], history: before.history });
 });
 
 test('Truck drag updates an existing key and adds a new-frame key without changing another ball', async ({ page }) => {

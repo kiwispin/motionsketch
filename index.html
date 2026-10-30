@@ -781,6 +781,9 @@
         }
         .zoom-btn:hover { background: var(--btn-hover); }
         .zoom-btn:focus-visible, .zoom-val:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+        /* Hide panels only exists in the new look (src/look.css). */
+        #panels-toggle, #panels-show, .zoom-divider { display: none; }
+        .zoom-divider { width: 1px; height: 18px; margin: 0 3px; background: var(--border-panel); }
         .zoom-val { border: 0; background: transparent; color: var(--text-main); font: inherit; font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; width: 45px; text-align: center; cursor: pointer; }
 
         .inspector-context {
@@ -1369,7 +1372,10 @@
         <button type="button" class="zoom-btn" onclick="app.adjustZoom(-0.1)" aria-label="Zoom out" title="Zoom out (-)"><i class="fas fa-minus"></i></button>
         <button type="button" class="zoom-val" id="zoom-disp" onclick="app.fitCanvas()" aria-label="Fit canvas to workspace" title="Fit canvas to workspace (0)">100%</button>
         <button type="button" class="zoom-btn" onclick="app.adjustZoom(0.1)" aria-label="Zoom in" title="Zoom in (+)"><i class="fas fa-plus"></i></button>
+        <span class="zoom-divider" aria-hidden="true"></span>
+        <button type="button" class="zoom-btn" id="panels-toggle" onclick="app.togglePanels()" aria-pressed="false" aria-label="Hide panels" title="Hide panels (Tab)"><i class="fas fa-expand"></i></button>
     </div>
+    <button type="button" id="panels-show" onclick="app.setPanelsHidden(false)" title="Show panels (Tab)"><i class="fas fa-compress"></i> Show panels <kbd>Tab</kbd></button>
 
     <div class="glass-panel timeline-panel">
         <div class="timeline-controls">

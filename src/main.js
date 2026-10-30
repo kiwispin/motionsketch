@@ -138,6 +138,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.canvasHeight = 600;
                 this.projectName = 'Untitled';
                 this.zoom = 1.0;
+                this.panelsHidden = false;
                 this.isHandTool = false;
                 this.spacePanActive = false;
                 this.spacePanUsed = false;
@@ -243,6 +244,29 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     workspace.scrollLeft += (after.width - before.width) * focusRatioX;
                     workspace.scrollTop += (after.height - before.height) * focusRatioY;
                 }
+            }
+
+            // Hide panels (Tab): the settings panel and frame strip tuck away so the
+            // canvas gets the room. Tools, Play and the frame buttons stay.
+            setPanelsHidden(hidden) {
+                this.panelsHidden = hidden;
+                document.body.classList.toggle('panels-hidden', hidden);
+                const toggle = document.getElementById('panels-toggle');
+                if (toggle) {
+                    toggle.setAttribute('aria-pressed', String(hidden));
+                    toggle.setAttribute('aria-label', hidden ? 'Show panels' : 'Hide panels');
+                    toggle.title = hidden ? 'Show panels (Tab)' : 'Hide panels (Tab)';
+                    toggle.innerHTML = `<i class="fas fa-${hidden ? 'compress' : 'expand'}"></i>`;
+                }
+                this.handleResize();
+            }
+
+            togglePanels() {
+                this.setPanelsHidden(!this.panelsHidden);
+            }
+
+            canHidePanels() {
+                return Boolean(document.getElementById('panels-toggle')?.offsetParent);
             }
 
             resetZoom() {
@@ -501,6 +525,11 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                             this.closeModal(openModal.id);
                             return;
                         }
+                        if (this.panelsHidden) {
+                            e.preventDefault();
+                            this.setPanelsHidden(false);
+                            return;
+                        }
                     }
                     const target = e.target;
                     const isTypingTarget = target && (
@@ -558,6 +587,15 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     // Alt-modified keys belong to the browser/operating system rather
                     // than the canvas. Do not turn them into drawing or frame commands.
                     if (hasToolModifier) return;
+
+                    // Tab hides the panels while drawing. On a button or slider it
+                    // still moves focus, so the keyboard can reach every control.
+                    if (e.key === 'Tab' && !e.shiftKey && this.canHidePanels() &&
+                        (target === document.body || target === document.documentElement || target?.closest?.('.workspace'))) {
+                        e.preventDefault();
+                        this.togglePanels();
+                        return;
+                    }
 
                     if (e.code === 'Space') {
                         e.preventDefault();
@@ -4072,6 +4110,8 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 
             setTool(t) {
                 if (this.isHandTool) this.setHandTool(false);
+                // Truck works in the motion timeline, so it needs the panels.
+                if (t === 'truck' && this.panelsHidden) this.setPanelsHidden(false);
                 this.clearQuickLineTimer();
                 this.quickLineActive = false;
                 this.tool = t;
