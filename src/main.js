@@ -266,13 +266,41 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 panel.classList.remove('tools-measuring');
             }
 
+            // How far the motion timeline, when open, reaches into the canvas area.
+            getMotionTimelineReserve(workspace) {
+                const timeline = document.querySelector('.timeline-panel');
+                if (!timeline) return 0;
+                const wasOpen = timeline.classList.contains('has-motion');
+                timeline.classList.add('has-motion');
+                const top = timeline.getBoundingClientRect().top;
+                timeline.classList.toggle('has-motion', wasOpen);
+                return Math.max(0, Math.ceil(workspace.getBoundingClientRect().bottom - top));
+            }
+
+            // Zoom floats at the bottom-right of the visible canvas area, above
+            // the timeline whichever height it currently has.
+            positionZoomControls() {
+                const zoom = document.querySelector('.zoom-controls');
+                const workspace = document.querySelector('.workspace');
+                const timeline = document.querySelector('.timeline-panel');
+                if (!zoom || !workspace) return;
+                const area = workspace.getBoundingClientRect();
+                const bottom = Math.min(area.top + workspace.clientHeight, timeline ? timeline.getBoundingClientRect().top : Infinity) - 12;
+                zoom.style.left = `${Math.round(area.left + workspace.clientWidth - zoom.offsetWidth - 12)}px`;
+                zoom.style.top = `${Math.round(bottom - zoom.offsetHeight)}px`;
+            }
+
             handleResize() {
                 this.fitToolsPanel();
                 const workspace = document.querySelector('.workspace');
                 if (!workspace) return;
 
-                const availW = workspace.clientWidth - 100;
-                const availH = workspace.clientHeight - 100;
+                // Keep room below the canvas for the taller motion timeline, so the
+                // canvas neither moves nor hides under it when the Truck tool opens.
+                const reserve = this.getMotionTimelineReserve(workspace);
+                workspace.style.paddingBottom = `${reserve}px`;
+                const availW = workspace.clientWidth - 48;
+                const availH = workspace.clientHeight - 48 - reserve;
                 const aspect = this.canvasWidth / this.canvasHeight;
                 let w, h;
 
@@ -287,6 +315,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 
                 this.canvasWrapper.style.width = `${w}px`;
                 this.canvasWrapper.style.height = `${h}px`;
+                this.positionZoomControls();
                 if (this.showGrid) this.canvasWrapper.style.setProperty('--grid-size', `${this.snapSize * this.zoom}px`);
                 this.updateBrushPreview();
             }
@@ -3434,6 +3463,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 
                 // Update floating group toolbar
                 this.updateGroupToolbar();
+                this.updateInspector();
             }
 
             scheduleRender() {
@@ -3995,15 +4025,10 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
             }
 
             updateBgColorButton(color) {
-                const btn = document.getElementById('bg-color-picker');
+                const swatch = document.getElementById('bg-color-swatch');
                 const input = document.getElementById('bg-color-input');
-                const label = document.getElementById('bg-color-label');
-                if (!btn || !input || !label) return;
-                const textColor = this.getContrastTextColor(color);
-                btn.style.background = color;
-                btn.style.color = textColor;
-                input.value = color;
-                label.style.textShadow = 'none';
+                if (swatch) swatch.style.background = color;
+                if (input) input.value = color;
             }
 
             setTool(t) {
@@ -4178,14 +4203,24 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 return { dx, dy };
             }
 
+            // Heads the right panel with the active tool or selection; the hint is
+            // its tooltip. Called on every render, so it only writes on change.
             updateInspector() {
                 const title = document.getElementById('inspector-title');
-                const description = document.getElementById('inspector-description');
-                if (!title || !description) return;
+                const panel = document.querySelector('.props-panel');
+                if (!title || !panel) return;
+                const show = (heading, hint, drawing) => {
+                    if (title.textContent !== heading) title.textContent = heading;
+                    if (title.title !== hint) title.title = hint;
+                    const mode = drawing ? 'draw' : 'other';
+                    if (panel.dataset.mode !== mode) panel.dataset.mode = mode;
+                };
                 if (this.selectedObject) {
-                    const selectedType = this.selectedObject.isGroup ? 'Multiple objects' : (this.selectedObject.stroke?.type || 'Object');
-                    title.textContent = selectedType === 'Multiple objects' ? selectedType : `${selectedType[0].toUpperCase()}${selectedType.slice(1)} selected`;
-                    description.textContent = 'Use the canvas handles to move, resize, rotate, or edit the selected object.';
+                    const names = { brush: 'Stroke', rect: 'Rectangle', circle: 'Circle', line: 'Line', text: 'Text', fill: 'Fill', group: 'Group' };
+                    const heading = this.selectedObject.isPersistentGroup ? 'Group selected'
+                        : this.selectedObject.isGroup ? `${this.selectedObject.items.length} objects selected`
+                        : `${names[this.selectedObject.stroke?.type] || 'Object'} selected`;
+                    show(heading, 'Colour, size and opacity changes apply to the selection. Use the handles on the canvas to move, resize or rotate it.', false);
                     return;
                 }
                 const labels = {
@@ -4200,11 +4235,13 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     text: ['Text', 'Click the canvas to add editable text.'],
                     eraser: ['Eraser', 'Drag over marks to erase them.'],
                     bucket: ['Fill', 'Click the canvas to fill the active layer.'],
-                    select: ['Select', 'Click an object to move, resize, rotate, or edit it.']
+                    select: ['Select', 'Click an object to move, resize, rotate, or edit it.'],
+                    truck: ['Motion path', 'Click an object, then drag it on different frames to animate its movement.']
                 };
-                const [toolTitle, toolDescription] = this.isHandTool ? labels.hand : (labels[this.tool] || labels.brush);
-                title.textContent = toolTitle;
-                description.textContent = `${toolDescription} Active layer: ${this.activeLayer === 'ink' ? 'Foreground' : 'Background'}.`;
+                const key = this.isHandTool ? 'hand' : (this.tool === 'brush' ? (this.brushType || 'brush') : this.tool);
+                const [toolTitle, toolDescription] = labels[key] || labels.brush;
+                const drawing = !this.isHandTool && ['brush', 'eraser', 'rect', 'circle', 'line'].includes(this.tool);
+                show(toolTitle, `${toolDescription} Active layer: ${this.activeLayer === 'ink' ? 'Foreground' : 'Background'}.`, drawing);
             }
 
             setColor(c) {
@@ -4685,11 +4722,11 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 if (track) {
                     if (label) label.textContent = `Movement · frame ${this.frameIndex + 1}`;
                 } else {
-                    if (label) label.textContent = this.selectedObject ? `Selected object · frame ${this.frameIndex + 1}` : 'Select an object';
+                    if (label) label.textContent = this.selectedObject ? `Frame ${this.frameIndex + 1}: drag the object to move it` : 'Click an object to animate it';
                 }
                 if (addButton) addButton.disabled = !this.selectedObject;
                 if (addButton) {
-                    addButton.textContent = currentKey ? '−' : '+';
+                    addButton.textContent = currentKey ? '− Key' : '+ Key';
                     addButton.setAttribute('aria-label', currentKey ? 'Remove movement keyframe' : 'Add movement keyframe');
                     addButton.title = currentKey ? 'Remove keyframe at current frame' : 'Add keyframe at current frame';
                 }
@@ -4799,6 +4836,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 panel.classList.toggle('has-motion', showMotion);
                 document.body.classList.toggle('has-motion-timeline', showMotion);
                 this.fitToolsPanel();
+                this.positionZoomControls();
                 this.syncMotionTimelineLayout();
                 visibleTracks.forEach((track, trackIndex) => {
                     const row = document.createElement('div');
@@ -5102,6 +5140,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         const limit = 100 * 1024 * 1024;
                         const pct = Math.min(100, (size / limit) * 100);
 
+                        const storageLabel = document.querySelector('.storage-label');
+                        if (storageLabel) storageLabel.textContent = `Storage ${Math.round(pct)}%`;
                         const bar = document.getElementById('storage-bar');
                         if (bar) {
                             bar.style.width = pct + '%';
@@ -5111,7 +5151,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         }
                         this.db.set('currentProject', jsonStr).then(() => {
                             const ind = document.getElementById('save-indicator');
-                            ind.innerHTML = '<i class="fas fa-check"></i> Saved';
+                            ind.innerHTML = '<i class="fas fa-check"></i> Saved in this browser';
                             ind.style.background = 'rgba(46, 204, 113, 0.9)';
                             ind.style.opacity = 1;
                             setTimeout(() => ind.style.opacity = 0, 1500);

@@ -19,7 +19,7 @@
             --accent-blue: #0067C0;
             --accent-hover: #007AFF;
             --text-main: #ffffff;
-            --text-muted: #8e8e93;
+            --text-muted: #a1a1a6;
             --shadow-elevation: 0 12px 40px rgba(0, 0, 0, 0.4);
             --radius-lg: 18px;
             --radius-sm: 8px;
@@ -35,7 +35,7 @@
             --accent-blue: #007AFF;
             --accent-hover: #0062cc;
             --text-main: #1c1c1e;
-            --text-muted: #6e6e73;
+            --text-muted: #55555a;
             --shadow-elevation: 0 8px 30px rgba(0, 0, 0, 0.12);
             --bg-gradient: radial-gradient(circle at center, #e5e5ea 0%, #d1d1d6 100%);
             --input-bg: rgba(0, 0, 0, 0.05);
@@ -99,7 +99,7 @@
             width: auto;
             height: auto;
             aspect-ratio: 1/1;
-            margin: 50px;
+            margin: 24px;
         }
         .selection-marquee { position: fixed; pointer-events: none; z-index: 10; border: 1px dashed #0A84FF; background: rgba(10, 132, 255, 0.1); }
         .selection-marquee[hidden] { display: none; }
@@ -261,8 +261,8 @@
         .export-menu-item i { width: 16px; color: var(--accent-blue); text-align: center; }
         .export-menu-divider { height: 1px; margin: 5px 4px; background: var(--border-panel); }
 
-        .storage-container { display: flex; flex-direction: column; justify-content: center; width: 60px; margin: 0 10px; }
-        .storage-label { font-size: 9px; color: var(--text-muted); margin-bottom: 2px; text-align: center; }
+        .storage-container { display: flex; flex-direction: column; justify-content: center; width: 76px; margin: 0 10px; }
+        .storage-label { font-size: 0.68rem; color: var(--text-muted); margin-bottom: 3px; text-align: center; white-space: nowrap; }
         .storage-track { width: 100%; height: 4px; background: var(--input-bg); border-radius: 2px; overflow: hidden; }
         .storage-fill { height: 100%; width: 0%; background: #2ecc71; transition: width 0.5s ease, background 0.3s; }
 
@@ -417,6 +417,9 @@
         .layer-option.active { background: var(--accent-blue); color: white; }
 
         .slider-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .slider-label { flex: 0 0 52px; font-size: .8rem; color: var(--text-muted); }
+        .slider-row input[type="range"] { min-width: 0; }
+        .slider-icon { display: none; }
         .slider-val { font-size: 0.8rem; color: var(--text-main); font-variant-numeric: tabular-nums; width: 30px; text-align: right; }
         #onion-settings .slider-row { display: grid; grid-template-columns: 70px minmax(0, 1fr) 34px; gap: 6px; width: 100%; }
         #onion-settings .slider-row > span { white-space: nowrap; font-size: 0.7rem !important; }
@@ -452,7 +455,13 @@
         }
 
         .color-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-        .swatch { width: 100%; aspect-ratio: 1; border-radius: 6px; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; }
+        .swatch { width: 100%; aspect-ratio: 1; border-radius: 6px; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.45); }
+        .bg-color-row { position: relative; display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 8px 10px; border: 1px solid var(--border-panel); border-radius: 8px; color: var(--text-main); font-size: .82rem; cursor: pointer; }
+        .bg-color-row:hover { background: var(--btn-hover); }
+        .bg-color-row:focus-within { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+        .bg-color-swatch { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 5px; background: #ffffff; box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.5); }
+        .bg-color-row input[type="color"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+        .props-panel[data-mode="other"] .brush-preview { display: none; }
         .swatch:hover { transform: scale(1.1); }
         [data-theme="light"] .swatch.active { border-color: #000; }
         .swatch.active { border-color: white; }
@@ -547,7 +556,7 @@
             color: var(--text-main);
             cursor: pointer;
             font: inherit;
-            font-size: .62rem;
+            font-size: .7rem;
             line-height: 1.05;
         }
         .timeline-action.add-frame-btn { margin-left: 0; border-radius: 8px; }
@@ -609,7 +618,7 @@
         .frame-card.frame-selected { border-color: #ff9f0a; box-shadow: inset 0 0 0 2px rgba(255, 159, 10, 0.9), 0 0 0 2px rgba(255, 159, 10, 0.25); }
         .frame-card.active.frame-selected { border-color: #ff9f0a; box-shadow: inset 0 0 0 2px rgba(255, 159, 10, 0.9), 0 0 0 2px rgba(255, 159, 10, 0.25); }
 
-        .frame-num { position: absolute; top: 3px; left: 4px; font-size: 9px; color: #000; font-weight: 800; background: rgba(255, 255, 255, 0.8); padding: 1px 4px; border-radius: 3px; pointer-events: none; }
+        .frame-num { position: absolute; top: 3px; left: 4px; font-size: 10px; color: #000; font-weight: 800; background: rgba(255, 255, 255, 0.8); padding: 1px 4px; border-radius: 3px; pointer-events: none; }
 
         .frame-delete-btn {
             position: absolute; top: 2px; right: 2px; width: 18px; height: 18px;
@@ -626,6 +635,17 @@
             cursor: pointer; transition: transform 0.2s; z-index: 10;
         }
         .frame-copy-btn:hover { transform: scale(1.1); background: var(--accent-hover); }
+        /* Delete and duplicate badges show on the current frame, or on hover and
+           keyboard focus, instead of covering every thumbnail and inviting
+           accidental deletes. Touch screens show them on the current frame. */
+        .frame-card:not(.active) .frame-delete-btn,
+        .frame-card:not(.active) .frame-copy-btn { opacity: 0; pointer-events: none; transition: opacity .15s; }
+        @media (hover: hover) {
+            .frame-card:hover .frame-delete-btn,
+            .frame-card:hover .frame-copy-btn { opacity: 1; pointer-events: auto; }
+        }
+        .frame-card:focus-within .frame-delete-btn,
+        .frame-card:focus-within .frame-copy-btn { opacity: 1; pointer-events: auto; }
 
         .frames-track .add-frame-btn {
             min-width: 50px; height: 50px; border: 0; padding: 0; appearance: none; border-radius: 50%;
@@ -653,12 +673,12 @@
         }
 
         .play-fab {
-            width: 32px; height: 32px; flex: 0 0 32px; border: 0; background: var(--accent-blue); border-radius: 50%;
+            width: 40px; height: 40px; flex: 0 0 40px; border: 0; background: var(--accent-blue); border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            color: white; cursor: pointer; font-size: 0.8rem; transition: transform 0.2s;
+            color: white; cursor: pointer; font-size: 1rem; transition: transform 0.2s;
         }
         .play-fab:hover { transform: scale(1.1); }
-        .frame-position { min-width: 74px; color: var(--text-muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; text-align: center; }
+        .frame-position { min-width: 96px; color: var(--text-main); font-size: 0.9rem; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; }
 
         #save-indicator {
             position: fixed; top: 90px; right: 30px;
@@ -712,23 +732,27 @@
         .new-animation-option strong { display: block; font-size: .9rem; }
         .new-animation-option span { color: var(--text-muted); font-size: .75rem; }
 
+        /* Floats at the canvas area's bottom-right corner; placed by positionZoomControls. */
         .zoom-controls {
-            position: static;
-            background: transparent;
-            border: 0;
-            border-radius: 0;
-            padding: 0;
+            position: fixed;
+            left: -999px;
+            top: -999px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-panel);
+            border-radius: 999px;
+            padding: 3px 6px;
             display: flex;
             align-items: center;
-            gap: 3px;
-            box-shadow: none;
-            z-index: auto;
-            transition: opacity 0.2s;
+            gap: 2px;
+            box-shadow: var(--shadow-elevation);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            z-index: 25;
         }
 
         .zoom-btn {
             background: transparent; border: none; color: var(--text-main);
-            width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+            width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
             display: flex; justify-content: center; align-items: center; font-size: 0.9rem;
         }
         .zoom-btn:hover { background: var(--btn-hover); }
@@ -770,8 +794,8 @@
         }
         .movement-track-controls .movement-selected { min-width: 150px; flex: 0 1 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .movement-key-controls { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
-        .movement-key-controls .btn-ghost { width: 28px; height: 28px; padding: 0; font-size: 1rem; line-height: 1; justify-content: center; }
-        .movement-key-toggle { font-size: 1.15rem !important; font-weight: 600; }
+        .movement-key-controls .btn-ghost { min-width: 28px; height: 28px; padding: 0 8px; font-size: .8rem; line-height: 1; justify-content: center; white-space: nowrap; }
+        .movement-key-toggle { font-weight: 700; background: rgba(10, 132, 255, .18) !important; }
         .motion-track-row {
             display: grid;
             grid-auto-flow: column;
@@ -793,7 +817,7 @@
         .motion-track-cell.keyframe.selected::before { background: #ffcc00; }
         .motion-track-cell:first-child::after {
             content: attr(data-track-label); position: absolute; left: 4px; bottom: 2px;
-            font-size: 8px; line-height: 1; color: var(--text-muted); pointer-events: none;
+            font-size: 10px; line-height: 1; color: var(--text-muted); pointer-events: none;
         }
         body.truck-active .tools-panel { overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
         .inspector-context strong { font-size: 0.85rem; }
@@ -929,6 +953,8 @@
             .props-panel .inspector-context { display: none !important; }
             .props-panel .layer-switch { width: 190px; }
             .props-panel .slider-row { width: 155px; }
+            .props-panel .slider-label { display: none; }
+            .props-panel .slider-icon { display: inline-block; }
             .props-panel .color-input-wrap { width: 52px; height: 44px; }
             .props-panel { overflow-x: auto; }
             .timeline-controls { padding-left: 12px; padding-right: 12px; overflow-x: auto; justify-content: flex-start; }
@@ -1123,9 +1149,9 @@
         <input class="project-name" id="project-name" type="text" value="Untitled" aria-label="Project name" title="Project name" onchange="app.setProjectName(this.value)" onkeydown="event.stopPropagation()">
         <div class="top-actions">
             <button class="btn-ghost" onclick="app.requestNewAnimation()" title="New animation"><i class="fas fa-plus"></i> New</button>
-            <button class="btn-ghost" onclick="app.saveProject()" title="Save project file"><i class="fas fa-download"></i> Save</button>
+            <button class="btn-ghost" onclick="app.saveProject()" title="Download the project file to keep a copy or share it"><i class="fas fa-download"></i> Download</button>
             <button class="btn-ghost" onclick="app.openProject()" title="Open project file"><i class="fas fa-folder-open"></i> Open</button>
-            <div class="storage-container" title="Browser Storage Used">
+            <div class="storage-container" title="Storage used in this browser">
                 <div class="storage-label">Storage</div>
                 <div class="storage-track">
                     <div class="storage-fill" id="storage-bar"></div>
@@ -1162,7 +1188,7 @@
                     <button type="button" class="btn-ghost" id="reference-remove" onclick="app.clearReferenceImage()" style="display:none"><i class="fas fa-times"></i> Remove ref.</button>
                 </div>
             </div>
-            <button class="btn-ghost" onclick="app.openSettings()" aria-label="Canvas Settings" title="Canvas Settings"><i class="fas fa-sliders-h"></i></button>
+            <button class="btn-ghost" onclick="app.openSettings()" aria-label="Canvas Settings" title="Canvas Settings"><i class="fas fa-cog"></i></button>
         </div>
     </header>
 
@@ -1170,8 +1196,8 @@
         <button type="button" class="tool-btn" id="tool-select" onclick="app.setTool('select')" aria-label="Select tool (V)" title="Select (V)">
             <i class="fas fa-mouse-pointer"></i>
         </button>
-        <button type="button" class="tool-btn" id="tool-truck" onclick="app.setTool('truck')" aria-label="Truck motion tool" title="Truck motion">
-            <i class="fas fa-truck-moving"></i>
+        <button type="button" class="tool-btn" id="tool-truck" onclick="app.setTool('truck')" aria-label="Motion path tool" title="Motion path (Truck): animate an object moving between frames">
+            <i class="fas fa-route"></i>
         </button>
 
         <div class="tool-flyout-wrapper" id="brush-wrapper" onclick="app.toggleFlyout('brush-wrapper', 'tool-brush-anchor')">
@@ -1235,19 +1261,19 @@
         </div>
 
         <div class="prop-group">
-            <div class="prop-label">Brush Settings</div>
+            <div class="prop-label" id="inspector-title">Brush</div>
             <div class="brush-preview" title="Brush size preview">
                 <svg class="brush-preview-curve" viewBox="0 0 300 80" role="img" aria-label="Brush stroke preview">
                     <path class="brush-preview-mark" id="brush-preview-mark" d="M 24 49 C 76 24 107 23 151 38 S 223 57 274 24"></path>
                 </svg>
             </div>
             <div class="slider-row">
-                <i class="fas fa-circle" style="font-size:0.6rem; color:#aaa;"></i>
+                <i class="fas fa-circle slider-icon" style="font-size:0.6rem; color:#aaa;" aria-hidden="true"></i><span class="slider-label">Size</span>
                 <input type="range" id="brush-size" aria-label="Brush size" min="1" max="200" value="10" oninput="app.setSize(this.value)">
                 <div class="slider-val" id="size-disp">10</div>
             </div>
             <div class="slider-row">
-                <i class="fas fa-adjust" style="font-size:0.6rem; color:#aaa;"></i>
+                <i class="fas fa-adjust slider-icon" style="font-size:0.6rem; color:#aaa;" aria-hidden="true"></i><span class="slider-label">Opacity</span>
                 <input type="range" id="brush-opacity" aria-label="Brush opacity" min="1" max="100" value="100" oninput="app.setOpacity(this.value)">
                 <div class="slider-val" id="op-disp">100</div>
             </div>
@@ -1258,12 +1284,11 @@
                 <input type="color" id="html-color-picker" aria-label="Brush colour" value="#000000" oninput="app.setColor(this.value)">
             </div>
             <div class="color-grid" id="palette-container"></div>
-            <div class="color-picker-btn" id="bg-color-picker" onclick="app.setColorMode('bg')" title="Background Color"
-                style="background:white; margin-top:10px; width:100%; height:36px; border-radius:8px; border:1px solid var(--border-panel); display:flex; align-items:center; justify-content:center; font-size:0.8rem; color:#333; font-weight:400; position:relative; overflow:hidden; cursor:pointer;">
-                <input type="color" id="bg-color-input" aria-label="Frame background colour" value="#ffffff" oninput="app.updateBgColor(this.value)"
-                    style="position:absolute; width:200%; height:200%; top:-50%; left:-50%; cursor:pointer; padding:0; margin:0; border:none;">
-                <span id="bg-color-label" style="pointer-events:none; z-index:1; text-shadow:none;">Set Background Color</span>
-            </div>
+            <label class="bg-color-row" id="bg-color-picker" title="Background colour of this frame">
+                <span class="bg-color-swatch" id="bg-color-swatch"></span>
+                <span id="bg-color-label">Background colour</span>
+                <input type="color" id="bg-color-input" aria-label="Frame background colour" value="#ffffff" oninput="app.updateBgColor(this.value)">
+            </label>
         </div>
         <div class="prop-group" id="onion-settings">
             <!-- Onion Skin controls are intentionally held for a future UI pass; keep this section footprint blank. -->
@@ -1312,6 +1337,11 @@
         </div>
         <div class="selection-marquee" id="selection-marquee" hidden></div>
     </div>
+    <div class="zoom-controls" role="group" aria-label="Canvas zoom">
+        <button type="button" class="zoom-btn" onclick="app.adjustZoom(-0.1)" aria-label="Zoom out" title="Zoom out (-)"><i class="fas fa-minus"></i></button>
+        <button type="button" class="zoom-val" id="zoom-disp" onclick="app.fitCanvas()" aria-label="Fit canvas to workspace" title="Fit canvas to workspace (0)">100%</button>
+        <button type="button" class="zoom-btn" onclick="app.adjustZoom(0.1)" aria-label="Zoom in" title="Zoom in (+)"><i class="fas fa-plus"></i></button>
+    </div>
 
     <div class="glass-panel timeline-panel">
         <div class="timeline-controls">
@@ -1338,11 +1368,6 @@
                     <input id="fps-control" type="range" aria-label="Playback frames per second" min="1" max="24" value="12" oninput="app.setFps(this.value)">
                     <span id="fps-disp" class="fps-value" style="text-align: left; font-size:0.8rem; font-variant-numeric: tabular-nums; color:var(--text-muted)">12 FPS</span>
                 </div>
-                <div class="zoom-controls" aria-label="Canvas zoom">
-                    <button type="button" class="zoom-btn" onclick="app.adjustZoom(-0.1)" aria-label="Zoom out"><i class="fas fa-minus"></i></button>
-                    <button type="button" class="zoom-val" id="zoom-disp" onclick="app.fitCanvas()" aria-label="Fit canvas to workspace" title="Fit canvas to workspace">100%</button>
-                    <button type="button" class="zoom-btn" onclick="app.adjustZoom(0.1)" aria-label="Zoom in"><i class="fas fa-plus"></i></button>
-                </div>
             </div>
                 <div class="frame-actions" aria-label="Frame actions">
                     <button type="button" class="timeline-action primary add-frame-btn" id="timeline-add" onclick="app.addFrame()" title="Add frame (A)"><i class="fas fa-plus"></i><span>Add</span></button>
@@ -1359,9 +1384,9 @@
             <div class="movement-track-controls" id="movement-track-controls">
                 <span class="movement-selected" id="movement-selected-label">Select foreground artwork</span>
                 <div class="movement-key-controls" aria-label="Movement keyframe controls">
-                    <button type="button" class="btn-ghost" id="movement-previous-key" onclick="app.selectAdjacentMotionKey(-1)" aria-label="Previous movement key" title="Previous movement key">‹</button>
+                    <button type="button" class="btn-ghost" id="movement-previous-key" onclick="app.selectAdjacentMotionKey(-1)" aria-label="Previous movement key" title="Previous movement key">‹ Key</button>
                     <button type="button" class="btn-ghost movement-key-toggle" id="movement-add-keyframe" onclick="app.toggleMotionKeyframe()" aria-label="Add movement keyframe" title="Add keyframe at current frame">+</button>
-                    <button type="button" class="btn-ghost" id="movement-next-key" onclick="app.selectAdjacentMotionKey(1)" aria-label="Next movement key" title="Next movement key">›</button>
+                    <button type="button" class="btn-ghost" id="movement-next-key" onclick="app.selectAdjacentMotionKey(1)" aria-label="Next movement key" title="Next movement key">Key ›</button>
                 </div>
             </div>
             <div class="movement-track-list" id="movement-tracks"></div>

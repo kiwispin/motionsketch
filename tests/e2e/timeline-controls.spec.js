@@ -12,7 +12,7 @@ for (const width of widths) {
       const box = (element) => element.getBoundingClientRect();
       const panel = box(document.querySelector('.timeline-panel'));
       const play = box(document.getElementById('play-btn'));
-      const zoomIn = box(document.querySelector('.zoom-controls .zoom-btn:last-child'));
+      const lastControl = box(document.querySelector('.timeline-fps'));
       const add = box(document.getElementById('timeline-add'));
       const controls = document.querySelector('.timeline-controls');
       controls.scrollLeft = controls.scrollWidth;
@@ -20,13 +20,13 @@ for (const width of widths) {
       return {
         playInside: play.left >= panel.left && play.right <= panel.right,
         playWidth: Math.round(play.width),
-        overlap: zoomIn.right > add.left + 0.5,
+        overlap: lastControl.right > add.left + 0.5,
         pasteReachable: paste.right <= panel.right + 0.5 && paste.left >= panel.left
       };
     });
 
     expect(layout.playInside).toBe(true);
-    expect(layout.playWidth).toBe(32);
+    expect(layout.playWidth).toBe(40);
     expect(layout.overlap).toBe(false);
     expect(layout.pasteReachable).toBe(true);
   });

@@ -279,7 +279,7 @@ test('Truck creates independent tracks for multiple objects and saves them', asy
   }))).toEqual({ tracks: 2, keys: [[2], [2]], rows: 1 });
 
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: /Save/ }).click();
+  await page.getByRole('button', { name: /Download/ }).click();
   const download = await downloadPromise;
   const saved = JSON.parse(await fs.readFile(await download.path(), 'utf8'));
   expect(saved.motionTracks).toHaveLength(2);
@@ -475,7 +475,7 @@ test('Truck shows only the selected track and starts a new track for a clicked u
 
   box = await page.locator('#rendering-canvas').boundingBox();
   await page.mouse.click(box.x + 500 * box.width / 600, box.y + 500 * box.height / 600);
-  await expect(page.locator('#movement-selected-label')).toHaveText('Select an object');
+  await expect(page.locator('#movement-selected-label')).toHaveText('Click an object to animate it');
   await expect(page.locator('#movement-add-keyframe')).toBeDisabled();
   await expect(page.locator('.motion-track-row')).toHaveCount(0);
 });
@@ -589,7 +589,10 @@ test('Duplicating the last frame reveals the Add Frame control', async ({ page }
   await page.waitForFunction(() => window.app && Array.isArray(window.app.frames));
   await seedFrames(page, 12);
 
-  await page.locator('#frames-list .frame-card').last().locator('.frame-copy-btn').click();
+  // Frame badges appear on hover for frames other than the current one.
+  const lastCard = page.locator('#frames-list .frame-card').last();
+  await lastCard.hover();
+  await lastCard.locator('.frame-copy-btn').click();
   const feedback = await page.evaluate(() => ({
     addPulsing: document.querySelector('#frames-list .add-frame-btn')?.classList.contains('frame-added-pulse') || false,
     addedFramePulsing: document.querySelector('#frames-list .frame-card:last-of-type')?.classList.contains('frame-added') || false

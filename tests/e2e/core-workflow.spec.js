@@ -116,7 +116,7 @@ test('downloads a PNG frame and an editable project file', async ({ page }, test
 
   const [project] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: /Save$/ }).click()
+    page.getByRole('button', { name: /Download$/ }).click()
   ]);
   expect(project.suggestedFilename()).toBe('Untitled.json');
 });
