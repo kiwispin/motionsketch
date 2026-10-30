@@ -299,22 +299,28 @@ test('pans an enlarged canvas with the Hand tool and Space-drag without drawing'
 test('configures onion skin depth and opacity without altering undoable artwork', async ({ page }) => {
   const onion = page.getByRole('button', { name: 'Toggle onion skin' });
   await expect(onion.locator('.onion-icon')).toHaveCount(1);
-  const count = page.locator('#onion-count');
-  const opacity = page.locator('#onion-opacity');
-  await expect(count).toHaveCount(0);
-  await expect(opacity).toHaveCount(0);
+  const settings = page.locator('#onion-settings');
+  await expect(settings).toBeHidden();
 
   await onion.click();
+  await expect(settings).toBeVisible();
+  await page.locator('#onion-count').fill('3');
+  await page.locator('#onion-after').fill('2');
+  await page.locator('#onion-opacity').fill('50');
   await expect.poll(() => page.evaluate(() => ({
     enabled: window.app.isOnion,
-    frames: window.app.onionFrames,
+    before: window.app.onionFrames,
+    after: window.app.onionAfter,
     opacity: window.app.onionOpacity,
-    strokes: window.app.frames[0].strokes.length
-  }))).toEqual({ enabled: true, frames: 1, opacity: 0.3, strokes: 0 });
+    strokes: window.app.frames[0].strokes.length,
+    history: window.app.history.length
+  }))).toEqual({ enabled: true, before: 3, after: 2, opacity: 0.5, strokes: 0, history: 0 });
+  await expect(page.locator('#onion-after-disp')).toHaveText('2');
 
   await onion.click();
-  await expect.poll(() => page.evaluate(() => ({ frames: window.app.onionFrames, opacity: window.app.onionOpacity })))
-    .toEqual({ frames: 1, opacity: 0.3 });
+  await expect(settings).toBeHidden();
+  await expect.poll(() => page.evaluate(() => ({ before: window.app.onionFrames, after: window.app.onionAfter, opacity: window.app.onionOpacity })))
+    .toEqual({ before: 3, after: 2, opacity: 0.5 });
 });
 
 test('supports undoable frame holds and loop/once playback modes', async ({ page }) => {

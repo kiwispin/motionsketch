@@ -408,7 +408,7 @@
         }
 
         .prop-group { display: flex; flex-direction: column; gap: 10px; }
-        #onion-settings { min-height: 65px; }
+        #onion-settings[hidden] { display: none; }
         .prop-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 700; }
         .prop-hint { font-size: 0.7rem; color: var(--text-muted); line-height: 1.35; }
 
@@ -422,7 +422,11 @@
         .slider-icon { display: none; }
         .slider-val { font-size: 0.8rem; color: var(--text-main); font-variant-numeric: tabular-nums; width: 30px; text-align: right; }
         #onion-settings .slider-row { display: grid; grid-template-columns: 70px minmax(0, 1fr) 34px; gap: 6px; width: 100%; }
-        #onion-settings .slider-row > span { white-space: nowrap; font-size: 0.7rem !important; }
+        #onion-settings .slider-row > span { white-space: nowrap; font-size: .8rem; color: var(--text-muted); }
+        .onion-tint { display: flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--text-muted); cursor: pointer; }
+        .onion-tint input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent-blue); }
+        .onion-before { color: #4f86ff; font-weight: 600; }
+        .onion-after { color: #2fb36d; font-weight: 600; }
         #onion-settings input[type="range"] { min-width: 0; width: 100%; }
         #onion-settings .slider-val { width: 34px; min-width: 34px; overflow: visible; text-align: right; }
 
@@ -954,6 +958,9 @@
             .props-panel .layer-switch { width: 190px; }
             .props-panel .slider-row { width: 155px; }
             .props-panel .slider-label { display: none; }
+            .props-panel #onion-settings:not([hidden]) { flex-direction: row; align-items: center; gap: 12px; }
+            .props-panel #onion-settings .slider-row { width: 150px; grid-template-columns: 44px minmax(0, 1fr) 30px; }
+            .props-panel #onion-settings .onion-tint { white-space: nowrap; }
             .props-panel .slider-icon { display: inline-block; }
             .props-panel .color-input-wrap { width: 52px; height: 44px; }
             .props-panel { overflow-x: auto; }
@@ -1290,23 +1297,27 @@
                 <input type="color" id="bg-color-input" aria-label="Frame background colour" value="#ffffff" oninput="app.updateBgColor(this.value)">
             </label>
         </div>
-        <div class="prop-group" id="onion-settings">
-            <!-- Onion Skin controls are intentionally held for a future UI pass; keep this section footprint blank. -->
-            <!-- <div class="prop-label">Onion Skin</div> -->
-            <!-- Onion depth and opacity controls are intentionally held for a future UI pass.
-                 Keep this markup here so the existing handlers and defaults can be restored directly. -->
-            <!--
-            <label class="slider-row" for="onion-count">
-                <span style="font-size:0.75rem; color:var(--text-muted);">Prev. frames</span>
+        <div class="prop-group" id="onion-settings" hidden>
+            <div class="prop-label">Onion skin</div>
+            <label class="slider-row" for="onion-count" title="How many earlier frames show faintly">
+                <span>Before</span>
                 <input type="range" id="onion-count" min="1" max="3" value="1" oninput="app.setOnionFrames(this.value)">
                 <output class="slider-val" id="onion-count-disp">1</output>
             </label>
-            <label class="slider-row" for="onion-opacity">
-                <span style="font-size:0.75rem; color:var(--text-muted);">Opacity</span>
+            <label class="slider-row" for="onion-after" title="How many later frames show faintly">
+                <span>After</span>
+                <input type="range" id="onion-after" min="0" max="3" value="0" oninput="app.setOnionAfter(this.value)">
+                <output class="slider-val" id="onion-after-disp">0</output>
+            </label>
+            <label class="slider-row" for="onion-opacity" title="How strongly the other frames show">
+                <span>Opacity</span>
                 <input type="range" id="onion-opacity" min="5" max="80" value="30" oninput="app.setOnionOpacity(this.value)">
                 <output class="slider-val" id="onion-opacity-disp">30%</output>
             </label>
-            -->
+            <label class="onion-tint" for="onion-tint" title="Show earlier frames in blue and later frames in green">
+                <input type="checkbox" id="onion-tint" checked onchange="app.setOnionTint(this.checked)">
+                <span>Tint: <span class="onion-before">before</span> and <span class="onion-after">after</span></span>
+            </label>
         </div>
 
     </div>

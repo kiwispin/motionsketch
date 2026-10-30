@@ -7,6 +7,11 @@ window.gifshot = gifshot;
 const LONG_GIF_FRAME_THRESHOLD = 150;
 const BACKGROUND_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
+// Undo snapshots store each frame once and reuse unchanged frames, so a long
+// history stays small.
+const HISTORY_LIMIT = 100;
+const ONION_BEFORE_TINT = '#2f6bff';
+const ONION_AFTER_TINT = '#19a35b';
 
         class IDBHelper {
             constructor(dbName, storeName) {
@@ -118,6 +123,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.fps = 12;
                 this.isOnion = false;
                 this.onionFrames = 1;
+                this.onionAfter = 0;
+                this.onionTint = true;
                 this.onionOpacity = 0.3;
 
                 this.canvasWidth = 600;
@@ -1879,7 +1886,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 // Frame selection is transient UI state; any document mutation
                 // invalidates its old indexes before the history snapshot starts.
                 this.clearFrameSelection();
-                if (this.history.length > 20) this.history.shift();
+                if (this.history.length > HISTORY_LIMIT) this.history.shift();
                 this.redoStack = [];
                 this.history.push(this.captureHistoryState());
             }
@@ -3435,13 +3442,18 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 const previewStroke = this.getMotionPreviewStroke(previewTrack);
                 if (previewStroke) this.drawObject(ctx, previewStroke, false, 'ink');
 
-                if (this.isOnion && this.frameIndex > 0 && !this.isPlaying) {
-                    for (let offset = 1; offset <= this.onionFrames; offset++) {
-                        const previousFrame = this.frames[this.frameIndex - offset];
-                        if (!previousFrame) break;
-                        ctx.globalAlpha = this.onionOpacity * (1 - ((offset - 1) * 0.25));
-                        previousFrame.strokes.forEach(s => this.drawObject(ctx, s, true, 'ink'));
-                    }
+                if (this.isOnion && !this.isPlaying) {
+                    // Farthest frames first so the nearest ones sit on top; each step
+                    // away is fainter. Earlier frames are tinted blue, later ones green.
+                    const ghosts = [];
+                    for (let offset = this.onionFrames; offset >= 1; offset--) ghosts.push([-offset, ONION_BEFORE_TINT]);
+                    for (let offset = this.onionAfter; offset >= 1; offset--) ghosts.push([offset, ONION_AFTER_TINT]);
+                    ghosts.forEach(([delta, tint]) => {
+                        const frame = this.frames[this.frameIndex + delta];
+                        if (!frame) return;
+                        const alpha = this.onionOpacity * (1 - ((Math.abs(delta) - 1) * 0.25));
+                        this.drawOnionFrame(ctx, frame, alpha, this.onionTint ? tint : null);
+                    });
                     ctx.globalAlpha = 1.0;
                 }
 
@@ -4323,6 +4335,50 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 document.getElementById('onion-btn').classList.toggle('active', this.isOnion);
                 document.getElementById('onion-btn').setAttribute('aria-pressed', String(this.isOnion));
                 this.syncOnionUI();
+                // The settings sit at the bottom of the panel; bring them into view.
+                if (this.isOnion) document.getElementById('onion-settings')?.scrollIntoView({ block: 'nearest' });
+                this.renderCanvas();
+            }
+
+            drawOnionFrame(ctx, frame, alpha, tint) {
+                if (!tint) {
+                    ctx.globalAlpha = alpha;
+                    frame.strokes.forEach(s => this.drawObject(ctx, s, true, 'ink'));
+                    ctx.globalAlpha = 1.0;
+                    return;
+                }
+                if (!this.onionCanvas) this.onionCanvas = document.createElement('canvas');
+                const layer = this.onionCanvas;
+                if (layer.width !== this.canvasWidth || layer.height !== this.canvasHeight) {
+                    layer.width = this.canvasWidth;
+                    layer.height = this.canvasHeight;
+                }
+                const layerCtx = layer.getContext('2d');
+                layerCtx.save();
+                layerCtx.globalCompositeOperation = 'source-over';
+                layerCtx.globalAlpha = 1;
+                layerCtx.clearRect(0, 0, layer.width, layer.height);
+                frame.strokes.forEach(s => this.drawObject(layerCtx, s, true, 'ink'));
+                // Keep the drawing's shape and soft edges, but in one colour.
+                layerCtx.globalCompositeOperation = 'source-in';
+                layerCtx.fillStyle = tint;
+                layerCtx.fillRect(0, 0, layer.width, layer.height);
+                layerCtx.restore();
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.drawImage(layer, 0, 0);
+                ctx.restore();
+            }
+
+            setOnionAfter(value) {
+                this.onionAfter = Math.max(0, Math.min(3, Number.parseInt(value, 10) || 0));
+                this.syncOnionUI();
+                this.renderCanvas();
+            }
+
+            setOnionTint(enabled) {
+                this.onionTint = Boolean(enabled);
+                this.syncOnionUI();
                 this.renderCanvas();
             }
 
@@ -4340,16 +4396,22 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 
             syncOnionUI() {
                 const count = document.getElementById('onion-count');
+                const after = document.getElementById('onion-after');
                 const opacity = document.getElementById('onion-opacity');
+                const tint = document.getElementById('onion-tint');
                 const countDisplay = document.getElementById('onion-count-disp');
+                const afterDisplay = document.getElementById('onion-after-disp');
                 const opacityDisplay = document.getElementById('onion-opacity-disp');
                 if (count) count.value = this.onionFrames;
+                if (after) after.value = this.onionAfter;
                 if (opacity) opacity.value = Math.round(this.onionOpacity * 100);
+                if (tint) tint.checked = this.onionTint;
                 if (countDisplay) countDisplay.textContent = this.onionFrames;
+                if (afterDisplay) afterDisplay.textContent = this.onionAfter;
                 if (opacityDisplay) opacityDisplay.textContent = `${Math.round(this.onionOpacity * 100)}%`;
-                [count, opacity].forEach((control) => {
-                    if (control) control.disabled = !this.isOnion;
-                });
+                // The settings show while onion skin is on.
+                const settings = document.getElementById('onion-settings');
+                if (settings) settings.hidden = !this.isOnion;
             }
 
             rewind() {
