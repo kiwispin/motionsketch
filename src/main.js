@@ -1068,6 +1068,14 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 return true;
             }
 
+            // Brushes and shapes keep their line thickness in proportion when they are
+            // resized (sx/sy). Shapes used to keep full thickness, so a resized group
+            // mixing both changed its look: outlines stayed thick and lines that
+            // students had covered with brush strokes showed through.
+            scalesLineWidth(stroke) {
+                return ['brush', 'rect', 'circle', 'line'].includes(stroke?.type);
+            }
+
             getBrushScale(stroke) {
                 const readScale = (axis) => {
                     const value = Number(stroke?.[axis]);
@@ -2321,7 +2329,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                                                 pts[k].y = newY + relY * scaleY;
                                             }
                                         }
-                                        if (item.stroke.type === 'brush') {
+                                        if (this.scalesLineWidth(item.stroke)) {
                                             const originalScale = this.getBrushScale(orig);
                                             item.stroke.sx = originalScale.x * scaleX;
                                             item.stroke.sy = originalScale.y * scaleY;
@@ -2399,7 +2407,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                                         pts[i].y = newY + (normY * newH);
                                     }
                                 }
-                                if (stroke.type === 'brush') {
+                                if (this.scalesLineWidth(stroke)) {
                                     const originalScaleX = Number.isFinite(this.dragOriginalScaleX) ? this.dragOriginalScaleX : this.getBrushScale(stroke).x;
                                     const originalScaleY = Number.isFinite(this.dragOriginalScaleY) ? this.dragOriginalScaleY : this.getBrushScale(stroke).y;
                                     stroke.sx = originalScaleX * (newW / bounds.w);
@@ -2671,7 +2679,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 const pointScale = stroke.points.length === 1
                     ? Math.max(Math.abs(stroke.sx || 1), Math.abs(stroke.sy || 1))
                     : 1;
-                const brushScale = stroke.type === 'brush' ? this.getBrushScale(stroke) : { x: 1, y: 1 };
+                const brushScale = this.scalesLineWidth(stroke) ? this.getBrushScale(stroke) : { x: 1, y: 1 };
                 const brushRadius = Math.max(
                     1,
                     this.getSinglePointDiameter(stroke) * Math.max(pointScale, brushScale.x, brushScale.y) / 2
@@ -2871,7 +2879,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 
             strokeHit(stroke, pos) {
                 if (!stroke.points || stroke.points.length === 0) return false;
-                const scale = stroke.type === 'brush' ? this.getBrushScale(stroke) : { x: 1, y: 1 };
+                const scale = this.scalesLineWidth(stroke) ? this.getBrushScale(stroke) : { x: 1, y: 1 };
                 const hitThreshX = Math.max(10, (stroke.size || 0) * scale.x);
                 const hitThreshY = Math.max(10, (stroke.size || 0) * scale.y);
                 const hitThresh = Math.max(hitThreshX, hitThreshY);
@@ -3268,7 +3276,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 } else {
                     if (stroke.points.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
                     const pointBounds = this.getPointBounds(stroke.points);
-                    const scale = stroke.type === 'brush' ? this.getBrushScale(stroke) : { x: 1, y: 1 };
+                    const scale = this.scalesLineWidth(stroke) ? this.getBrushScale(stroke) : { x: 1, y: 1 };
                     const padX = (stroke.size || 0) * scale.x / 2;
                     const padY = (stroke.size || 0) * scale.y / 2;
                     return {
@@ -3858,8 +3866,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         return;
                     }
 
-                    const brushScale = stroke.type === 'brush' ? this.getBrushScale(stroke) : { x: 1, y: 1 };
-                    const useBrushScale = stroke.type === 'brush' && (brushScale.x !== 1 || brushScale.y !== 1);
+                    const brushScale = this.scalesLineWidth(stroke) ? this.getBrushScale(stroke) : { x: 1, y: 1 };
+                    const useBrushScale = this.scalesLineWidth(stroke) && (brushScale.x !== 1 || brushScale.y !== 1);
                     const pointBounds = useBrushScale ? this.getPointBounds(stroke.points) : null;
                     const brushCenter = pointBounds
                         ? { x: pointBounds.x + pointBounds.w / 2, y: pointBounds.y + pointBounds.h / 2 }
@@ -5186,8 +5194,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                         const d = points.map((point, index) => `${index === 0 ? 'M' : point.m ? 'Z M' : 'L'}${point.x} ${point.y}`).join(' ') + ' Z';
                         return withHoles(object, `<path d="${d}" fill="${object.fillColor || object.color}" fill-opacity="${opacity}" fill-rule="evenodd" stroke="none"/>`);
                     }
-                    const brushScale = object.type === 'brush' ? this.getBrushScale(object) : { x: 1, y: 1 };
-                    const useBrushScale = object.type === 'brush' && (brushScale.x !== 1 || brushScale.y !== 1);
+                    const brushScale = this.scalesLineWidth(object) ? this.getBrushScale(object) : { x: 1, y: 1 };
+                    const useBrushScale = this.scalesLineWidth(object) && (brushScale.x !== 1 || brushScale.y !== 1);
                     const pointBounds = useBrushScale ? this.getPointBounds(points) : null;
                     const brushCenter = pointBounds
                         ? { x: pointBounds.x + pointBounds.w / 2, y: pointBounds.y + pointBounds.h / 2 }

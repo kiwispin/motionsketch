@@ -242,3 +242,56 @@ test('retains a top-handle resize through undo, redo, duplicate, and reload', as
     equal: JSON.stringify(window.app.frames[0].strokes[0]) === JSON.stringify(window.app.frames[1].strokes[0])
   }))).toEqual({ frameCount: 2, strokeCounts: [1, 1], scales: [0.5, 0.5], equal: true });
 });
+
+test('a resized group keeps shape outlines in proportion with its brush strokes', async ({ page }) => {
+  // Like a student's ball: a circle shape whose outline edge is partly covered
+  // by a white brush stroke. Shapes used to keep full line thickness on resize,
+  // so the covered black edge showed through as extra lines.
+  const result = await page.evaluate(() => {
+    const app = window.app;
+    const circle = Array.from({ length: 33 }, (_, i) => {
+      const angle = (i / 32) * Math.PI * 2;
+      return { x: 300 + Math.cos(angle) * 120, y: 300 + Math.sin(angle) * 120, p: 0.5 };
+    });
+    app.frames[0].strokes = [{
+      type: 'group',
+      angle: 0,
+      items: [
+        { type: 'circle', brushType: 'brush', color: '#000000', fillColor: '#ff9500', size: 16, opacity: 1, sx: 1, sy: 1, angle: 0, points: circle },
+        { type: 'brush', brushType: 'brush', color: '#ffffff', size: 22, opacity: 1, sx: 1, sy: 1, angle: 0, points: [{ x: 230, y: 175, p: 0.5 }, { x: 300, y: 172, p: 0.5 }, { x: 370, y: 175, p: 0.5 }] }
+      ]
+    }];
+    const W = app.canvasWidth, H = app.canvasHeight;
+    const render = () => {
+      const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+      app.renderFrameToContext(canvas.getContext('2d'), app.frames[0]);
+      return canvas;
+    };
+    const original = render();
+    app.setTool('select');
+    app.onDown({ x: 300, y: 300 }, 0.5, false);
+    app.onUp();
+    const bounds = { ...app.selectedObject.bounds };
+    app.onDown({ x: bounds.x + bounds.w, y: bounds.y + bounds.h }, 0.5, false);
+    app.onMove({ x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 }, 0.5);
+    app.onUp();
+    app.selectedObject = null;
+    const resized = render().getContext('2d').getImageData(0, 0, W, H).data;
+    const ideal = document.createElement('canvas'); ideal.width = W; ideal.height = H;
+    const context = ideal.getContext('2d');
+    context.fillStyle = '#ffffff'; context.fillRect(0, 0, W, H);
+    context.drawImage(original, bounds.x, bounds.y, bounds.w, bounds.h, bounds.x, bounds.y, bounds.w / 2, bounds.h / 2);
+    const expected = context.getImageData(0, 0, W, H).data;
+    let darkExtra = 0;
+    for (let i = 0; i < resized.length; i += 4) {
+      const actual = resized[i] + resized[i + 1] + resized[i + 2];
+      const wanted = expected[i] + expected[i + 1] + expected[i + 2];
+      if (actual < 200 && wanted > 600) darkExtra++;
+    }
+    return { circleScale: app.frames[0].strokes[0].items[0].sx, brushScale: app.frames[0].strokes[0].items[1].sx, darkExtra };
+  });
+  expect(result.circleScale).toBeCloseTo(0.5, 2);
+  expect(result.brushScale).toBeCloseTo(0.5, 2);
+  // Before the fix this left hundreds of black pixels where the ideal is white.
+  expect(result.darkExtra).toBe(0);
+});
