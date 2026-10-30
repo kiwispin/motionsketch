@@ -77,3 +77,21 @@ test('style changes to selected artwork refresh its thumbnail once they settle',
   expect(after[2]).not.toBe(before[2]);
   expect(after.filter((thumb, index) => index !== 2)).toEqual(before.filter((thumb, index) => index !== 2));
 });
+
+test('A and N add a blank frame after the current one; Ctrl+A still selects all', async ({ page }) => {
+  await page.locator('#rendering-canvas').focus();
+  await page.keyboard.press('a');
+  await page.keyboard.press('n');
+  const frames = await page.evaluate(() => ({
+    count: window.app.frames.length,
+    current: window.app.frameIndex,
+    blank: window.app.frames.slice(3, 5).map((frame) => frame.strokes.length)
+  }));
+  // Five frames to start, current frame 3 (index 2): two blank frames follow it.
+  expect(frames).toEqual({ count: 7, current: 4, blank: [0, 0] });
+
+  await page.evaluate(() => window.app.selectFrame(0));
+  await page.keyboard.press('ControlOrMeta+a');
+  expect(await page.evaluate(() => ({ count: window.app.frames.length, selected: Boolean(window.app.selectedObject) }))).toEqual({ count: 7, selected: true });
+  await expect(page.locator('#timeline-add')).toHaveAttribute('title', 'Add frame (A)');
+});

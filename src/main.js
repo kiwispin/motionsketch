@@ -514,7 +514,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     }
 
                     if (key === 'd') this.duplicateFrame();
-                    if (key === 'n') this.addFrame();
+                    // A for Add (easier to remember); N kept for anyone already using it.
+                    if (key === 'a' || key === 'n') this.addFrame();
                     if (key === '0') { e.preventDefault(); this.fitCanvas(); }
                     if (key === '+' || key === '=') { e.preventDefault(); this.adjustZoom(0.1); }
                     if (key === '-') { e.preventDefault(); this.adjustZoom(-0.1); }
@@ -4911,7 +4912,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     addButton.type = 'button';
                     addButton.className = 'add-frame-btn';
                     addButton.setAttribute('aria-label', 'Add frame');
-                    addButton.title = 'Add frame';
+                    addButton.title = 'Add frame (A)';
                     addButton.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i>';
                     addButton.onclick = () => this.addFrame();
                     this.framesList.appendChild(addButton);
