@@ -338,14 +338,15 @@ test('supports undoable frame holds and loop/once playback modes', async ({ page
   await page.getByRole('button', { name: 'Redo' }).click();
   await expect.poll(() => page.evaluate(() => window.app.frames[window.app.frameIndex].hold)).toBe(4);
 
+  // The button names what Play will do.
   const loopMode = page.locator('#loop-mode-btn');
   await expect(loopMode).toHaveText('Loop');
   await loopMode.click();
-  await expect(loopMode).toHaveText('Loop');
-  await expect(loopMode).toHaveAttribute('aria-pressed', 'false');
+  await expect(loopMode).toHaveText('Play once');
+  expect(await page.evaluate(() => window.app.loopMode)).toBe('once');
   await loopMode.click();
   await expect(loopMode).toHaveText('Loop');
-  await expect(loopMode).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.evaluate(() => window.app.loopMode)).toBe('loop');
 });
 
 test('opens brush and shape flyouts without clipping the toolbar', async ({ page }) => {

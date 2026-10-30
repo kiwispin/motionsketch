@@ -1,4 +1,6 @@
 import '@fortawesome/fontawesome-free/css/all.css';
+// The new look (stage 1). Remove this line and src/look.css for the classic look.
+import './look.css';
 import gifshot from 'gifshot';
 import JSZip from 'jszip';
 
@@ -12,6 +14,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 const HISTORY_LIMIT = 100;
 const ONION_BEFORE_TINT = '#2f6bff';
 const ONION_AFTER_TINT = '#19a35b';
+const LOOP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>';
+const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h13"/><path d="M11 7l5 5-5 5"/><path d="M20 5v14"/></svg>';
 
         class IDBHelper {
             constructor(dbName, storeName) {
@@ -172,10 +176,30 @@ const ONION_AFTER_TINT = '#19a35b';
                 this.updateBrushPreview();
                 this.updateInspector();
                 this.syncOnionUI();
+                this.watchPanelEdges();
                 this.registerServiceWorker();
 
                 const picker = document.getElementById('html-color-picker');
                 if (picker) picker.value = this.brushColor;
+            }
+
+            // Marks the settings panel when it can scroll further, so its edges
+            // can fade instead of cutting a row in half.
+            watchPanelEdges() {
+                const panel = document.querySelector('.props-panel');
+                if (!panel) return;
+                const update = () => {
+                    const more = panel.scrollHeight - panel.clientHeight;
+                    panel.classList.toggle('more-above', more > 1 && panel.scrollTop > 1);
+                    panel.classList.toggle('more-below', more > 1 && panel.scrollTop < more - 1);
+                };
+                panel.addEventListener('scroll', update, { passive: true });
+                if (window.ResizeObserver) {
+                    const observer = new ResizeObserver(update);
+                    observer.observe(panel);
+                    [...panel.children].forEach(child => observer.observe(child));
+                }
+                update();
             }
 
             loadTheme() {
@@ -5181,10 +5205,11 @@ const ONION_AFTER_TINT = '#19a35b';
                 if (holdControl) holdControl.value = hold;
                 if (holdDisplay) holdDisplay.textContent = `${hold}f`;
                 if (loopButton) {
+                    // The button names what Play will do; clicking switches to the other.
                     const isLoop = this.loopMode === 'loop';
-                    loopButton.textContent = 'Loop';
-                    loopButton.setAttribute('aria-label', `Playback mode: ${isLoop ? 'loop' : 'once'}`);
-                    loopButton.setAttribute('aria-pressed', String(isLoop));
+                    loopButton.innerHTML = isLoop ? `${LOOP_ICON}<span>Loop</span>` : `${PLAY_ONCE_ICON}<span>Play once</span>`;
+                    loopButton.classList.toggle('is-loop', isLoop);
+                    loopButton.title = isLoop ? 'Play keeps repeating. Click to play once.' : 'Play stops at the last frame. Click to loop.';
                 }
             }
 
