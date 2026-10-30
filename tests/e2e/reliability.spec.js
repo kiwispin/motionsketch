@@ -433,11 +433,11 @@ test('bucket-fills the canvas with a real shape that the eraser can carve into',
     window.app.onUp();
   });
 
-  await expect.poll(() => page.evaluate(() => window.app.frames[0].strokes[0])).toMatchObject({
-    type: 'rect',
-    fillColor: '#ff0000',
-    points: [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 600 }, { x: 0, y: 600 }, { x: 0, y: 0 }]
-  });
+  // An empty canvas encloses nothing, so the fill covers the whole canvas.
+  await expect.poll(() => page.evaluate(() => {
+    const fill = window.app.frames[0].strokes[0];
+    return { type: fill.type, fillColor: fill.fillColor, bounds: window.app.getPointBounds(fill.points), points: fill.points.length };
+  })).toEqual({ type: 'fill', fillColor: '#ff0000', bounds: { x: 0, y: 0, w: 600, h: 600 }, points: 4 });
 
   await page.getByRole('button', { name: 'Eraser tool (E)' }).click();
   await expect.poll(() => page.evaluate(() => window.app.tool)).toBe('eraser');
@@ -448,7 +448,7 @@ test('bucket-fills the canvas with a real shape that the eraser can carve into',
   });
 
   await expect.poll(() => page.evaluate(() => {
-    const fill = window.app.frames[0].strokes.find((s) => s.type === 'rect' && s.fillColor);
+    const fill = window.app.frames[0].strokes.find((s) => s.type === 'fill');
     return { exists: Boolean(fill), holes: fill ? fill.holes.length : 0, sweepPoints: fill?.holes[0]?.path?.length };
   })).toEqual({ exists: true, holes: 1, sweepPoints: 2 });
 });

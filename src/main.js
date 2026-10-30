@@ -2007,37 +2007,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 }
 
                 if (this.tool === 'bucket') {
-                    const found = this.hitTest(pos);
-                    this.saveState();
-                    if (found?.stroke?.motionTrackId) this.bakeMotionTracksByIds([found.stroke.motionTrackId]);
-                    if (found) {
-                        found.stroke.fillColor = this.brushColor;
-                        if (found.stroke.type === 'text') found.stroke.color = this.brushColor;
-                        this.renderCanvas();
-                    } else {
-                        const list = this.getActiveStrokeList();
-                        list.unshift({
-                            type: 'rect',
-                            brushType: 'brush',
-                            color: this.brushColor,
-                            size: 2,
-                            opacity: 1,
-                            points: [
-                                { x: 0, y: 0, p: 0.5 },
-                                { x: this.canvasWidth, y: 0, p: 0.5 },
-                                { x: this.canvasWidth, y: this.canvasHeight, p: 0.5 },
-                                { x: 0, y: this.canvasHeight, p: 0.5 },
-                                { x: 0, y: 0, p: 0.5 }
-                            ],
-                            fillColor: this.brushColor,
-                            holes: [],
-                            sx: 1, sy: 1,
-                            angle: 0
-                        });
-                        this.updateThumbnails([this.frameIndex]);
-                        this.renderCanvas();
-                    }
-                    this.saveStorage();
+                    this.fillAt(pos);
                     return;
                 }
 
@@ -2920,6 +2890,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     };
                 }
 
+                if (stroke.type === 'fill') return this.containsPoint(stroke.points, checkPos);
+
                 if (stroke.points.length === 1) {
                     const p = stroke.points[0];
                     const dist = Math.hypot(checkPos.x - p.x, checkPos.y - p.y);
@@ -2936,21 +2908,244 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     if (this.distToSegment(checkPos, stroke.points[i], stroke.points[i + 1]) < hitThresh) return true;
                 }
 
-                if (this.tool === 'bucket' || stroke.fillColor) {
+                if (stroke.fillColor || (this.tool === 'bucket' && (stroke.type === 'rect' || stroke.type === 'circle'))) {
                     if (this.containsPoint(stroke.points, checkPos)) return true;
                 }
                 return false;
             }
 
+            // Even-odd test. Bucket fills hold several outlines (the area and its
+            // holes); each outline starts at a point marked m.
             containsPoint(points, pos) {
                 let inside = false;
-                for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-                    const xi = points[i].x, yi = points[i].y;
-                    const xj = points[j].x, yj = points[j].y;
-                    const intersect = ((yi > pos.y) !== (yj > pos.y)) && (pos.x < (xj - xi) * (pos.y - yi) / (yj - yi) + xi);
-                    if (intersect) inside = !inside;
+                let start = 0;
+                for (let end = 1; end <= points.length; end++) {
+                    if (end < points.length && !points[end].m) continue;
+                    for (let i = start, j = end - 1; i < end; j = i++) {
+                        const xi = points[i].x, yi = points[i].y;
+                        const xj = points[j].x, yj = points[j].y;
+                        const intersect = ((yi > pos.y) !== (yj > pos.y)) && (pos.x < (xj - xi) * (pos.y - yi) / (yj - yi) + xi);
+                        if (intersect) inside = !inside;
+                    }
+                    start = end;
                 }
                 return inside;
+            }
+
+            // Paint bucket. Recolours text, closed shapes and earlier fills; a click
+            // on a line recolours the line; anywhere else fills the area that the
+            // visible artwork encloses, like a paint app.
+            fillAt(pos) {
+                const found = this.hitTest(pos);
+                const stroke = found?.stroke;
+                const commit = () => {
+                    this.renderCanvas();
+                    this.updateEditedThumbnails();
+                    this.saveStorage();
+                };
+                if (stroke && stroke.type !== 'group' && (stroke.type === 'text' || stroke.type === 'fill' || stroke.type === 'rect' || stroke.type === 'circle' || stroke.fillColor)) {
+                    this.saveState();
+                    if (stroke.motionTrackId) this.bakeMotionTracksByIds([stroke.motionTrackId]);
+                    stroke.fillColor = this.brushColor;
+                    if (stroke.type === 'text' || stroke.type === 'fill') stroke.color = this.brushColor;
+                    commit();
+                    return;
+                }
+
+                const region = this.findFillRegion(pos);
+                if (!region) return;
+                if (region.onLine) {
+                    if (!stroke || stroke.type === 'group') {
+                        this.showExportNotice('Click inside an area to fill it', true);
+                        return;
+                    }
+                    this.saveState();
+                    if (stroke.motionTrackId) this.bakeMotionTracksByIds([stroke.motionTrackId]);
+                    stroke.color = this.brushColor;
+                    commit();
+                    return;
+                }
+
+                const outlines = this.traceRegionOutlines(region.mask, this.canvasWidth, this.canvasHeight);
+                if (!outlines.length) return;
+                const points = [];
+                outlines.forEach((outline) => outline.forEach((point, index) => {
+                    points.push(index === 0 ? { x: point.x, y: point.y, p: 0.5, m: 1 } : { x: point.x, y: point.y, p: 0.5 });
+                }));
+                this.saveState();
+                // Fills sit at the bottom of the active layer, beneath its lines.
+                this.getActiveStrokeList().unshift({
+                    type: 'fill',
+                    brushType: 'brush',
+                    color: this.brushColor,
+                    fillColor: this.brushColor,
+                    size: 0,
+                    opacity: this.opacity,
+                    points,
+                    holes: [],
+                    sx: 1, sy: 1,
+                    angle: 0
+                });
+                commit();
+            }
+
+            // Pixel mask of the area to fill: flood from the click across everything
+            // not covered by visible artwork on either layer, bridging gaps of a few
+            // pixels, then grown slightly so the fill tucks under its outlines.
+            findFillRegion(pos) {
+                const W = this.canvasWidth, H = this.canvasHeight;
+                const sx = Math.floor(pos.x), sy = Math.floor(pos.y);
+                if (sx < 0 || sy < 0 || sx >= W || sy >= H) return null;
+                const frame = this.frames[this.frameIndex];
+                const paper = this.getPaperStrokes(frame);
+                const sampleArtwork = (layers, minAlpha = 32) => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = W; canvas.height = H;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    layers.forEach(([list, layerName]) => list.forEach((item) => this.drawObject(ctx, item, false, layerName)));
+                    const data = ctx.getImageData(0, 0, W, H).data;
+                    const covered = new Uint8Array(W * H);
+                    for (let i = 0; i < covered.length; i++) covered[i] = data[i * 4 + 3] > minAlpha ? 1 : 0;
+                    return covered;
+                };
+
+                const artwork = sampleArtwork([[paper, 'paper'], [frame.strokes, 'ink']]);
+                if (artwork[sy * W + sx]) return { onLine: true };
+                const gap = 2;
+                const walls = this.dilateMask(artwork, W, H, gap);
+                let seed = sy * W + sx;
+                if (walls[seed]) {
+                    // Clicked in the thin band beside a line; start just beyond it.
+                    seed = -1;
+                    for (let r = 1; r <= gap + 1 && seed < 0; r++) {
+                        for (let dy = -r; dy <= r && seed < 0; dy++) {
+                            for (let dx = -r; dx <= r; dx++) {
+                                const x = sx + dx, y = sy + dy;
+                                if (x >= 0 && y >= 0 && x < W && y < H && !walls[y * W + x]) { seed = y * W + x; break; }
+                            }
+                        }
+                    }
+                    if (seed < 0) return { onLine: true };
+                }
+
+                const region = new Uint8Array(W * H);
+                const stack = new Int32Array(W * H);
+                let top = 0;
+                stack[top++] = seed;
+                region[seed] = 1;
+                while (top) {
+                    const i = stack[--top];
+                    const x = i % W;
+                    if (x > 0 && !region[i - 1] && !walls[i - 1]) { region[i - 1] = 1; stack[top++] = i - 1; }
+                    if (x < W - 1 && !region[i + 1] && !walls[i + 1]) { region[i + 1] = 1; stack[top++] = i + 1; }
+                    if (i >= W && !region[i - W] && !walls[i - W]) { region[i - W] = 1; stack[top++] = i - W; }
+                    if (i < W * (H - 1) && !region[i + W] && !walls[i + W]) { region[i + W] = 1; stack[top++] = i + W; }
+                }
+
+                const mask = this.dilateMask(region, W, H, gap + 1);
+                // On the Foreground layer the fill is drawn above Background lines,
+                // so it must not grow into their solid core. It may cover their soft
+                // antialiased edge, which would otherwise show as a pale rim.
+                if (this.activeLayer === 'ink' && paper.length) {
+                    const background = sampleArtwork([[paper, 'paper']], 160);
+                    for (let i = 0; i < mask.length; i++) if (background[i] && !region[i]) mask[i] = 0;
+                }
+                return { mask };
+            }
+
+            dilateMask(mask, W, H, radius) {
+                const rows = new Uint8Array(W * H);
+                for (let y = 0; y < H; y++) {
+                    const row = y * W;
+                    for (let x = 0; x < W; x++) {
+                        if (!mask[row + x]) continue;
+                        const to = Math.min(W - 1, x + radius);
+                        for (let k = Math.max(0, x - radius); k <= to; k++) rows[row + k] = 1;
+                    }
+                }
+                const out = new Uint8Array(W * H);
+                for (let y = 0; y < H; y++) {
+                    for (let x = 0; x < W; x++) {
+                        if (!rows[y * W + x]) continue;
+                        const to = Math.min(H - 1, y + radius);
+                        for (let k = Math.max(0, y - radius); k <= to; k++) out[k * W + x] = 1;
+                    }
+                }
+                return out;
+            }
+
+            // Outlines of a pixel mask as closed polygons (outer edges and holes),
+            // simplified from pixel steps to smooth edges.
+            traceRegionOutlines(mask, W, H) {
+                const stride = W + 1;
+                const next = new Int32Array(stride * (H + 1)).fill(-1);
+                const spare = new Int32Array(stride * (H + 1)).fill(-1);
+                const add = (from, to) => { if (next[from] === -1) next[from] = to; else spare[from] = to; };
+                for (let y = 0; y < H; y++) {
+                    for (let x = 0; x < W; x++) {
+                        const i = y * W + x;
+                        if (!mask[i]) continue;
+                        const v = y * stride + x;
+                        if (y === 0 || !mask[i - W]) add(v, v + 1);
+                        if (x === W - 1 || !mask[i + 1]) add(v + 1, v + 1 + stride);
+                        if (y === H - 1 || !mask[i + W]) add(v + 1 + stride, v + stride);
+                        if (x === 0 || !mask[i - 1]) add(v + stride, v);
+                    }
+                }
+                const take = (v) => {
+                    let to = next[v];
+                    if (to !== -1) { next[v] = spare[v]; spare[v] = -1; return to; }
+                    return -1;
+                };
+                const outlines = [];
+                for (let start = 0; start < next.length; start++) {
+                    while (next[start] !== -1) {
+                        const loop = [];
+                        let v = start;
+                        do {
+                            loop.push({ x: v % stride, y: Math.floor(v / stride) });
+                            v = take(v);
+                        } while (v !== start && v !== -1);
+                        // Keep only corners, then smooth the pixel steps.
+                        const corners = loop.filter((point, index) => {
+                            const prev = loop[(index - 1 + loop.length) % loop.length];
+                            const after = loop[(index + 1) % loop.length];
+                            return (point.x - prev.x) * (after.y - point.y) !== (point.y - prev.y) * (after.x - point.x);
+                        });
+                        const outline = this.simplifyClosedPath(corners, 0.75);
+                        let area = 0;
+                        for (let i = 0, j = outline.length - 1; i < outline.length; j = i++) area += (outline[j].x + outline[i].x) * (outline[j].y - outline[i].y);
+                        if (outline.length >= 3 && Math.abs(area) / 2 >= 4) outlines.push(outline);
+                    }
+                }
+                return outlines;
+            }
+
+            simplifyClosedPath(points, tolerance) {
+                if (points.length <= 4) return points;
+                let far = 0, farDistance = -1;
+                points.forEach((point, index) => {
+                    const distance = Math.hypot(point.x - points[0].x, point.y - points[0].y);
+                    if (distance > farDistance) { farDistance = distance; far = index; }
+                });
+                const simplify = (run) => {
+                    const keep = new Uint8Array(run.length);
+                    keep[0] = keep[run.length - 1] = 1;
+                    const ranges = [[0, run.length - 1]];
+                    while (ranges.length) {
+                        const [a, b] = ranges.pop();
+                        let worst = -1, index = -1;
+                        for (let i = a + 1; i < b; i++) {
+                            const distance = this.distToSegment(run[i], run[a], run[b]);
+                            if (distance > worst) { worst = distance; index = i; }
+                        }
+                        if (worst > tolerance) { keep[index] = 1; ranges.push([a, index], [index, b]); }
+                    }
+                    return run.filter((_, i) => keep[i]);
+                };
+                const first = simplify(points.slice(0, far + 1));
+                const second = simplify([...points.slice(far), points[0]]);
+                return [...first.slice(0, -1), ...second.slice(0, -1)];
             }
 
             hitTestHandles(pos) {
@@ -3625,6 +3820,21 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 
                 ctx.fillStyle = rgba;
                 ctx.strokeStyle = rgba;
+
+                if (stroke.type === 'fill') {
+                    ctx.beginPath();
+                    stroke.points.forEach((point, index) => {
+                        if (index === 0 || point.m) {
+                            if (index) ctx.closePath();
+                            ctx.moveTo(point.x, point.y);
+                        } else {
+                            ctx.lineTo(point.x, point.y);
+                        }
+                    });
+                    ctx.closePath();
+                    ctx.fill('evenodd');
+                    return;
+                }
 
                 const type = stroke.brushType || 'brush';
 
@@ -4972,6 +5182,10 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                     const style = `stroke="${object.color || '#000'}" stroke-opacity="${opacity}" fill="${object.fillColor || 'none'}" fill-opacity="${opacity}" stroke-width="${object.size || 1}" stroke-linecap="round" stroke-linejoin="round"`;
                     if (object.type === 'text') return withHoles(object, `<text x="${object.x}" y="${object.y}" fill="${object.color}" fill-opacity="${opacity}" font-family="sans-serif" font-size="${object.size}">${escape(object.text)}</text>`);
                     if (!points.length) return '';
+                    if (object.type === 'fill') {
+                        const d = points.map((point, index) => `${index === 0 ? 'M' : point.m ? 'Z M' : 'L'}${point.x} ${point.y}`).join(' ') + ' Z';
+                        return withHoles(object, `<path d="${d}" fill="${object.fillColor || object.color}" fill-opacity="${opacity}" fill-rule="evenodd" stroke="none"/>`);
+                    }
                     const brushScale = object.type === 'brush' ? this.getBrushScale(object) : { x: 1, y: 1 };
                     const useBrushScale = object.type === 'brush' && (brushScale.x !== 1 || brushScale.y !== 1);
                     const pointBounds = useBrushScale ? this.getPointBounds(points) : null;
