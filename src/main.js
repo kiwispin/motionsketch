@@ -3867,25 +3867,31 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 menu.hidden = !open;
                 toggle.setAttribute('aria-expanded', String(open));
                 if (open && toggle.closest('.header-drawing-aids-wrapper')) {
-                    const rect = toggle.getBoundingClientRect();
-                    const viewportWidth = Math.max(1, window.innerWidth);
-                    const menuWidth = Math.min(menu.offsetWidth || 214, Math.max(1, viewportWidth - 16));
-                    const menuHeight = Math.min(menu.offsetHeight || 220, Math.max(1, window.innerHeight - 16));
-                    const left = Math.min(
-                        Math.max(8, rect.right - menuWidth),
-                        Math.max(8, viewportWidth - menuWidth - 8)
-                    );
-                    const below = rect.bottom + 8;
-                    const top = below + menuHeight <= window.innerHeight - 8
-                        ? below
-                        : Math.max(8, rect.top - menuHeight - 8);
-                    menu.style.left = `${Math.round(left)}px`;
-                    menu.style.top = `${Math.round(top)}px`;
+                    this.positionHeaderMenu(menu, toggle, 214, 220);
                 } else if (!open) {
                     menu.style.removeProperty('left');
                     menu.style.removeProperty('top');
                 }
                 if (returnFocus) toggle.focus();
+            }
+
+            // Header menus are fixed-position and placed under their button, since
+            // the header row scrolls on narrow screens and would clip them.
+            positionHeaderMenu(menu, toggle, fallbackWidth, fallbackHeight) {
+                const rect = toggle.getBoundingClientRect();
+                const viewportWidth = Math.max(1, window.innerWidth);
+                const menuWidth = Math.min(menu.offsetWidth || fallbackWidth, Math.max(1, viewportWidth - 16));
+                const menuHeight = Math.min(menu.offsetHeight || fallbackHeight, Math.max(1, window.innerHeight - 16));
+                const left = Math.min(
+                    Math.max(8, rect.right - menuWidth),
+                    Math.max(8, viewportWidth - menuWidth - 8)
+                );
+                const below = rect.bottom + 8;
+                const top = below + menuHeight <= window.innerHeight - 8
+                    ? below
+                    : Math.max(8, rect.top - menuHeight - 8);
+                menu.style.left = `${Math.round(left)}px`;
+                menu.style.top = `${Math.round(top)}px`;
             }
 
             toggleDrawingAids() {
@@ -5347,6 +5353,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 if (!menu || !toggle) return;
                 menu.hidden = !open;
                 toggle.setAttribute('aria-expanded', String(open));
+                if (open) this.positionHeaderMenu(menu, toggle, 212, 260);
                 if (returnFocus) toggle.focus();
             }
 
