@@ -415,6 +415,12 @@
         .layer-switch { display: flex; background: var(--input-bg); border-radius: 8px; padding: 2px; }
         .layer-option { flex: 1; border: 0; background: transparent; font: inherit; text-align: center; padding: 6px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; color: var(--text-muted); font-weight: 500; transition: all 0.2s; }
         .layer-option.active { background: var(--accent-blue); color: white; }
+        .layer-option.unavailable { opacity: .5; cursor: not-allowed; }
+        .layer-tools { display: flex; gap: 6px; }
+        .layer-tool { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--border-panel); border-radius: 8px; background: transparent; color: var(--text-muted); font: inherit; font-size: .8rem; cursor: pointer; }
+        .layer-tool:hover { background: var(--btn-hover); color: var(--text-main); }
+        .layer-tool.active { background: var(--accent-blue); border-color: var(--accent-blue); color: white; }
+        .layer-tool:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
 
         .slider-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         .slider-label { flex: 0 0 52px; font-size: .8rem; color: var(--text-muted); }
@@ -586,11 +592,13 @@
         .timeline-action.primary { background: rgba(10, 132, 255, .18); }
 
         .frames-track {
+            position: relative;
             flex: 1;
             display: flex;
             align-items: center;
             overflow-x: auto;
-            padding: 10px 20px;
+            overflow-y: hidden;
+            padding: 24px 20px 6px;
             gap: 12px;
             scrollbar-width: auto;
             scrollbar-color: var(--text-muted) transparent;
@@ -617,6 +625,18 @@
         }
 
         .frame-card:active { cursor: grabbing; }
+
+        /* Scrub bar above the thumbnails: drag along it to flip through the
+           frames. It scrolls with the strip, so each tick sits over its frame. */
+        .frame-scrub { position: absolute; top: 0; left: 0; height: 22px; cursor: ew-resize; touch-action: none; }
+        .frame-scrub::before { content: ""; position: absolute; left: 20px; right: 20px; top: 10px; height: 2px; border-radius: 1px; background: var(--border-panel); }
+        .frame-scrub:hover::before, .frame-scrub.scrubbing::before { background: var(--text-muted); }
+        .frame-scrub:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; border-radius: 6px; }
+        .frame-scrub-tick { position: absolute; top: 7px; width: 2px; height: 8px; margin-left: -1px; border-radius: 1px; background: var(--text-muted); opacity: .45; pointer-events: none; }
+        .frame-playhead { position: absolute; top: 2px; min-width: 26px; height: 18px; padding: 0 5px; transform: translateX(-50%); border-radius: 9px; background: var(--accent-blue); color: white; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; pointer-events: none; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); }
+        .frame-scrub.scrubbing .frame-playhead { transform: translateX(-50%) scale(1.12); }
+        /* The movement row needs the room while Truck is open. */
+        .timeline-panel.has-motion .frame-scrub { display: none; }
         .frame-card img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
         .frame-card.active { border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.3); transform: translateY(-2px); }
         .frame-card.frame-selected { border-color: #ff9f0a; box-shadow: inset 0 0 0 2px rgba(255, 159, 10, 0.9), 0 0 0 2px rgba(255, 159, 10, 0.25); }
@@ -956,6 +976,9 @@
             .props-panel #bg-color-picker,
             .props-panel .inspector-context { display: none !important; }
             .props-panel .layer-switch { width: 190px; }
+            .props-panel .layer-group { flex-direction: row; align-items: center; }
+            .props-panel .layer-tool { flex: 0 0 36px; height: 36px; padding: 0; }
+            .props-panel .layer-tool span { display: none; }
             .props-panel .slider-row { width: 155px; }
             .props-panel .slider-label { display: none; }
             .props-panel #onion-settings:not([hidden]) { flex-direction: row; align-items: center; gap: 12px; }
@@ -1016,7 +1039,7 @@
                 padding: 10px;
                 gap: 12px;
             }
-            .props-panel .layer-switch { width: 142px; }
+            .props-panel .layer-switch { width: auto; }
             .props-panel .slider-row { width: 126px; }
             .timeline-panel { left: 10px; right: 10px; bottom: 10px; height: 154px; }
             .timeline-panel.has-motion { height: 208px; }
@@ -1259,11 +1282,15 @@
     </div>
 
     <div class="glass-panel props-panel">
-        <div class="prop-group">
+        <div class="prop-group layer-group">
             <div class="prop-label">Layer</div>
             <div class="layer-switch">
                 <button type="button" class="layer-option active" id="layer-ink" onclick="app.setLayer('ink')" aria-pressed="true" title="Foreground: drawn fresh on each frame (animate here)">Foreground</button>
                 <button type="button" class="layer-option" id="layer-paper" onclick="app.setLayer('paper')" aria-pressed="false" title="Background: behind the foreground on this frame (Duplicate a frame to keep it)">Background</button>
+            </div>
+            <div class="layer-tools" role="group" aria-label="Background layer">
+                <button type="button" class="layer-tool" id="bg-lock" onclick="app.toggleBackgroundLock()" aria-pressed="false" aria-label="Lock background" title="Lock the background so it can't be drawn on, erased or moved"><i class="fas fa-lock" aria-hidden="true"></i><span>Lock</span></button>
+                <button type="button" class="layer-tool" id="bg-hide" onclick="app.toggleBackgroundHidden()" aria-pressed="false" aria-label="Hide background" title="Hide the background while you draw. It still exports."><i class="fas fa-eye-slash" aria-hidden="true"></i><span>Hide</span></button>
             </div>
         </div>
 

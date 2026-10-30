@@ -78,6 +78,8 @@ const ONION_AFTER_TINT = '#19a35b';
                 this.frameIndex = 0;
 
                 this.activeLayer = 'ink';
+                this.backgroundLocked = false;
+                this.backgroundHidden = false;
                 this.tool = 'brush';
                 this.brushType = 'brush';
 
@@ -108,6 +110,7 @@ const ONION_AFTER_TINT = '#19a35b';
                 this.backgroundImageRequest = 0;
                 this.projectLoadRequest = 0;
                 this.draggedFrameIndex = null;
+                this.frameScrub = null;
                 this.selectedFrameIndices = [];
                 this.frameSelectionAnchor = null;
                 this.timelineSelectionFocused = false;
@@ -3042,7 +3045,7 @@ const ONION_AFTER_TINT = '#19a35b';
                 const sx = Math.floor(pos.x), sy = Math.floor(pos.y);
                 if (sx < 0 || sy < 0 || sx >= W || sy >= H) return null;
                 const frame = this.frames[this.frameIndex];
-                const paper = this.getPaperStrokes(frame);
+                const paper = this.backgroundHidden ? [] : this.getPaperStrokes(frame);
                 const sampleArtwork = (layers, minAlpha = 32) => {
                     const canvas = document.createElement('canvas');
                     canvas.width = W; canvas.height = H;
@@ -3426,10 +3429,10 @@ const ONION_AFTER_TINT = '#19a35b';
                 this.currentRenderBgColor = bgColor;
                 bgCtx.fillStyle = bgColor;
                 bgCtx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
-                this.drawBackgroundImage(bgCtx);
+                if (!this.backgroundHidden) this.drawBackgroundImage(bgCtx);
                 if (this.referenceImage?.complete) { bgCtx.save(); bgCtx.globalAlpha = 0.35; const scale = Math.min(this.canvasWidth / this.referenceImage.width, this.canvasHeight / this.referenceImage.height); const width = this.referenceImage.width * scale, height = this.referenceImage.height * scale; bgCtx.drawImage(this.referenceImage, (this.canvasWidth - width) / 2, (this.canvasHeight - height) / 2, width, height); bgCtx.restore(); }
                 bgCtx.globalAlpha = 1.0;
-                this.getPaperStrokes().forEach(s => this.drawObject(bgCtx, s, false, 'paper'));
+                if (!this.backgroundHidden) this.getPaperStrokes().forEach(s => this.drawObject(bgCtx, s, false, 'paper'));
                 this.currentRenderBgColor = null;
 
                 ctx.globalCompositeOperation = 'source-over';
@@ -4119,6 +4122,12 @@ const ONION_AFTER_TINT = '#19a35b';
             }
 
             setLayer(l) {
+                if (l === 'paper' && (this.backgroundLocked || this.backgroundHidden)) {
+                    this.showExportNotice(this.backgroundLocked
+                        ? 'The background is locked. Unlock it to draw on it.'
+                        : 'The background is hidden. Show it to draw on it.');
+                    return;
+                }
                 this.activeLayer = l;
                 document.getElementById('layer-ink').classList.toggle('active', l === 'ink');
                 document.getElementById('layer-paper').classList.toggle('active', l === 'paper');
@@ -4127,6 +4136,38 @@ const ONION_AFTER_TINT = '#19a35b';
                 this.selectedObject = null;
                 this.updateInspector();
                 this.renderCanvas();
+            }
+
+            // Lock and Hide only change what can be edited and seen here; the
+            // background is still saved, played and exported.
+            toggleBackgroundLock() {
+                this.backgroundLocked = !this.backgroundLocked;
+                if (this.backgroundLocked && this.activeLayer === 'paper') this.setLayer('ink');
+                this.syncBackgroundLayerUI();
+            }
+
+            toggleBackgroundHidden() {
+                this.backgroundHidden = !this.backgroundHidden;
+                if (this.backgroundHidden && this.activeLayer === 'paper') this.setLayer('ink');
+                this.syncBackgroundLayerUI();
+                this.renderCanvas();
+            }
+
+            syncBackgroundLayerUI() {
+                const lock = document.getElementById('bg-lock');
+                const hide = document.getElementById('bg-hide');
+                const paper = document.getElementById('layer-paper');
+                if (lock) {
+                    lock.classList.toggle('active', this.backgroundLocked);
+                    lock.setAttribute('aria-pressed', String(this.backgroundLocked));
+                    lock.querySelector('span').textContent = this.backgroundLocked ? 'Locked' : 'Lock';
+                }
+                if (hide) {
+                    hide.classList.toggle('active', this.backgroundHidden);
+                    hide.setAttribute('aria-pressed', String(this.backgroundHidden));
+                    hide.querySelector('span').textContent = this.backgroundHidden ? 'Hidden' : 'Hide';
+                }
+                paper?.classList.toggle('unavailable', this.backgroundLocked || this.backgroundHidden);
             }
 
             toggleSnapToGrid() {
@@ -4454,6 +4495,90 @@ const ONION_AFTER_TINT = '#19a35b';
 
             previousFrame() {
                 return this.selectFrame(this.frameIndex - 1);
+            }
+
+            // One tick on the scrub bar over the middle of each thumbnail.
+            layoutFrameScrub() {
+                const scrub = document.getElementById('frame-scrub');
+                if (!scrub) return;
+                scrub.querySelectorAll('.frame-scrub-tick').forEach(tick => tick.remove());
+                this.framesList.querySelectorAll('.frame-card').forEach((card) => {
+                    const tick = document.createElement('div');
+                    tick.className = 'frame-scrub-tick';
+                    tick.style.left = `${card.offsetLeft + card.offsetWidth / 2}px`;
+                    scrub.appendChild(tick);
+                });
+                scrub.style.width = `${this.framesList.scrollWidth}px`;
+            }
+
+            syncFrameScrub() {
+                const scrub = document.getElementById('frame-scrub');
+                const card = this.framesList?.querySelectorAll('.frame-card')[this.frameIndex];
+                if (!scrub || !card) return;
+                // Thumbnails can change size as they load or the window narrows.
+                const ticks = scrub.querySelectorAll('.frame-scrub-tick');
+                const cards = this.framesList.querySelectorAll('.frame-card');
+                const last = cards[cards.length - 1];
+                if (ticks.length !== cards.length || ticks[ticks.length - 1].style.left !== `${last.offsetLeft + last.offsetWidth / 2}px`) this.layoutFrameScrub();
+                const playhead = scrub.querySelector('.frame-playhead');
+                playhead.style.left = `${card.offsetLeft + card.offsetWidth / 2}px`;
+                playhead.textContent = this.frameIndex + 1;
+                scrub.setAttribute('aria-valuemin', '1');
+                scrub.setAttribute('aria-valuemax', String(this.frames.length));
+                scrub.setAttribute('aria-valuenow', String(this.frameIndex + 1));
+                scrub.setAttribute('aria-valuetext', `Frame ${this.frameIndex + 1} of ${this.frames.length}`);
+            }
+
+            startFrameScrub(event) {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                const scrub = event.currentTarget;
+                if (this.isPlaying) this.togglePlay();
+                scrub.setPointerCapture?.(event.pointerId);
+                scrub.classList.add('scrubbing');
+                this.frameScrub = { x: event.clientX, timer: null };
+                this.scrubToX(event.clientX);
+                const move = (e) => {
+                    this.frameScrub.x = e.clientX;
+                    this.scrubToX(e.clientX);
+                };
+                const end = () => {
+                    clearInterval(this.frameScrub?.timer);
+                    this.frameScrub = null;
+                    scrub.classList.remove('scrubbing');
+                    scrub.removeEventListener('pointermove', move);
+                    scrub.removeEventListener('pointerup', end);
+                    scrub.removeEventListener('pointercancel', end);
+                };
+                scrub.addEventListener('pointermove', move);
+                scrub.addEventListener('pointerup', end);
+                scrub.addEventListener('pointercancel', end);
+                // Holding near either end keeps scrolling the strip, for long animations.
+                this.frameScrub.timer = setInterval(() => {
+                    if (!this.frameScrub) return;
+                    const bounds = this.framesList.getBoundingClientRect();
+                    const edge = 40;
+                    const step = this.frameScrub.x < bounds.left + edge ? -24 : this.frameScrub.x > bounds.right - edge ? 24 : 0;
+                    if (!step) return;
+                    this.framesList.scrollLeft += step;
+                    this.scrubToX(this.frameScrub.x);
+                }, 30);
+            }
+
+            // Go to the frame whose thumbnail is nearest the pointer.
+            scrubToX(clientX) {
+                const bounds = this.framesList.getBoundingClientRect();
+                const x = Math.max(bounds.left, Math.min(bounds.right, clientX)) - bounds.left + this.framesList.scrollLeft;
+                let nearest = this.frameIndex;
+                let distance = Infinity;
+                this.framesList.querySelectorAll('.frame-card').forEach((card, index) => {
+                    const gap = Math.abs(card.offsetLeft + card.offsetWidth / 2 - x);
+                    if (gap < distance) {
+                        distance = gap;
+                        nearest = index;
+                    }
+                });
+                this.selectFrame(nearest);
             }
 
             nextFrame() {
@@ -4980,6 +5105,16 @@ const ONION_AFTER_TINT = '#19a35b';
                 const frameScrollLeft = this.framesList.scrollLeft;
                 if (!minimal) {
                     this.framesList.innerHTML = '';
+                    const scrub = document.createElement('div');
+                    scrub.className = 'frame-scrub';
+                    scrub.id = 'frame-scrub';
+                    scrub.tabIndex = 0;
+                    scrub.title = 'Drag along here to flip through your frames';
+                    scrub.setAttribute('role', 'slider');
+                    scrub.setAttribute('aria-label', 'Scrub through frames');
+                    scrub.innerHTML = '<div class="frame-playhead" aria-hidden="true"></div>';
+                    scrub.onpointerdown = (event) => this.startFrameScrub(event);
+                    this.framesList.appendChild(scrub);
                     this.frames.forEach((f, i) => {
                         const el = document.createElement('div');
                         el.className = `frame-card ${i === this.frameIndex ? 'active' : ''}`;
@@ -5016,13 +5151,15 @@ const ONION_AFTER_TINT = '#19a35b';
                     addButton.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i>';
                     addButton.onclick = () => this.addFrame();
                     this.framesList.appendChild(addButton);
+                    this.layoutFrameScrub();
                     this.framesList.scrollLeft = frameScrollLeft;
                 } else {
                     const cards = this.framesList.querySelectorAll('.frame-card');
                     cards.forEach((c, i) => {
                         if (i === this.frameIndex) {
                             c.classList.add('active');
-                            c.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+                            // While scrubbing, the strip stays put under the pointer.
+                            if (!this.frameScrub) c.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
                         } else {
                             c.classList.remove('active');
                         }
@@ -5030,6 +5167,7 @@ const ONION_AFTER_TINT = '#19a35b';
                 }
                 this.updateFrameSelectionUI();
                 this.syncFramePosition();
+                this.syncFrameScrub();
                 this.syncTimelineSettings();
                 this.syncFrameActions();
                 this.renderMotionTracks();

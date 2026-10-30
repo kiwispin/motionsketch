@@ -45,7 +45,7 @@ test('Background edits change only the current frame', async ({ page }) => {
     window.app.renderCanvas();
   }, [text('bg-0', 50, 50), text('bg-1', 50, 50)]);
 
-  await page.getByRole('button', { name: 'Background' }).click();
+  await page.getByRole('button', { name: 'Background', exact: true }).click();
   await page.locator('#rendering-canvas').focus();
   await page.keyboard.press('ControlOrMeta+a');
   expect(await page.evaluate(() => window.app.selectedObject?.stroke?.text)).toBe('bg-1');
