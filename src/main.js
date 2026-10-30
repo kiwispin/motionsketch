@@ -149,6 +149,10 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.setupEditableNumbers();
                 this.handleResize();
                 window.addEventListener('resize', () => this.handleResize());
+                // Icon fonts can finish loading after the first layout and change
+                // the toolbar's height.
+                document.fonts?.ready.then(() => this.fitToolsPanel());
+                window.addEventListener('load', () => this.fitToolsPanel());
                 this.resizeCanvas(this.canvasWidth, this.canvasHeight);
 
                 await this.loadStorage();
@@ -231,7 +235,39 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.updateCursorStyle();
             }
 
+            // The tool column's height depends on the window and on whether the
+            // motion timeline is open, so fixed breakpoints missed sizes such as
+            // 1280x720 and tablet widths, letting the last tools spill onto the
+            // timeline. Step down to smaller buttons until the last tool fits.
+            fitToolsPanel() {
+                const panel = document.querySelector('.tools-panel');
+                const last = document.getElementById('onion-btn');
+                const timeline = document.querySelector('.timeline-panel');
+                if (!panel || !last) return;
+                // The panel's stylesheet bottom can reach behind the timeline at some
+                // heights; end it just above the timeline instead.
+                panel.style.removeProperty('bottom');
+                const timelineTop = timeline?.getBoundingClientRect().top;
+                if (timelineTop && panel.getBoundingClientRect().bottom > timelineTop - 8) {
+                    panel.style.bottom = `${Math.round(window.innerHeight - timelineTop + 8)}px`;
+                }
+                const fits = () => last.getBoundingClientRect().bottom <= panel.getBoundingClientRect().bottom - 2;
+                // Tool buttons animate size changes; measure final sizes, not frames
+                // of the animation.
+                panel.classList.add('tools-measuring');
+                const steps = ['tools-compact', 'tools-tight', 'tools-tiny'];
+                panel.classList.remove(...steps);
+                for (const step of steps) {
+                    if (fits()) break;
+                    panel.classList.remove(...steps);
+                    panel.classList.add(step);
+                }
+                void panel.offsetHeight;
+                panel.classList.remove('tools-measuring');
+            }
+
             handleResize() {
+                this.fitToolsPanel();
                 const workspace = document.querySelector('.workspace');
                 if (!workspace) return;
 
@@ -4543,6 +4579,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
                 this.motionScrollActive = showMotion && visibleTracks.length > 0;
                 panel.classList.toggle('has-motion', showMotion);
                 document.body.classList.toggle('has-motion-timeline', showMotion);
+                this.fitToolsPanel();
                 this.syncMotionTimelineLayout();
                 visibleTracks.forEach((track, trackIndex) => {
                     const row = document.createElement('div');

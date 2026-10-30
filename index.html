@@ -892,6 +892,10 @@
                 -webkit-overflow-scrolling: touch;
                 flex: 1 1 auto;
             }
+            /* The row scrolls here, so lead with Export: it stays visible
+               without scrolling a row that shows no scrollbar. */
+            .top-actions > :first-child { margin-left: 0; }
+            .top-actions > .export-menu-wrapper { order: -1; margin-left: auto; }
             .top-actions .btn-ghost,
             .top-actions .btn-primary {
                 min-width: 44px;
@@ -999,6 +1003,21 @@
             .timeline-action { width: 60px; min-width: 60px; }
             .frame-actions { gap: 4px; padding-right: 6px; }
         }
+        /* Added by fitToolsPanel when the tools do not fit the panel height. */
+        .tools-panel.tools-measuring,
+        .tools-panel.tools-measuring * { transition: none !important; }
+        .tools-panel.tools-compact { padding: 6px 0; gap: 3px; }
+        .tools-panel.tools-compact .tool-btn,
+        .tools-panel.tools-compact .flyout-menu .tool-btn { width: 40px; height: 40px; min-width: 40px; min-height: 40px; flex-basis: 40px; }
+        .tools-panel.tools-compact .divider { margin: 1px 0; }
+        .tools-panel.tools-tight { padding: 4px 0; gap: 2px; }
+        .tools-panel.tools-tight .tool-btn,
+        .tools-panel.tools-tight .flyout-menu .tool-btn { width: 34px; height: 34px; min-width: 34px; min-height: 34px; flex-basis: 34px; }
+        .tools-panel.tools-tight .divider { margin: 0; }
+        .tools-panel.tools-tiny { padding: 3px 0; gap: 1px; }
+        .tools-panel.tools-tiny .tool-btn,
+        .tools-panel.tools-tiny .flyout-menu .tool-btn { width: 30px; height: 30px; min-width: 30px; min-height: 30px; flex-basis: 30px; font-size: 0.9rem; }
+        .tools-panel.tools-tiny .divider { margin: 0; }
     </style>
 </head>
 
@@ -1099,7 +1118,7 @@
 
     <header class="glass-panel app-header">
         <div class="logo">
-            <i class="fas fa-pen-nib"></i> SketchMotion
+            <i class="fas fa-pen-nib"></i> <span>SketchMotion</span>
         </div>
         <input class="project-name" id="project-name" type="text" value="Untitled" aria-label="Project name" title="Project name" onchange="app.setProjectName(this.value)" onkeydown="event.stopPropagation()">
         <div class="top-actions">
