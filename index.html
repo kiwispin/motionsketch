@@ -634,7 +634,8 @@
         [data-theme="light"] .swatch.active { border-color: #000; }
         .swatch.active { border-color: white; }
 
-        .color-input-wrap { width: 100%; height: 36px; border-radius: 8px; border: 1px solid var(--border-panel); overflow: hidden; position: relative; cursor: pointer; }
+        .color-input-wrap { display: block; width: 100%; height: 36px; border-radius: 8px; border: 1px solid var(--border-panel); overflow: hidden; position: relative; cursor: pointer; }
+        .more-colours-chip, .more-colours-label, .more-colours > i { display: none; }
         input[type="color"] { position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; cursor: pointer; border: none; padding: 0; margin: 0; }
 
         .timeline-panel {
@@ -1305,9 +1306,10 @@
     <div id="whats-new-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="whats-new-title" aria-hidden="true" tabindex="-1">
         <div class="modal-box whats-new-box" role="document">
             <div class="modal-title" id="whats-new-title">What’s new in SketchMotion</div>
-            <p class="whats-new-date">Updated 31 October 2026</p>
+            <p class="whats-new-date">Updated 1 November 2026</p>
             <h3 class="whats-new-heading">New</h3>
             <ul class="whats-new-list">
+                <li><i class="fas fa-sliders" aria-hidden="true"></i><div><strong>A tidier settings panel</strong>Layer, Brush and Colour have more room between them, so each is easy to spot. Background colour is now under Layer, and <b>More colours</b>, under the swatches, picks any colour you like. The ring on the swatches now moves to the colour you pick.</div></li>
                 <li><i class="fas fa-shapes" aria-hidden="true"></i><div><strong>Hold to tidy a shape</strong>At the end of a brush line, hold still for a moment. A wobbly line becomes straight, as before, and now curves, zigzags, circles, ovals, triangles, squares and rectangles get tidied too. Keep holding and move to resize it. Not what you meant? <kbd>Ctrl</kbd>+<kbd>Z</kbd> gets your own line back.</div></li>
                 <li><i class="fas fa-bezier-curve" aria-hidden="true"></i><div><strong>Smoother curves</strong>Curves drawn quickly with the brush stay round, instead of showing straight pieces. Drawings you’ve already made look smoother too.</div></li>
                 <li><i class="fas fa-stream" aria-hidden="true"></i><div><strong>A tidier timeline</strong>Hold is now <b>− ×2 +</b>: ×2 means a frame stays on screen twice as long, and held frames show it on their thumbnail. <b>Onion skin</b> has moved to the timeline, next to the frame counter. Thumbnails are bigger and the same shape as your canvas.</div></li>
@@ -1525,6 +1527,11 @@
                 <button type="button" class="layer-tool" id="bg-lock" onclick="app.toggleBackgroundLock()" aria-pressed="false" aria-label="Lock background" title="Lock the background so it can't be drawn on, erased or moved"><i class="fas fa-lock" aria-hidden="true"></i><span>Lock</span></button>
                 <button type="button" class="layer-tool" id="bg-hide" onclick="app.toggleBackgroundHidden()" aria-pressed="false" aria-label="Hide background" title="Hide the background while you draw. It still exports."><i class="fas fa-eye-slash" aria-hidden="true"></i><span>Hide</span></button>
             </div>
+            <label class="bg-color-row" id="bg-color-picker" title="Background colour of this frame">
+                <span class="bg-color-swatch" id="bg-color-swatch"></span>
+                <span id="bg-color-label">Background colour</span>
+                <input type="color" id="bg-color-input" aria-label="Frame background colour" value="#ffffff" oninput="app.updateBgColor(this.value)">
+            </label>
         </div>
 
         <div class="prop-group motion-settings" id="motion-settings">
@@ -1563,14 +1570,12 @@
         </div>
         <div class="prop-group">
             <div class="prop-label">Colour</div>
-            <div class="color-input-wrap">
-                <input type="color" id="html-color-picker" aria-label="Brush colour" value="#000000" oninput="app.setColor(this.value)">
-            </div>
             <div class="color-grid" id="palette-container"></div>
-            <label class="bg-color-row" id="bg-color-picker" title="Background colour of this frame">
-                <span class="bg-color-swatch" id="bg-color-swatch"></span>
-                <span id="bg-color-label">Background colour</span>
-                <input type="color" id="bg-color-input" aria-label="Frame background colour" value="#ffffff" oninput="app.updateBgColor(this.value)">
+            <label class="color-input-wrap more-colours" title="Pick any colour">
+                <span class="more-colours-chip" id="more-colours-chip" aria-hidden="true"></span>
+                <span class="more-colours-label">More colours</span>
+                <i class="fas fa-chevron-right" aria-hidden="true"></i>
+                <input type="color" id="html-color-picker" aria-label="More colours" value="#000000" oninput="app.setColor(this.value)">
             </label>
         </div>
         <div class="prop-group" id="onion-settings" hidden>

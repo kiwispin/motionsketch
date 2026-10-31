@@ -13,7 +13,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 // history stays small.
 const HISTORY_LIMIT = 100;
 // Bump when the What's new notes change, so the dot shows again.
-const WHATS_NEW_VERSION = '2026-10-31d';
+const WHATS_NEW_VERSION = '2026-11-01';
 const GUIDE_KEY = 'motionSketchGuide';
 const ONION_BEFORE_TINT = '#2f6bff';
 const ONION_AFTER_TINT = '#19a35b';
@@ -463,6 +463,7 @@ function tidyStroke(raw) {
 
                 const picker = document.getElementById('html-color-picker');
                 if (picker) picker.value = this.brushColor;
+                this.showBrushColour();
                 if (!hadProject && !this.readPref(GUIDE_KEY)) this.showWelcome(true);
             }
 
@@ -4954,9 +4955,20 @@ function tidyStroke(raw) {
                 show(toolTitle, `${toolDescription} Active layer: ${this.activeLayer === 'ink' ? 'Foreground' : 'Background'}.`, drawing);
             }
 
+            // The ring on the swatches and the middle of More colours follow
+            // the brush colour.
+            showBrushColour() {
+                const colour = String(this.brushColor).toLowerCase();
+                document.querySelectorAll('#palette-container .swatch').forEach((swatch, index) => {
+                    swatch.classList.toggle('active', String(this.palette[index]).toLowerCase() === colour);
+                });
+                document.getElementById('more-colours-chip')?.style.setProperty('--chip', this.brushColor);
+            }
+
             setColor(c) {
                 this.brushColor = c;
                 document.getElementById('html-color-picker').value = c;
+                this.showBrushColour();
                 if (this.selectedObject) {
                     if (this.motionDirectEditBlocked()) return;
                     this.saveState();

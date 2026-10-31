@@ -193,8 +193,51 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; background: v
     .props-panel .prop-group { gap: 8px; }
     .props-panel .prop-label { line-height: 1.2; }
     .brush-preview { height: 48px; }
-    .color-input-wrap { height: 32px; }
     .bg-color-row { margin-top: 0; }
+
+    /* Sections sit three times further apart than the rows inside them,
+       with a faint line between, so each reads as its own group. */
+    .props-panel > .prop-group + .prop-group {
+        margin-top: 2px;
+        padding-top: 14px;
+        border-top: 1px solid var(--border-panel);
+    }
+
+    /* More colours: a button under the swatches. Its rainbow ring has the
+       colour in use in the middle, so a custom colour still shows. */
+    .color-input-wrap.more-colours {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: auto;
+        padding: 8px 10px;
+        color: var(--text-main);
+        font-size: .82rem;
+    }
+    .color-input-wrap.more-colours:hover { background: var(--btn-hover); }
+    .color-input-wrap.more-colours:focus-within { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+    .more-colours input[type="color"] { inset: 0; width: 100%; height: 100%; opacity: 0; }
+    .more-colours-chip,
+    .more-colours-label,
+    .more-colours > i { display: block; }
+    .more-colours-chip {
+        width: 20px;
+        height: 20px;
+        flex: 0 0 20px;
+        border-radius: 50%;
+        background: conic-gradient(#ff4d4d, #ffb84d, #ffe14d, #6ee06e, #4dc3ff, #5a6cff, #c45aff, #ff4d4d);
+    }
+    .more-colours-chip::after {
+        content: "";
+        display: block;
+        width: 10px;
+        height: 10px;
+        margin: 5px;
+        border-radius: 50%;
+        background: var(--chip, #000);
+        box-shadow: 0 0 0 1.5px var(--bg-panel);
+    }
+    .more-colours > i { margin-left: auto; color: var(--text-muted); font-size: .75rem; }
 }
 
 /* Short laptop screens: the brush preview gives way so the settings still fit. */
