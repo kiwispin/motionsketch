@@ -13,7 +13,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 // history stays small.
 const HISTORY_LIMIT = 100;
 // Bump when the What's new notes change, so the dot shows again.
-const WHATS_NEW_VERSION = '2026-10-31b';
+const WHATS_NEW_VERSION = '2026-10-31c';
 const GUIDE_KEY = 'motionSketchGuide';
 const ONION_BEFORE_TINT = '#2f6bff';
 const ONION_AFTER_TINT = '#19a35b';
@@ -420,9 +420,15 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 
                 const start = (e) => this.onDown(this.getPos(e), e.pressure, e.ctrlKey || e.metaKey);
                 const move = (e) => {
-                    let p = e.pressure;
-                    if (e.pointerType === 'mouse' && e.buttons === 1) p = 0.5;
-                    this.onMove(this.getPos(e), p);
+                    // The browser sends one move per screen refresh and keeps the
+                    // positions in between; a brush stroke uses them all, so fast
+                    // curves don't turn into straight pieces.
+                    const events = this.isDrawing && this.tool === 'brush' && e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+                    (events.length ? events : [e]).forEach((ev) => {
+                        let p = ev.pressure;
+                        if (ev.pointerType === 'mouse' && e.buttons === 1) p = 0.5;
+                        this.onMove(this.getPos(ev), p);
+                    });
                 };
                 const end = (e) => this.onUp();
 
@@ -4252,9 +4258,21 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     }
 
                     ctx.moveTo(firstPoint.x, firstPoint.y);
-                    for (let i = 1; i < stroke.points.length; i++) {
-                        const point = renderPoint(stroke.points[i]);
-                        ctx.lineTo(point.x, point.y);
+                    if (['brush', 'eraser'].includes(stroke.type) && stroke.points.length > 2) {
+                        // Freehand strokes curve through the midpoints between
+                        // points instead of joining them with straight lines.
+                        for (let i = 1; i < stroke.points.length - 1; i++) {
+                            const point = renderPoint(stroke.points[i]);
+                            const next = renderPoint(stroke.points[i + 1]);
+                            ctx.quadraticCurveTo(point.x, point.y, (point.x + next.x) / 2, (point.y + next.y) / 2);
+                        }
+                        const lastPoint = renderPoint(stroke.points[stroke.points.length - 1]);
+                        ctx.lineTo(lastPoint.x, lastPoint.y);
+                    } else {
+                        for (let i = 1; i < stroke.points.length; i++) {
+                            const point = renderPoint(stroke.points[i]);
+                            ctx.lineTo(point.x, point.y);
+                        }
                     }
 
                     // FIX 2: closePath before fill so rect/circle shapes render their fill correctly
