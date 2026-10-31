@@ -13,7 +13,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 // history stays small.
 const HISTORY_LIMIT = 100;
 // Bump when the What's new notes change, so the dot shows again.
-const WHATS_NEW_VERSION = '2026-11-01';
+const WHATS_NEW_VERSION = '2026-11-01b';
 const GUIDE_KEY = 'motionSketchGuide';
 const ONION_BEFORE_TINT = '#2f6bff';
 const ONION_AFTER_TINT = '#19a35b';
@@ -375,6 +375,8 @@ function tidyStroke(raw) {
                 this.quickLineDelay = 550;
                 this.quickShape = null;
                 this.shapeLabelTimer = null;
+                this.pointerAt = null;
+                this.sizeWheel = 0;
                 this.frameAddPulseTimer = null;
                 this.frameAddedTimer = null;
 
@@ -684,6 +686,11 @@ function tidyStroke(raw) {
                 });
 
                 workspace?.addEventListener('wheel', (e) => {
+                    if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                        this.wheelBrushSize(e);
+                        return;
+                    }
                     if (!e.ctrlKey && !e.metaKey) return;
                     e.preventDefault();
                     this.adjustZoom(e.deltaY < 0 ? 0.1 : -0.1, e);
@@ -717,11 +724,12 @@ function tidyStroke(raw) {
                         return;
                     }
                     this.updateCursorPos(e);
+                    if (e.target === c) this.pointerAt = { clientX: e.clientX, clientY: e.clientY };
                     if (this.isDrawing || this.selectedObject || this.isSelectingBox || this.pathKeyDrag || (this.tool === 'truck' && this.truckSelectedTrackId)) move(e);
                 });
 
                 c.addEventListener('pointerenter', () => { if (this.isDrawingTool()) this.cursorEl.style.display = 'block'; });
-                c.addEventListener('pointerleave', () => { this.cursorEl.style.display = 'none'; });
+                c.addEventListener('pointerleave', () => { this.cursorEl.style.display = 'none'; this.pointerAt = null; });
 
                 c.addEventListener('pointerdown', (e) => {
                     this.clearFrameSelection();
@@ -915,6 +923,10 @@ function tidyStroke(raw) {
                     if (key === 'v') this.setTool('select');
                     if (key === 'f') this.setTool('bucket');
                     if (key === 'h') this.toggleHandTool();
+                    if (e.key === '[' || e.key === ']' || e.code === 'BracketLeft' || e.code === 'BracketRight') {
+                        e.preventDefault();
+                        this.nudgeBrushSize(e.key === ']' || e.code === 'BracketRight' ? 1 : -1);
+                    }
                     if (key === 't') this.setTool('text');
                     if (key === 'r') this.setTool('rect');
                     if (key === 'c') this.setTool('circle');
@@ -3039,7 +3051,7 @@ function tidyStroke(raw) {
                 this.quickLineActive = true;
                 this.currentStroke.points = points.map((point) => ({ ...point }));
                 if (tidy.sharp) this.currentStroke.sharp = true;
-                this.showShapeLabel(tidy.name, grab);
+                this.showCanvasLabel(tidy.name, grab);
                 this.renderCanvas();
             }
 
@@ -3069,7 +3081,7 @@ function tidyStroke(raw) {
                 if (sharp) stroke.sharp = true;
             }
 
-            showShapeLabel(name, at) {
+            showCanvasLabel(name, at) {
                 const label = document.getElementById('shape-label');
                 const wrapper = document.getElementById('canvas-wrapper');
                 if (!label || !wrapper) return;
@@ -5019,6 +5031,45 @@ function tidyStroke(raw) {
                     this.saveStorage();
                 }
                 this.updateCursorStyle();
+            }
+
+            // Shift + scroll and [ ] change the size about a tenth at a time, so
+            // small brushes change gently and big ones quickly. Not while
+            // drawing, or with something selected, where each step would be
+            // an undo of its own.
+            nudgeBrushSize(steps, at = this.pointerAt && this.getPos(this.pointerAt)) {
+                const tools = ['brush', 'pencil', 'marker', 'highlighter', 'eraser', 'rect', 'circle', 'line'];
+                if (this.isDrawing || this.selectedObject || !tools.includes(this.tool) || !steps) return;
+                let size = this.brushSize;
+                for (let i = 0; i < Math.abs(steps); i++) {
+                    size = steps > 0 ? Math.max(size + 1, Math.round(size * 1.1)) : Math.min(size - 1, Math.round(size / 1.1));
+                }
+                size = Math.max(1, Math.min(200, size));
+                if (size !== this.brushSize) {
+                    document.getElementById('brush-size').value = size;
+                    this.setSize(size);
+                }
+                const spot = at || { x: this.canvasWidth / 2, y: this.canvasHeight / 2 };
+                this.showCanvasLabel(`Size ${size}`, { x: spot.x, y: spot.y - size / 2 });
+            }
+
+            // A mouse wheel moves one notch at a time; a touchpad sends many small
+            // movements, which add up to a step. Shift turns the wheel sideways
+            // in some browsers, so either direction counts (up or left is bigger).
+            wheelBrushSize(e) {
+                const scale = e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 600 : 1;
+                const delta = (e.deltaY || e.deltaX) * scale;
+                if (!delta) return;
+                if (Math.abs(delta) >= 50) {
+                    this.sizeWheel = 0;
+                    this.nudgeBrushSize(delta < 0 ? 1 : -1, this.getPos(e));
+                    return;
+                }
+                this.sizeWheel += delta;
+                if (Math.abs(this.sizeWheel) < 100) return;
+                const steps = Math.trunc(this.sizeWheel / 100);
+                this.sizeWheel -= steps * 100;
+                this.nudgeBrushSize(-steps, this.getPos(e));
             }
 
             setOpacity(v) {
