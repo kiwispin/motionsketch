@@ -114,9 +114,10 @@ test('downloads a PNG frame and an editable project file', async ({ page }, test
     expect(webm.suggestedFilename()).toBe('Untitled.webm');
   }
 
+  await page.getByRole('button', { name: 'File', exact: true }).click();
   const [project] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: /Download$/ }).click()
+    page.getByRole('menuitem', { name: /Save project file/ }).click()
   ]);
   expect(project.suggestedFilename()).toBe('Untitled.json');
 });
@@ -349,7 +350,12 @@ test('navigates timeline frames forwards and backwards without crossing boundari
 });
 
 test('starts blank, square, and wide animations from the simple New chooser', async ({ page }) => {
-  const newButton = page.getByRole('button', { name: 'New' });
+  const newButton = {
+    click: async () => {
+      await page.getByRole('button', { name: 'File', exact: true }).click();
+      await page.getByRole('menuitem', { name: /New animation/ }).click();
+    }
+  };
   await newButton.click();
   await expect(page.getByRole('dialog', { name: 'Start a new animation' })).toBeVisible();
   await page.getByRole('button', { name: /Square loop/ }).click();

@@ -136,6 +136,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.canvasWidth = 600;
                 this.canvasHeight = 600;
                 this.projectName = 'Untitled';
+                this.fileSaved = true;
                 this.zoom = 1.0;
                 this.panelsHidden = false;
                 this.isHandTool = false;
@@ -487,6 +488,8 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     if (brushWrapper && !brushWrapper.contains(e.target)) this.setFlyoutExpanded('brush-wrapper', 'tool-brush-anchor', false);
                     const exportWrapper = document.getElementById('export-menu-wrapper');
                     if (exportWrapper && !exportWrapper.contains(e.target)) this.setExportMenuOpen(false);
+                    const fileWrapper = document.getElementById('file-menu-wrapper');
+                    if (fileWrapper && !fileWrapper.contains(e.target)) this.setFileMenuOpen(false);
                     const drawingAids = document.querySelector('.drawing-aids-wrapper');
                     if (drawingAids && !drawingAids.contains(e.target)) this.setDrawingAidsOpen(false);
                 });
@@ -501,6 +504,11 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                         if (!document.getElementById('export-menu')?.hidden) {
                             e.preventDefault();
                             this.setExportMenuOpen(false, true);
+                            return;
+                        }
+                        if (!document.getElementById('file-menu')?.hidden) {
+                            e.preventDefault();
+                            this.setFileMenuOpen(false, true);
                             return;
                         }
                         const openModal = [...document.querySelectorAll('.modal-overlay')].find((modal) => modal.style.display === 'flex');
@@ -818,7 +826,40 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.syncBackgroundImageSettings();
                 document.getElementById('canvas-width').value = this.canvasWidth;
                 document.getElementById('canvas-height').value = this.canvasHeight;
-                this.openModal('settings-modal', 'canvas-width');
+                this.syncCanvasPresets();
+                const name = document.getElementById('project-name-input');
+                if (name) name.value = this.projectName;
+                const speed = document.getElementById('project-fps');
+                if (speed) speed.value = String(this.fps);
+                this.syncProjectSpeed(this.fps);
+                this.openModal('settings-modal', 'project-name-input');
+            }
+
+            pickCanvasPreset(button) {
+                const width = document.getElementById('canvas-width');
+                const height = document.getElementById('canvas-height');
+                if (button.dataset.custom) {
+                    width.focus();
+                    width.select();
+                } else {
+                    width.value = button.dataset.width;
+                    height.value = button.dataset.height;
+                }
+                this.syncCanvasPresets(Boolean(button.dataset.custom));
+            }
+
+            // The preset matching the size is shown as picked; any other size is Custom.
+            syncCanvasPresets(custom = false) {
+                const width = Number(document.getElementById('canvas-width')?.value);
+                const height = Number(document.getElementById('canvas-height')?.value);
+                const presets = [...document.querySelectorAll('.size-preset')];
+                const match = custom ? null : presets.find((preset) => Number(preset.dataset.width) === width && Number(preset.dataset.height) === height);
+                presets.forEach((preset) => preset.setAttribute('aria-pressed', String(match ? preset === match : Boolean(preset.dataset.custom))));
+            }
+
+            syncProjectSpeed(value) {
+                const label = document.getElementById('project-fps-label');
+                if (label) label.textContent = `${value} frames per second`;
             }
 
             openModal(id, focusId) {
@@ -844,6 +885,13 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     this.renderUI();
                     this.updateThumbnails();
                     this.renderCanvas();
+                }
+                // Name and speed only come from the dialog while it is open.
+                if (document.getElementById('settings-modal')?.getAttribute('aria-hidden') === 'false') {
+                    const name = document.getElementById('project-name-input')?.value.trim();
+                    if (name && name !== this.projectName) this.setProjectName(name);
+                    const speed = Number(document.getElementById('project-fps')?.value);
+                    if (speed && speed !== this.fps) this.setFps(speed);
                 }
                 this.closeModal('settings-modal');
                 this.saveStorage();
@@ -4452,13 +4500,13 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 
             // Header menus are fixed-position and placed under their button, since
             // the header row scrolls on narrow screens and would clip them.
-            positionHeaderMenu(menu, toggle, fallbackWidth, fallbackHeight) {
+            positionHeaderMenu(menu, toggle, fallbackWidth, fallbackHeight, align = 'right') {
                 const rect = toggle.getBoundingClientRect();
                 const viewportWidth = Math.max(1, window.innerWidth);
                 const menuWidth = Math.min(menu.offsetWidth || fallbackWidth, Math.max(1, viewportWidth - 16));
                 const menuHeight = Math.min(menu.offsetHeight || fallbackHeight, Math.max(1, window.innerHeight - 16));
                 const left = Math.min(
-                    Math.max(8, rect.right - menuWidth),
+                    Math.max(8, align === 'left' ? rect.left : rect.right - menuWidth),
                     Math.max(8, viewportWidth - menuWidth - 8)
                 );
                 const below = rect.bottom + 8;
@@ -5510,11 +5558,14 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 }, 250);
             }
 
-            saveStorage() {
+            saveStorage(changed = true) {
+                if (changed) this.fileSaved = false;
+                this.setSaveStatus('saving');
                 if (this.saveTimer) clearTimeout(this.saveTimer);
                 this.saveTimer = setTimeout(() => {
                     const data = {
                         version: 7,
+                        savedToFile: this.fileSaved,
                         backgroundImage: this.backgroundImage,
                         name: this.projectName,
                         frames: this.frames,
@@ -5538,7 +5589,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                         const pct = Math.min(100, (size / limit) * 100);
 
                         const storageLabel = document.querySelector('.storage-label');
-                        if (storageLabel) storageLabel.textContent = `Storage ${Math.round(pct)}%`;
+                        if (storageLabel) storageLabel.textContent = `Browser storage: ${pct < 1 ? 'under 1%' : `${Math.round(pct)}%`} used`;
                         const bar = document.getElementById('storage-bar');
                         if (bar) {
                             bar.style.width = pct + '%';
@@ -5546,15 +5597,34 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                             else if (pct > 70) bar.style.background = '#f1c40f';
                             else bar.style.background = '#2ecc71';
                         }
-                        this.db.set('currentProject', jsonStr).then(() => {
-                            const ind = document.getElementById('save-indicator');
-                            ind.innerHTML = '<i class="fas fa-check"></i> Saved in this browser';
-                            ind.style.background = 'rgb(22, 128, 61)';
-                            ind.style.opacity = 1;
-                            setTimeout(() => ind.style.opacity = 0, 1500);
-                        }).catch(e => console.log("IDB Error", e));
-                    } catch (e) { console.log("Serialization Error", e); }
+                        this.db.set('currentProject', jsonStr).then(() => this.setSaveStatus('saved')).catch((e) => {
+                            console.log("IDB Error", e);
+                            this.setSaveStatus('error');
+                        });
+                    } catch (e) {
+                        console.log("Serialization Error", e);
+                        this.setSaveStatus('error');
+                    }
                 }, 1000);
+            }
+
+            setSaveStatus(state) {
+                const status = document.getElementById('save-status');
+                const text = document.getElementById('save-status-text');
+                if (!status || !text) return;
+                text.textContent = { saving: 'Saving…', saved: 'Saved in this browser', error: 'Couldn’t save in this browser' }[state];
+                status.classList.toggle('is-saving', state === 'saving');
+                status.classList.toggle('is-error', state === 'error');
+                status.title = state === 'error'
+                    ? 'This browser couldn’t keep your work. Save a project file to be safe.'
+                    : 'Your work is kept in this browser as you go';
+            }
+
+            // Work that isn't in a project file yet would be lost by New.
+            hasUnsavedWork() {
+                if (this.fileSaved) return false;
+                return this.frames.length > 1 || this.motionTracks.length > 0 || Boolean(this.backgroundImage) ||
+                    this.frames.some((frame) => frame.strokes.length || this.getPaperStrokes(frame).length);
             }
 
             syncProjectNameUI() {
@@ -5580,6 +5650,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                             this.syncFpsUI();
                             this.frameIndex = 0;
                             this.projectName = typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled';
+                            this.fileSaved = data.savedToFile === true;
                             if (data.width && data.height) this.resizeCanvas(data.width, data.height);
                             if (data.palette) { this.palette = data.palette; this.renderPalette(); }
                             this.renderUI();
@@ -5913,6 +5984,9 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 const safeName = this.getExportBaseName();
                 a.href = url; a.download = `${safeName}.json`;
                 a.click();
+                this.fileSaved = true;
+                this.saveStorage(false);
+                this.updateNewAnimationWarning();
             }
 
             getExportBaseName() {
@@ -5984,7 +6058,8 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.renderUI();
                 this.syncProjectNameUI();
                 this.renderCanvas();
-                this.saveStorage();
+                this.fileSaved = true;
+                this.saveStorage(false);
                 this.showExportNotice(version < 7 ? 'Project upgraded and opened' : 'Project opened');
             }
 
@@ -6059,6 +6134,26 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.setExportMenuOpen(document.getElementById('export-menu')?.hidden);
             }
 
+            // File: New, Open and Save project file, with the storage meter.
+            setFileMenuOpen(open, returnFocus = false) {
+                const menu = document.getElementById('file-menu');
+                const toggle = document.getElementById('file-menu-toggle');
+                if (!menu || !toggle) return;
+                menu.hidden = !open;
+                toggle.setAttribute('aria-expanded', String(open));
+                if (open) this.positionHeaderMenu(menu, toggle, 280, 240, 'left');
+                if (returnFocus) toggle.focus();
+            }
+
+            toggleFileMenu() {
+                this.setFileMenuOpen(document.getElementById('file-menu')?.hidden);
+            }
+
+            runFileAction(action) {
+                this.setFileMenuOpen(false);
+                ({ new: () => this.requestNewAnimation(), open: () => this.openProject(), save: () => this.saveProject() }[action])?.();
+            }
+
             runExport(format) {
                 this.setExportMenuOpen(false);
                 if (format === 'gif' && this.frames.length > LONG_GIF_FRAME_THRESHOLD) {
@@ -6075,7 +6170,24 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 }[format])?.();
             }
 
-            requestNewAnimation() { this.openModal('custom-modal', 'custom-modal'); }
+            requestNewAnimation() {
+                this.newDialogWarned = this.hasUnsavedWork();
+                this.updateNewAnimationWarning();
+                this.openModal('custom-modal', 'custom-modal');
+            }
+
+            // New replaces the only copy in this browser, so it says so when the
+            // animation isn't saved as a file, and offers to save it first.
+            updateNewAnimationWarning() {
+                const warning = document.getElementById('new-unsaved');
+                if (!warning) return;
+                const unsaved = this.hasUnsavedWork();
+                warning.hidden = !unsaved;
+                const title = document.getElementById('new-unsaved-title');
+                if (title) title.textContent = `“${this.projectName || 'Untitled'}” isn’t saved as a file yet.`;
+                const saved = document.getElementById('new-saved');
+                if (saved) saved.hidden = unsaved || !this.newDialogWarned;
+            }
             closeModal(id) {
                 if (id === 'settings-modal') {
                     this.backgroundImageRequest++;
@@ -6111,7 +6223,8 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.renderUI();
                 this.syncProjectNameUI();
                 this.renderCanvas();
-                this.saveStorage();
+                this.fileSaved = true;
+                this.saveStorage(false);
             }
 
             groupSelection() {

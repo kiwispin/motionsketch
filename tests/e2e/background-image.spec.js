@@ -26,7 +26,7 @@ async function choose(page, file) {
 }
 
 async function install(page, color = '#ff0000') {
-  await page.getByRole('button', { name: 'Canvas Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   await choose(page, await imageFile(page, color));
   await page.locator('#settings-apply').click();
 }
@@ -47,7 +47,7 @@ async function download(page, fn) {
 
 test('stages import, replacement and removal until Apply; Undo/Redo restores pixels and size', async ({ page }) => {
   const before = await page.locator('.tools-panel').boundingBox();
-  await page.getByRole('button', { name: 'Canvas Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   await choose(page, await imageFile(page));
   expect(await page.evaluate(() => app.backgroundImage)).toBeNull();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -57,7 +57,7 @@ test('stages import, replacement and removal until Apply; Undo/Redo restores pix
   expect(await page.evaluate(() => app.getBackgroundImagePlacement())).toEqual({ x: 0, y: 150, width: 600, height: 300 });
   expect(await page.evaluate(() => [...app.bgCtx.getImageData(300, 300, 1, 1).data])).toEqual([255, 0, 0, 255]);
   expect(await page.evaluate(() => [...app.bgCtx.getImageData(300, 50, 1, 1).data])).toEqual([255, 255, 255, 255]);
-  await page.getByRole('button', { name: 'Canvas Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   await choose(page, await imageFile(page, '#0000ff'));
   await page.locator('#canvas-width').fill('800');
   await page.locator('#settings-apply').click();
@@ -66,11 +66,11 @@ test('stages import, replacement and removal until Apply; Undo/Redo restores pix
   expect(await page.evaluate(() => ({ width: app.canvasWidth, image: app.backgroundImage.dataUrl }))).toEqual({ width: 600, image: original });
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
   expect(await page.evaluate(() => [...app.bgCtx.getImageData(400, 300, 1, 1).data])).toEqual([0, 0, 255, 255]);
-  await page.getByRole('button', { name: 'Canvas Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   await page.locator('#background-image-remove').click();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   expect(await page.evaluate(() => app.backgroundImage)).not.toBeNull();
-  await page.getByRole('button', { name: 'Canvas Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   await page.locator('#background-image-remove').click();
   await page.locator('#settings-apply').click();
   expect(await page.evaluate(() => app.backgroundImage)).toBeNull();
@@ -102,7 +102,7 @@ test('saves one embedded image, reopens it, restores autosave, and clears it for
 test('rejects invalid and oversized images without replacing the draft or project', async ({ page }) => {
   await install(page);
   const original = await page.evaluate(() => app.backgroundImage.dataUrl);
-  await page.getByRole('button', { name: 'Canvas Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   const input = page.locator('#background-image-input');
   await input.setInputFiles({ name: 'bad.png', mimeType: 'image/png', buffer: Buffer.from('not a PNG') });
   await expect(page.locator('#background-image-error')).toContainText('could not be opened');
@@ -158,7 +158,7 @@ test('video rendering contains the image on every recorded frame', async ({ page
 });
 
 test('Cancel invalidates an in-flight image load', async ({ page }) => {
-  await page.getByRole('button', { name: 'Canvas Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   await page.evaluate(() => {
     const decode = app.decodeBackgroundImage.bind(app);
     app.decodeBackgroundImage = async value => { await new Promise(resolve => { window.resumeBackgroundLoad = resolve; }); return decode(value); };
@@ -168,7 +168,7 @@ test('Cancel invalidates an in-flight image load', async ({ page }) => {
   await expect(page.locator('#settings-apply')).toBeDisabled();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.evaluate(() => window.resumeBackgroundLoad());
-  await page.getByRole('button', { name: 'Canvas Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   expect(await page.evaluate(() => app.backgroundImageDraft)).toBeNull();
   await expect(page.locator('#background-image-set')).toBeVisible();
 });
@@ -210,7 +210,7 @@ test('keeps drawn artwork above the image, including eraser holes and transparen
 });
 
 test('accepts JPEG/WebP and preserves PNG transparency over the background colour', async ({ page }) => {
-  await page.getByRole('button', { name: 'Canvas Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   for (const type of ['image/jpeg', 'image/webp', 'image/png']) {
     const dataUrl = await page.evaluate(type => {
       const canvas = document.createElement('canvas'); canvas.width = 40; canvas.height = 40;

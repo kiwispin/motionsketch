@@ -61,8 +61,9 @@ for (const [width, height] of [[1440, 900], [1280, 720], [1024, 768], [768, 1024
   });
 }
 
-test('the header says Download and shows how much browser storage is used', async ({ page }) => {
-  await expect(page.getByRole('button', { name: /Download$/ })).toBeVisible();
+test('the File menu offers Save project file and shows how much browser storage is used', async ({ page }) => {
+  await page.getByRole('button', { name: 'File', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: /Save project file/ })).toBeVisible();
   await page.evaluate(() => window.app.saveStorage());
-  await expect(page.locator('.storage-label')).toHaveText(/^Storage \d+%$/);
+  await expect(page.locator('.storage-label')).toHaveText(/^Browser storage: (under 1%|\d+%) used$/);
 });

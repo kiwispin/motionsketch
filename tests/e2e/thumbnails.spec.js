@@ -55,7 +55,7 @@ test('timeline changes draw only new frames, and canvas settings redraw all', as
   await page.evaluate(() => window.app.deleteFrame(0));
   expect(await draws(page)).toEqual([]);
 
-  await page.getByRole('button', { name: 'Canvas Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   await page.locator('#canvas-width').fill('800');
   await page.locator('#settings-apply').click();
   expect((await draws(page)).sort()).toEqual([0, 1, 2, 3, 4, 5]);

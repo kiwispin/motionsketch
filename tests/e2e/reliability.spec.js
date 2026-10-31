@@ -74,13 +74,13 @@ test('exposes editing controls to the keyboard and restores focus after dialogs'
   await expect(page.getByRole('button', { name: 'Rectangle tool (R)' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Shapes; show shape options' })).toHaveAttribute('aria-expanded', 'true');
 
-  const settings = page.getByRole('button', { name: 'Canvas Settings' });
+  const settings = page.getByRole('button', { name: 'Project', exact: true });
   await settings.focus();
   await settings.press('Enter');
-  await expect(page.getByRole('dialog', { name: 'Project Settings' })).toBeVisible();
-  await expect(page.locator('#canvas-width')).toBeFocused();
+  await expect(page.getByRole('dialog', { name: 'Project' })).toBeVisible();
+  await expect(page.locator('#project-name-input')).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog', { name: 'Project Settings' })).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'Project' })).toBeHidden();
   await expect(settings).toBeFocused();
 });
 

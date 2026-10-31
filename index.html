@@ -260,6 +260,53 @@
         .export-menu-item:hover, .export-menu-item:focus-visible { background: var(--btn-hover); outline: none; }
         .export-menu-item i { width: 16px; color: var(--accent-blue); text-align: center; }
         .export-menu-divider { height: 1px; margin: 5px 4px; background: var(--border-panel); }
+        /* File: New, Open and Save project file, with the storage meter. */
+        .save-status { display: inline-flex; align-items: center; gap: 6px; margin: 0 6px; font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; flex: 0 0 auto; margin-right: auto; }
+        #save-status-text { display: inline-block; min-width: 9.5em; }
+        .save-status i { color: #3fb36b; font-size: 0.7rem; }
+        .save-status.is-saving i { visibility: hidden; }
+        .save-status.is-error { color: #ff6961; }
+        .save-status.is-error i::before { content: "\f071"; }
+        .save-status.is-error i { color: #ff6961; }
+        .file-menu-wrapper { position: relative; flex: 0 0 auto; margin-left: 4px; }
+        .file-menu-toggle { gap: 8px; }
+        .file-menu-toggle .fa-chevron-down { font-size: 0.65rem; opacity: 0.7; }
+        .file-menu { width: min(280px, calc(100vw - 16px)); }
+        .file-menu .export-menu-item span { display: grid; gap: 1px; text-align: left; }
+        .file-menu .export-menu-item small { font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
+        .file-storage { display: grid; gap: 7px; padding: 8px 12px 10px; }
+        .file-storage .storage-label { margin: 0; font-size: 0.8rem; text-align: left; }
+        .file-storage .storage-track { width: 100%; height: 6px; }
+        /* New warns when the animation isn't saved as a file, because it replaces it. */
+        .new-unsaved { display: grid; grid-template-columns: auto 1fr; gap: 12px; margin: 4px 0 14px; padding: 14px; border-radius: 12px; text-align: left; background: rgba(255, 196, 0, 0.1); border: 1px solid rgba(255, 196, 0, 0.45); font-size: 0.9rem; line-height: 1.45; }
+        .new-unsaved > i { color: #ffc400; margin-top: 3px; }
+        .new-unsaved strong { display: block; margin-bottom: 2px; }
+        .new-unsaved-actions { margin-top: 10px; }
+        .new-saved { margin: 4px 0 14px; color: #3fb36b; font-size: 0.9rem; }
+        .new-unsaved[hidden], .new-saved[hidden] { display: none; }
+        /* Project: name, canvas size, background image and speed in one place. */
+        .project-box { width: min(460px, calc(100vw - 32px)); text-align: left; }
+        .project-box .modal-title { margin-bottom: 18px; }
+        .project-section { display: block; margin: 18px 0 8px; font-size: 0.85rem; font-weight: 600; color: var(--text-main); }
+        .project-field { width: 100%; box-sizing: border-box; padding: 9px 11px; border: 1px solid var(--border-panel); border-radius: 8px; background: var(--input-bg); color: var(--text-main); font: inherit; }
+        .project-field:focus { border-color: var(--accent-blue); outline: none; }
+        .size-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .size-preset { display: grid; justify-items: center; align-content: start; gap: 6px; padding: 10px 4px 8px; border: 1px solid var(--border-panel); border-radius: 10px; background: transparent; color: var(--text-main); font: inherit; font-size: 0.8rem; cursor: pointer; }
+        .size-preset:hover { background: var(--btn-hover); }
+        .size-preset small { color: var(--text-muted); font-size: 0.7rem; }
+        .size-preset i { height: 22px; display: grid; place-items: center; font-size: 1rem; opacity: 0.8; }
+        .size-shape { width: 18px; height: 18px; margin: 2px 0; border: 2px solid currentColor; border-radius: 3px; opacity: 0.8; }
+        .size-shape.wide { width: 28px; height: 16px; margin: 3px 0; }
+        .size-preset[aria-pressed="true"] { border-color: var(--accent-blue); box-shadow: inset 0 0 0 1px var(--accent-blue); color: var(--accent-blue); }
+        .size-preset[aria-pressed="true"] small { color: inherit; }
+        .size-inputs { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: var(--text-muted); }
+        .size-inputs .modal-input { width: 76px; }
+        .project-box .background-image-settings { margin-bottom: 0; }
+        .project-box .background-image-actions { justify-content: flex-start; }
+        .project-note { margin: 8px 0 0; font-size: 0.8rem; color: var(--text-muted); }
+        .project-speed { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; }
+        .project-speed output { min-width: 140px; text-align: right; font-size: 0.85rem; color: var(--text-main); }
+        .project-box .modal-btns { justify-content: flex-end; margin-top: 22px; }
 
         .storage-container { display: flex; flex-direction: column; justify-content: center; width: 76px; margin: 0 10px; }
         .storage-label { font-size: 0.68rem; color: var(--text-muted); margin-bottom: 3px; text-align: center; white-space: nowrap; }
@@ -898,6 +945,9 @@
             .top-actions .btn-ghost { font-size: 0; }
             .top-actions .btn-ghost i { font-size: 1rem; margin: 0; }
         }
+        @media (max-width: 1100px) {
+            #save-status-text { display: none; }
+        }
 
         @media (max-width: 900px) {
             .app-header { padding: 0 12px; }
@@ -993,6 +1043,9 @@
             .project-name { max-width: 110px; min-width: 60px; font-size: 0.85rem; padding: 4px 6px; }
             .top-actions .btn-ghost { font-size: 0; padding: 8px 10px; }
             .top-actions .btn-primary { font-size: 0.75rem; padding: 8px 10px; }
+            .save-status { display: none; }
+            .file-menu-toggle { padding: 8px 10px; }
+            .file-menu-toggle span, .file-menu-toggle .fa-chevron-down { display: none; }
             .top-actions .btn-ghost i { font-size: 1rem; margin: 0; }
             .workspace { top: 156px; left: 64px; right: 10px; bottom: 140px; }
             .tools-panel { top: 70px; bottom: 150px; left: 10px; width: 44px; padding: 8px 0; gap: 8px; }
@@ -1057,7 +1110,16 @@
     <div id="custom-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="new-project-modal-title" aria-hidden="true" tabindex="-1">
         <div class="modal-box" role="document">
             <div class="modal-title" id="new-project-modal-title">Start a new animation</div>
-            <div class="modal-desc">Choose a canvas. Your current work is already autosaved in this browser.</div>
+            <div class="new-unsaved" id="new-unsaved" hidden>
+                <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+                <div>
+                    <strong id="new-unsaved-title">This animation isn’t saved as a file yet.</strong>
+                    Starting a new animation replaces it in this browser, and it can’t be undone.
+                    <div class="new-unsaved-actions"><button type="button" class="btn-primary" id="new-save-first" onclick="app.saveProject()"><i class="fas fa-download" aria-hidden="true"></i> Save project file first</button></div>
+                </div>
+            </div>
+            <p class="new-saved" id="new-saved" hidden><i class="fas fa-check" aria-hidden="true"></i> Saved as a file. You can start a new animation.</p>
+            <div class="modal-desc">Choose a canvas for your new animation.</div>
             <div class="new-animation-options">
                 <button type="button" class="new-animation-option" onclick="app.confirmNewAnimation(600, 600)"><span><strong>Blank canvas</strong>Start drawing right away</span><span>600 × 600</span></button>
                 <button type="button" class="new-animation-option" onclick="app.confirmNewAnimation(1080, 1080)"><span><strong>Square loop</strong>Great for social posts</span><span>1080 × 1080</span></button>
@@ -1098,20 +1160,26 @@
     </div>
 
     <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" aria-hidden="true">
-        <div class="modal-box" role="document">
-            <div class="modal-title" id="settings-modal-title">Project Settings</div>
-            <div class="modal-desc">Adjust Canvas Size</div>
-            <div class="modal-input-group">
-                <div>
-                    <label class="modal-label" for="canvas-width">Width</label>
-                    <input type="number" id="canvas-width" class="modal-input" value="600" min="64" max="2048" step="1">
-                </div>
-                <div style="display:flex; align-items:center; padding-top:15px;">x</div>
-                <div>
-                    <label class="modal-label" for="canvas-height">Height</label>
-                    <input type="number" id="canvas-height" class="modal-input" value="600" min="64" max="2048" step="1">
-                </div>
+        <div class="modal-box project-box" role="document">
+            <div class="modal-title" id="settings-modal-title">Project</div>
+            <label class="modal-label" for="project-name-input">Name</label>
+            <input type="text" id="project-name-input" class="project-field" maxlength="80" autocomplete="off" onkeydown="if (event.key === 'Enter') { event.preventDefault(); app.applySettings(); } if (event.key !== 'Escape') event.stopPropagation();">
+            <div class="project-section" id="canvas-size-label">Canvas size</div>
+            <div class="size-presets" role="group" aria-labelledby="canvas-size-label">
+                <button type="button" class="size-preset" data-width="600" data-height="600" aria-pressed="false" onclick="app.pickCanvasPreset(this)"><span class="size-shape" aria-hidden="true"></span>Square<small>600 × 600</small></button>
+                <button type="button" class="size-preset" data-width="1080" data-height="1080" aria-pressed="false" onclick="app.pickCanvasPreset(this)"><span class="size-shape" aria-hidden="true"></span>Square HD<small>1080 × 1080</small></button>
+                <button type="button" class="size-preset" data-width="1280" data-height="720" aria-pressed="false" onclick="app.pickCanvasPreset(this)"><span class="size-shape wide" aria-hidden="true"></span>Wide<small>1280 × 720</small></button>
+                <button type="button" class="size-preset" data-custom="true" aria-pressed="false" onclick="app.pickCanvasPreset(this)"><i class="fas fa-pen" aria-hidden="true"></i>Custom<small>Any size</small></button>
             </div>
+            <div class="size-inputs">
+                <label for="canvas-width">Width</label>
+                <input type="number" id="canvas-width" class="modal-input" value="600" min="64" max="2048" step="1" oninput="app.syncCanvasPresets()">
+                <span aria-hidden="true">×</span>
+                <label for="canvas-height">Height</label>
+                <input type="number" id="canvas-height" class="modal-input" value="600" min="64" max="2048" step="1" oninput="app.syncCanvasPresets()">
+                <span>px</span>
+            </div>
+            <div class="project-section">Background image</div>
             <div class="background-image-settings">
                 <input type="file" id="background-image-input" accept="image/png,image/jpeg,image/webp" hidden onchange="app.loadBackgroundImage(this)">
                 <button type="button" class="btn-ghost" id="background-image-set" onclick="document.getElementById('background-image-input').click()"><i class="fas fa-image" aria-hidden="true"></i> Set Background Image</button>
@@ -1125,6 +1193,12 @@
                 <p class="background-image-hint" id="background-image-hint">Behind your drawings on every frame.</p>
                 <p id="background-image-error" role="alert" hidden></p>
             </div>
+            <p class="project-note">Background colour is in the drawing panel, because each frame can have its own.</p>
+            <label class="project-section" for="project-fps">Speed</label>
+            <div class="project-speed">
+                <input type="range" id="project-fps" min="1" max="24" value="12" oninput="app.syncProjectSpeed(this.value)">
+                <output id="project-fps-label" for="project-fps">12 frames per second</output>
+            </div>
             <div class="modal-btns">
                 <button class="btn-ghost" onclick="app.closeModal('settings-modal')">Cancel</button>
                 <button class="btn-primary" id="settings-apply" onclick="app.applySettings()">Apply</button>
@@ -1137,35 +1211,27 @@
             <i class="fas fa-pen-nib"></i> <span>SketchMotion</span>
         </div>
         <input class="project-name" id="project-name" type="text" value="Untitled" aria-label="Project name" title="Project name" onchange="app.setProjectName(this.value)" onkeydown="event.stopPropagation()">
-        <div class="top-actions">
-            <button class="btn-ghost" onclick="app.requestNewAnimation()" title="New animation"><i class="fas fa-plus"></i> New</button>
-            <button class="btn-ghost" onclick="app.saveProject()" title="Download the project file to keep a copy or share it"><i class="fas fa-download"></i> Download</button>
-            <button class="btn-ghost" onclick="app.openProject()" title="Open project file"><i class="fas fa-folder-open"></i> Open</button>
-            <div class="storage-container" title="Storage used in this browser">
-                <div class="storage-label">Storage</div>
-                <div class="storage-track">
-                    <div class="storage-fill" id="storage-bar"></div>
+        <div class="file-menu-wrapper" id="file-menu-wrapper">
+            <button type="button" class="btn-ghost file-menu-toggle" id="file-menu-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu" onclick="app.toggleFileMenu()"><i class="fas fa-folder" aria-hidden="true"></i><span>File</span><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+            <div class="export-menu file-menu" id="file-menu" role="menu" aria-label="File" hidden>
+                <button class="export-menu-item" type="button" role="menuitem" onclick="app.runFileAction('new')"><i class="fas fa-plus" aria-hidden="true"></i><span>New animation…</span></button>
+                <button class="export-menu-item" type="button" role="menuitem" onclick="app.runFileAction('open')"><i class="fas fa-folder-open" aria-hidden="true"></i><span>Open project file…</span></button>
+                <button class="export-menu-item" type="button" role="menuitem" onclick="app.runFileAction('save')"><i class="fas fa-download" aria-hidden="true"></i><span>Save project file<small>Keep a copy, or hand it in</small></span></button>
+                <div class="export-menu-divider" role="separator"></div>
+                <div class="file-storage" title="How much of this browser's storage your project uses">
+                    <div class="storage-label">Browser storage</div>
+                    <div class="storage-track"><div class="storage-fill" id="storage-bar"></div></div>
                 </div>
             </div>
-            <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
+        </div>
+        <span class="save-status" id="save-status" role="status" title="Your work is kept in this browser as you go"><i class="fas fa-check" aria-hidden="true"></i><span id="save-status-text">Saved in this browser</span></span>
+        <div class="top-actions">
             <button class="btn-ghost" onclick="app.undo()" aria-label="Undo" title="Undo"><i class="fas fa-undo"></i></button>
             <button class="btn-ghost" onclick="app.redo()" aria-label="Redo" title="Redo"><i class="fas fa-redo"></i></button>
             <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
             <button class="btn-ghost" onclick="app.toggleTheme()" aria-label="Toggle theme" title="Toggle Theme">
                 <i class="fas fa-moon" id="theme-icon"></i>
             </button>
-            <div class="export-menu-wrapper" id="export-menu-wrapper">
-                <button class="btn-primary" id="export-menu-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu" onclick="app.toggleExportMenu()"><i class="fas fa-share-square"></i> Export <i class="fas fa-chevron-down"></i></button>
-                <div class="export-menu" id="export-menu" role="menu" aria-label="Export options" hidden>
-                    <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('gif')"><i class="fas fa-film"></i> GIF animation</button>
-                    <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('webm')"><i class="fas fa-video"></i> Video (WebM)</button>
-                    <div class="export-menu-divider" role="separator"></div>
-                    <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('png')"><i class="fas fa-image"></i> Current frame PNG</button>
-                    <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('transparent-png')"><i class="fas fa-border-none"></i> Transparent PNG</button>
-                    <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('svg')"><i class="fas fa-bezier-curve"></i> SVG artwork</button>
-                    <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('png-sequence')"><i class="fas fa-file-archive"></i> PNG frames ZIP</button>
-                </div>
-            </div>
             <div class="drawing-aids-wrapper header-drawing-aids-wrapper">
                 <button type="button" class="btn-ghost drawing-aids-toggle" id="drawing-aids-toggle" onclick="app.toggleDrawingAids()" aria-expanded="false" aria-controls="drawing-aids-menu" title="Show drawing aids">
                     <span><i class="fas fa-sliders-h"></i> Drawing Aids</span><i class="fas fa-chevron-down" aria-hidden="true"></i>
@@ -1178,7 +1244,19 @@
                     <button type="button" class="btn-ghost" id="reference-remove" onclick="app.clearReferenceImage()" style="display:none"><i class="fas fa-times"></i> Remove ref.</button>
                 </div>
             </div>
-            <button class="btn-ghost" id="canvas-settings-btn" onclick="app.openSettings()" aria-label="Canvas Settings" title="Canvas Settings: size and background image"><i class="fas fa-cog"></i></button>
+            <button class="btn-ghost" id="canvas-settings-btn" onclick="app.openSettings()" aria-label="Project" title="Project: name, canvas size, background and speed"><i class="fas fa-film"></i></button>
+            <div class="export-menu-wrapper" id="export-menu-wrapper">
+                <button class="btn-primary" id="export-menu-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu" onclick="app.toggleExportMenu()"><i class="fas fa-share-square"></i> Export <i class="fas fa-chevron-down"></i></button>
+                <div class="export-menu" id="export-menu" role="menu" aria-label="Export options" hidden>
+                    <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('gif')"><i class="fas fa-film"></i> GIF animation</button>
+                    <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('webm')"><i class="fas fa-video"></i> Video (WebM)</button>
+                    <div class="export-menu-divider" role="separator"></div>
+                    <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('png')"><i class="fas fa-image"></i> Current frame PNG</button>
+                    <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('transparent-png')"><i class="fas fa-border-none"></i> Transparent PNG</button>
+                    <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('svg')"><i class="fas fa-bezier-curve"></i> SVG artwork</button>
+                    <button class="export-menu-item" type="button" role="menuitem" onclick="app.runExport('png-sequence')"><i class="fas fa-file-archive"></i> PNG frames ZIP</button>
+                </div>
+            </div>
         </div>
     </header>
 

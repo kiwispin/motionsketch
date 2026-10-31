@@ -281,8 +281,9 @@ test('Truck creates independent tracks for multiple objects and saves them', asy
     badges: document.querySelectorAll('.frame-key-badge').length
   }))).toEqual({ tracks: 2, keys: [[2], [2]], badges: 1 });
 
+  await page.getByRole('button', { name: 'File', exact: true }).click();
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: /Download/ }).click();
+  await page.getByRole('menuitem', { name: /Save project file/ }).click();
   const download = await downloadPromise;
   const saved = JSON.parse(await fs.readFile(await download.path(), 'utf8'));
   expect(saved.motionTracks).toHaveLength(2);
