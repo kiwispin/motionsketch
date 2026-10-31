@@ -160,7 +160,6 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; background: v
         white-space: nowrap;
     }
     .tools-panel .tool-btn.active::after { font-weight: 500; }
-    .tools-panel .onion-icon { width: 1.2rem; height: 1.2rem; }
     .tools-panel #tool-select::after { content: "Select"; }
     .tools-panel #tool-truck::after { content: "Motion"; }
     .tools-panel #tool-brush-anchor::after { content: "Brush"; }
@@ -169,7 +168,6 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; background: v
     .tools-panel #tool-eraser::after { content: "Eraser"; }
     .tools-panel #tool-bucket::after { content: "Fill"; }
     .tools-panel #tool-hand::after { content: "Hand"; }
-    .tools-panel #onion-btn::after { content: "Onion"; }
     /* Flyout options stay as icons beside the column. */
     .tools-panel .flyout-menu { left: 78px; }
     .tools-panel .flyout-menu .tool-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; flex: 0 0 44px; }
@@ -181,7 +179,6 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; background: v
 @media (min-width: 901px) and (min-height: 740px) and (max-height: 859px) {
     .tools-panel { padding: 6px 0; gap: 2px; }
     .tools-panel .tool-btn { height: 42px; min-height: 42px; flex: 0 0 42px; gap: 1px; font-size: 0.95rem; }
-    .tools-panel .onion-icon { width: 1.05rem; height: 1.05rem; }
     .tools-panel .divider { margin: 2px 0; }
 }
 

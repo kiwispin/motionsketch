@@ -65,7 +65,7 @@ test('persists undo and synchronizes restored FPS controls', async ({ page }) =>
     fps: window.app.fps,
     display: document.getElementById('fps-disp').innerText,
     slider: document.querySelector('.timeline-controls input[type=range][oninput*="setFps"]').value
-  }))).toEqual({ strokes: 0, fps: 7, display: '7 FPS', slider: '7' });
+  }))).toEqual({ strokes: 0, fps: 7, display: '7 fps', slider: '7' });
 });
 
 test('exposes editing controls to the keyboard and restores focus after dialogs', async ({ page }) => {
@@ -328,13 +328,19 @@ test('supports undoable frame holds and loop/once playback modes', async ({ page
     window.app.addFrame();
     window.app.addFrame();
   });
-  const hold = page.locator('#frame-hold');
-  await hold.fill('4');
-  await expect(page.locator('#frame-hold-disp')).toHaveText('4f');
+  // Hold is a stepper: three steps longer is ×4.
+  const longer = page.getByRole('button', { name: 'Hold this frame for longer' });
+  await expect(page.getByRole('button', { name: 'Hold this frame for less time' })).toBeDisabled();
+  await longer.click();
+  await longer.click();
+  await longer.click();
+  await expect(page.locator('#frame-hold-disp')).toHaveText('×4');
+  await expect(page.locator('.frame-card.active .frame-hold-badge')).toHaveText('×4');
   await expect.poll(() => page.evaluate(() => window.app.frames[window.app.frameIndex].hold)).toBe(4);
 
+  // Each step is one undo.
   await page.getByRole('button', { name: 'Undo' }).click();
-  await expect.poll(() => page.evaluate(() => window.app.frames[window.app.frameIndex].hold)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.app.frames[window.app.frameIndex].hold)).toBe(3);
   await page.getByRole('button', { name: 'Redo' }).click();
   await expect.poll(() => page.evaluate(() => window.app.frames[window.app.frameIndex].hold)).toBe(4);
 
@@ -406,7 +412,7 @@ for (const viewport of [
     const measure = () => page.evaluate(() => {
       const panel = document.querySelector('.tools-panel').getBoundingClientRect();
       const props = document.querySelector('.props-panel').getBoundingClientRect();
-      const selectors = ['#tool-select', '#tool-truck', '#brush-wrapper', '#shape-wrapper', '#tool-text', '#tool-eraser', '#tool-bucket', '#tool-hand', '.divider', '#onion-btn'];
+      const selectors = ['#tool-select', '#tool-truck', '#brush-wrapper', '#shape-wrapper', '#tool-text', '#tool-eraser', '#tool-bucket', '#tool-hand'];
       const boxes = selectors.map((selector) => {
         const box = document.querySelector(selector).getBoundingClientRect();
         return { selector, top: box.top, bottom: box.bottom };

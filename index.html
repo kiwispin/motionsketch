@@ -605,9 +605,15 @@
         .timeline-controls-wrapper > :last-child { margin-right: auto; }
         .timeline-controls .btn-ghost { padding: 7px 9px; }
         .timeline-controls .slider-row { flex: 0 0 auto; }
-        .timeline-hold { gap: 4px; width: auto; }
-        .timeline-hold input[type="range"] { width: 46px; flex: 0 0 46px; }
-        .timeline-hold .slider-val { width: 24px; }
+        .timeline-label { font-size: 0.75rem; color: var(--text-muted); }
+        .timeline-hold { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+        .hold-stepper { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--border-panel); border-radius: 9px; }
+        .timeline-controls .hold-stepper .btn-ghost { width: 26px; height: 26px; padding: 0; display: grid; place-items: center; border-radius: 7px; font-size: 0.7rem; }
+        .hold-stepper .btn-ghost:disabled { opacity: 0.35; cursor: default; }
+        .hold-stepper output { min-width: 26px; text-align: center; font-size: 0.85rem; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-main); }
+        .timeline-onion { display: inline-flex; align-items: center; gap: 6px; }
+        .timeline-onion .onion-icon { width: 16px; height: 16px; }
+        .timeline-onion .onion-icon .onion-cut { stroke: var(--bg-panel); }
         .timeline-fps { display: flex; align-items: center; gap: 5px; flex: 0 0 auto; }
         .timeline-fps input[type="range"] { width: 50px; flex: 0 0 50px; }
         .timeline-fps .fps-value {
@@ -698,8 +704,10 @@
         .frames-track::-webkit-scrollbar-thumb:hover { background-color: rgba(128, 128, 128, 0.6); }
 
         .frame-card {
-            min-width: 90px;
-            height: 68px;
+            /* Shaped like the canvas, between 4:3 and 16:9 (set from main.js). */
+            width: calc(72px * var(--frame-card-ratio, 1.3333));
+            min-width: 0;
+            height: 72px;
             background: white;
             border-radius: 6px;
             position: relative;
@@ -728,6 +736,7 @@
         .frame-card.frame-selected { border-color: #ff9f0a; box-shadow: inset 0 0 0 2px rgba(255, 159, 10, 0.9), 0 0 0 2px rgba(255, 159, 10, 0.25); }
         .frame-card.active.frame-selected { border-color: #ff9f0a; box-shadow: inset 0 0 0 2px rgba(255, 159, 10, 0.9), 0 0 0 2px rgba(255, 159, 10, 0.25); }
 
+        .frame-hold-badge { margin-left: 3px; padding: 0 4px; border-radius: 3px; background: #1d1b20; color: #fff; font-weight: 600; }
         .frame-num { position: absolute; top: 3px; left: 4px; font-size: 10px; color: #000; font-weight: 800; background: rgba(255, 255, 255, 0.8); padding: 1px 4px; border-radius: 3px; pointer-events: none; }
 
         .frame-delete-btn {
@@ -1077,7 +1086,7 @@
             .props-panel .layer-switch { width: auto; }
             .props-panel .slider-row { width: 126px; }
             .timeline-panel { left: 10px; right: 10px; bottom: 10px; height: 154px; }
-            .frame-card { min-width: 70px; height: 55px; }
+            .frame-card { width: calc(55px * var(--frame-card-ratio, 1.3333)); height: 55px; }
             .frames-track .add-frame-btn { min-width: 40px; height: 40px; }
             .flyout-menu { left: 48px; }
             body.truck-active .flyout-menu { left: 58px; }
@@ -1340,15 +1349,6 @@
             <i class="fas fa-hand-paper"></i>
         </button>
 
-        <div class="divider"></div>
-
-        <button type="button" class="tool-btn" id="onion-btn" onclick="app.toggleOnion()" aria-label="Toggle onion skin" aria-pressed="false" title="Onion Skin">
-            <svg class="onion-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M12 2c.8 1.4 2.4 2.2 4.4 3.7 2.4 1.8 3.7 4.1 3.5 6.7-.2 3.5-2.1 6.3-4.9 7.8L13.5 22 12 20.7 10.5 22 9 20.2c-2.8-1.5-4.7-4.3-4.9-7.8-.2-2.6 1.1-4.9 3.5-6.7C9.6 4.2 11.2 3.4 12 2Z"></path>
-                <path class="onion-cut" d="M9.1 9.4c-1.4 1.1-1.4 3.1 0 4.2M14.9 9.4c1.4 1.1 1.4 3.1 0 4.2"></path>
-            </svg>
-        </button>
-
         <div style="flex:1"></div>
     </div>
 
@@ -1400,7 +1400,7 @@
             </div>
         </div>
         <div class="prop-group">
-            <div class="prop-label">Color</div>
+            <div class="prop-label">Colour</div>
             <div class="color-input-wrap">
                 <input type="color" id="html-color-picker" aria-label="Brush colour" value="#000000" oninput="app.setColor(this.value)">
             </div>
@@ -1485,18 +1485,28 @@
                 <button type="button" class="btn-ghost" id="previous-frame-btn" onclick="app.previousFrame()" aria-label="Previous frame" title="Previous frame"><i class="fas fa-step-backward"></i></button>
                 <span class="frame-position" id="frame-position" aria-live="polite">Frame 1 of 1</span>
                 <button type="button" class="btn-ghost" id="next-frame-btn" onclick="app.nextFrame()" aria-label="Next frame" title="Next frame"><i class="fas fa-step-forward"></i></button>
+                <button type="button" class="btn-ghost timeline-onion" id="onion-btn" onclick="app.toggleOnion()" aria-label="Toggle onion skin" aria-pressed="false" title="Onion skin: see the frames before and after faintly">
+                    <svg class="onion-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M12 2c.8 1.4 2.4 2.2 4.4 3.7 2.4 1.8 3.7 4.1 3.5 6.7-.2 3.5-2.1 6.3-4.9 7.8L13.5 22 12 20.7 10.5 22 9 20.2c-2.8-1.5-4.7-4.3-4.9-7.8-.2-2.6 1.1-4.9 3.5-6.7C9.6 4.2 11.2 3.4 12 2Z"></path>
+                        <path class="onion-cut" d="M9.1 9.4c-1.4 1.1-1.4 3.1 0 4.2M14.9 9.4c1.4 1.1 1.4 3.1 0 4.2"></path>
+                    </svg>
+                    <span>Onion skin</span>
+                </button>
                 <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
-                <label class="slider-row timeline-hold" for="frame-hold" title="How many timeline ticks the current frame remains visible">
-                    <span style="font-size:0.75rem; color:var(--text-muted);">Hold</span>
-                    <input type="range" id="frame-hold" aria-label="Frame hold" min="1" max="12" value="1" oninput="app.setFrameHold(this.value)">
-                    <output id="frame-hold-disp" class="slider-val">1f</output>
-                </label>
+                <div class="timeline-hold" role="group" aria-labelledby="frame-hold-label" title="How long this frame stays on screen. ×2 means twice as long.">
+                    <span class="timeline-label" id="frame-hold-label">Hold</span>
+                    <span class="hold-stepper">
+                        <button type="button" class="btn-ghost" id="frame-hold-less" onclick="app.stepFrameHold(-1)" aria-label="Hold this frame for less time"><i class="fas fa-minus" aria-hidden="true"></i></button>
+                        <output id="frame-hold-disp" aria-live="polite">×1</output>
+                        <button type="button" class="btn-ghost" id="frame-hold-more" onclick="app.stepFrameHold(1)" aria-label="Hold this frame for longer"><i class="fas fa-plus" aria-hidden="true"></i></button>
+                    </span>
+                </div>
                 <button type="button" class="btn-ghost is-loop" id="loop-mode-btn" onclick="app.toggleLoopMode()" title="Play keeps repeating. Click to play once.">Loop</button>
                 <div style="width:1px; height:20px; background:var(--border-panel); margin:0 5px;"></div>
                 <div class="timeline-fps">
-                    <i class="fas fa-tachometer-alt" style="color:var(--text-muted); font-size:0.8rem;"></i>
-                    <input id="fps-control" type="range" aria-label="Playback frames per second" min="1" max="24" value="12" oninput="app.setFps(this.value)">
-                    <span id="fps-disp" class="fps-value" style="text-align: left; font-size:0.8rem; font-variant-numeric: tabular-nums; color:var(--text-muted)">12 FPS</span>
+                    <label class="timeline-label" for="fps-control">Speed</label>
+                    <input id="fps-control" type="range" aria-label="Speed in frames per second" min="1" max="24" value="12" oninput="app.setFps(this.value)" title="Frames per second">
+                    <span id="fps-disp" class="fps-value" style="text-align: left; font-size:0.8rem; font-variant-numeric: tabular-nums; color:var(--text-muted)">12 fps</span>
                 </div>
             </div>
                 <div class="frame-actions" aria-label="Frame actions">

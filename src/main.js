@@ -207,7 +207,8 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
             }
 
             loadTheme() {
-                const theme = localStorage.getItem('motionSketchTheme') || 'dark';
+                let theme = 'dark';
+                try { theme = localStorage.getItem('motionSketchTheme') || 'dark'; } catch (e) { /* storage blocked */ }
                 document.body.setAttribute('data-theme', theme);
                 this.updateThemeIcon(theme);
             }
@@ -223,7 +224,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 const current = document.body.getAttribute('data-theme');
                 const next = current === 'light' ? 'dark' : 'light';
                 document.body.setAttribute('data-theme', next);
-                localStorage.setItem('motionSketchTheme', next);
+                try { localStorage.setItem('motionSketchTheme', next); } catch (e) { /* storage blocked */ }
                 this.updateThemeIcon(next);
             }
 
@@ -302,7 +303,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
             // timeline. Step down to smaller buttons until the last tool fits.
             fitToolsPanel() {
                 const panel = document.querySelector('.tools-panel');
-                const last = document.getElementById('onion-btn');
+                const last = document.getElementById('tool-hand');
                 const timeline = document.querySelector('.timeline-panel');
                 if (!panel || !last) return;
                 // The panel's stylesheet bottom can reach behind the timeline at some
@@ -533,6 +534,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                         (target.tagName === 'INPUT' && ['text', 'number', 'password', 'search', 'email', 'url', 'tel'].includes((target.type || '').toLowerCase()))
                     );
                     if (isTypingTarget) return;
+                    if (target?.tagName === 'INPUT' && target.type === 'range' && e.key.startsWith('Arrow')) return;
 
                     const key = (e.key || '').toLowerCase();
                     const hasCommandModifier = e.ctrlKey || e.metaKey;
@@ -600,11 +602,11 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     }
 
                     if (e.key === 'Delete' || e.key === 'Backspace') {
+                        // Some browsers go back a page on Backspace; never let that happen here.
+                        e.preventDefault();
                         if (this.selectedObject) {
-                            e.preventDefault();
                             this.deleteSelected();
-                        } else if (this.frames.length > 1) {
-                            e.preventDefault();
+                        } else if (this.frames.length > 1 && this.isTimelineCommandContext(target)) {
                             this.deleteFrame();
                         }
                     }
@@ -4760,6 +4762,11 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 return Math.max(1, Math.min(12, Number.parseInt(frame?.hold, 10) || 1));
             }
 
+            stepFrameHold(delta) {
+                const next = this.getFrameHold({ hold: this.getFrameHold() + delta });
+                if (next !== this.getFrameHold()) this.setFrameHold(next);
+            }
+
             setFrameHold(value) {
                 this.saveState();
                 this.frames[this.frameIndex].hold = this.getFrameHold({ hold: value });
@@ -5183,7 +5190,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 const control = this.getFpsControl();
                 if (control) control.value = String(fps);
                 const display = document.getElementById('fps-disp');
-                if (display) display.innerText = fps + ' FPS';
+                if (display) display.innerText = `${fps} fps`;
             }
 
             setFps(val) {
@@ -5423,11 +5430,32 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 
             syncTimelineSettings() {
                 const hold = this.getFrameHold();
-                const holdControl = document.getElementById('frame-hold');
                 const holdDisplay = document.getElementById('frame-hold-disp');
                 const loopButton = document.getElementById('loop-mode-btn');
-                if (holdControl) holdControl.value = hold;
-                if (holdDisplay) holdDisplay.textContent = `${hold}f`;
+                if (holdDisplay) holdDisplay.textContent = `×${hold}`;
+                const less = document.getElementById('frame-hold-less');
+                const more = document.getElementById('frame-hold-more');
+                if (less) less.disabled = hold <= 1;
+                if (more) more.disabled = hold >= 12;
+                // Thumbnails are shaped like the canvas and show any hold.
+                const ratio = Math.min(16 / 9, Math.max(4 / 3, this.canvasWidth / this.canvasHeight));
+                this.framesList?.style.setProperty('--frame-card-ratio', ratio.toFixed(4));
+                this.framesList?.querySelectorAll('.frame-card').forEach((card, index) => {
+                    const num = card.querySelector('.frame-num');
+                    if (!num) return;
+                    const frameHold = this.getFrameHold(this.frames[index]);
+                    let badge = num.querySelector('.frame-hold-badge');
+                    if (frameHold > 1) {
+                        if (!badge) {
+                            badge = document.createElement('span');
+                            badge.className = 'frame-hold-badge';
+                            num.appendChild(badge);
+                        }
+                        badge.textContent = `×${frameHold}`;
+                    } else {
+                        badge?.remove();
+                    }
+                });
                 if (loopButton) {
                     // The button names what Play will do; clicking switches to the other.
                     const isLoop = this.loopMode === 'loop';

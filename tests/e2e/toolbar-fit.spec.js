@@ -11,8 +11,9 @@ for (const [width, height] of sizes) {
     const measure = () => page.evaluate(() => {
       const panel = document.querySelector('.tools-panel').getBoundingClientRect();
       const timeline = document.querySelector('.timeline-panel').getBoundingClientRect();
-      const onion = document.getElementById('onion-btn').getBoundingClientRect();
-      return { insidePanel: onion.bottom <= panel.bottom + 0.5, clearOfTimeline: onion.bottom <= timeline.top, height: Math.round(onion.height) };
+      // Hand is the last tool in the column.
+      const last = document.getElementById('tool-hand').getBoundingClientRect();
+      return { insidePanel: last.bottom <= panel.bottom + 0.5, clearOfTimeline: last.bottom <= timeline.top, height: Math.round(last.height) };
     });
 
     const normal = await measure();

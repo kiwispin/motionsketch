@@ -101,7 +101,7 @@ test('Project sets the name, canvas size from a preset, and speed in one place',
 
   expect(await page.evaluate(() => ({ name: window.app.projectName, width: window.app.canvasWidth, height: window.app.canvasHeight, fps: window.app.fps }))).toEqual({ name: 'Rocket launch', width: 1280, height: 720, fps: 8 });
   await expect(page.locator('#project-name')).toHaveValue('Rocket launch');
-  await expect(page.locator('#fps-disp')).toHaveText('8 FPS');
+  await expect(page.locator('#fps-disp')).toHaveText('8 fps');
 
   // Typing a size that matches no preset picks Custom.
   await page.getByRole('button', { name: 'Project', exact: true }).click();
