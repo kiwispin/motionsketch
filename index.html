@@ -1099,7 +1099,7 @@
             .props-panel .color-input-wrap { width: 52px; height: 44px; }
             .props-panel { overflow-x: auto; }
             .timeline-controls { padding-left: 12px; padding-right: 12px; overflow-x: auto; justify-content: flex-start; }
-            .timeline-controls-wrapper { width: max-content; min-width: 100%; justify-content: flex-start; }
+            .timeline-controls-wrapper { width: max-content; min-width: 0; flex: 0 0 auto; justify-content: flex-start; }
             .timeline-frames-row { min-height: 88px; }
             .frame-actions { padding-right: 8px; }
         }
@@ -1177,6 +1177,49 @@
         .tools-panel.tools-tiny .tool-btn,
         .tools-panel.tools-tiny .flyout-menu .tool-btn { width: 30px; height: 30px; min-width: 30px; min-height: 30px; flex-basis: 30px; font-size: 0.9rem; }
         .tools-panel.tools-tiny .divider { margin: 0; }
+
+        /* Narrow windows: the timeline and header fold labels into icons,
+           least important first, so every control stays on screen. The
+           words stay for screen readers and tooltips. */
+        .timeline-panel { container: timeline / inline-size; }
+        .visually-hidden-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+        @container timeline (max-width: 1279px) {
+            .timeline-onion span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+        }
+        @container timeline (max-width: 1199px) {
+            .timeline-action { width: 40px; min-width: 40px; }
+            .timeline-action span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+        }
+        @container timeline (max-width: 1023px) {
+            .timeline-controls .timeline-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+            #loop-mode-btn { min-width: 0; padding-left: 9px; padding-right: 9px; }
+            #loop-mode-btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+            .frame-position { min-width: 0; }
+        }
+        @container timeline (max-width: 859px) {
+            #rewind-btn { display: none; }
+            .timeline-fps input[type="range"] { width: 40px; flex-basis: 40px; }
+        }
+        /* Very narrow: the row scrolls, and shows that it does. */
+        @container timeline (max-width: 759px) {
+            .timeline-controls { scrollbar-width: thin; }
+        }
+        @media (max-width: 900px) {
+            .save-status { display: none; }
+            .project-name { max-width: 140px; }
+            .file-menu-toggle { padding-left: 10px; padding-right: 10px; }
+            .file-menu-toggle span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+        }
+        @media (max-width: 1099px) {
+            .logo span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+            .logo { gap: 0; }
+        }
+        /* Touchscreens: finger-sized buttons in the header, timeline and zoom. */
+        @media (pointer: coarse) {
+            .app-header .btn-ghost, .app-header .btn-primary, .timeline-controls .btn-ghost, .zoom-btn { min-height: 44px; min-width: 44px; }
+            .timeline-action { height: 44px; }
+            .hold-stepper .btn-ghost { width: 36px; height: 36px; }
+        }
     </style>
 </head>
 
@@ -1264,6 +1307,7 @@
                 <li><i class="fas fa-stream" aria-hidden="true"></i><div><strong>A tidier timeline</strong>Hold is now <b>− ×2 +</b>: ×2 means a frame stays on screen twice as long, and held frames show it on their thumbnail. <b>Onion skin</b> has moved to the timeline, next to the frame counter. Thumbnails are bigger and the same shape as your canvas.</div></li>
                 <li><i class="fas fa-flag-checkered" aria-hidden="true"></i><div><strong>Getting started</strong><b>File › Getting started</b> walks you through your first animation, and opens a sample bouncing ball to explore.</div></li>
                 <li><i class="fas fa-keyboard" aria-hidden="true"></i><div><strong>Keyboard shortcuts</strong>Press <kbd>?</kbd> to see them all.</div></li>
+                <li><i class="fas fa-compress-alt" aria-hidden="true"></i><div><strong>Fits smaller windows</strong>In a narrow window, the timeline and header buttons fold into icons instead of disappearing off the edge. Hover over one to see its name. On a touchscreen, the buttons are bigger.</div></li>
                 <li><i class="fas fa-backspace" aria-hidden="true"></i><div><strong>Backspace is safer</strong>It no longer deletes a whole frame. To delete a frame, click it in the timeline, then press <kbd>Delete</kbd>.</div></li>
             </ul>
             <h3 class="whats-new-heading">Earlier this month</h3>
@@ -1592,7 +1636,7 @@
                 <button type="button" class="play-fab" id="play-btn" onclick="app.togglePlay()" aria-label="Play animation" aria-pressed="false">
                     <i class="fas fa-play"></i>
                 </button>
-                <button type="button" class="btn-ghost" onclick="app.rewind()" aria-label="Rewind to first frame" title="Rewind to Start">
+                <button type="button" class="btn-ghost" id="rewind-btn" onclick="app.rewind()" aria-label="Rewind to first frame" title="Rewind to Start">
                     <i class="fas fa-fast-backward"></i>
                 </button>
                 <button type="button" class="btn-ghost" id="previous-frame-btn" onclick="app.previousFrame()" aria-label="Previous frame" title="Previous frame"><i class="fas fa-step-backward"></i></button>
@@ -1624,7 +1668,7 @@
             </div>
                 <div class="frame-actions" aria-label="Frame actions">
                     <button type="button" class="timeline-action primary add-frame-btn" id="timeline-add" onclick="app.addFrame()" title="Add frame (A)"><i class="fas fa-plus"></i><span>Add</span></button>
-                    <button type="button" class="timeline-action" id="timeline-duplicate" onclick="app.duplicateSelectedFrames()" title="Duplicate selected frame(s)"><i class="far fa-copy"></i><span>Duplicate</span></button>
+                    <button type="button" class="timeline-action" id="timeline-duplicate" onclick="app.duplicateSelectedFrames()" title="Duplicate selected frame(s)"><i class="far fa-clone"></i><span>Duplicate</span></button>
                     <button type="button" class="timeline-action" id="timeline-delete" onclick="app.deleteSelectedFrames()" title="Delete selected frame(s)"><i class="fas fa-trash"></i><span>Delete</span></button>
                     <button type="button" class="timeline-action" id="timeline-copy" onclick="app.copySelectedFrames()" title="Copy selected frame(s)"><i class="far fa-copy"></i><span>Copy</span></button>
                     <button type="button" class="timeline-action" id="timeline-paste" onclick="app.pasteSelectedFrames()" title="Paste copied frame(s)"><i class="far fa-clipboard"></i><span>Paste</span></button>

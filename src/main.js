@@ -13,7 +13,7 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 // history stays small.
 const HISTORY_LIMIT = 100;
 // Bump when the What's new notes change, so the dot shows again.
-const WHATS_NEW_VERSION = '2026-10-31';
+const WHATS_NEW_VERSION = '2026-10-31b';
 const GUIDE_KEY = 'motionSketchGuide';
 const ONION_BEFORE_TINT = '#2f6bff';
 const ONION_AFTER_TINT = '#19a35b';

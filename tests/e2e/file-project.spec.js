@@ -141,7 +141,7 @@ test('What’s new is in the File menu, with a dot until it has been read', asyn
 
   const dialog = page.getByRole('dialog', { name: 'What’s new in SketchMotion' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('strong')).toHaveText(['A tidier timeline', 'Getting started', 'Keyboard shortcuts', 'Backspace is safer', 'A fresh look', 'More room to draw', 'Truck is now Motion', 'A File menu', 'A safer New', 'One place for your project']);
+  await expect(dialog.locator('strong')).toHaveText(['A tidier timeline', 'Getting started', 'Keyboard shortcuts', 'Fits smaller windows', 'Backspace is safer', 'A fresh look', 'More room to draw', 'Truck is now Motion', 'A File menu', 'A safer New', 'One place for your project']);
   await expect(page.locator('#whats-new-close')).toBeFocused();
   await page.getByRole('button', { name: 'Got it' }).click();
   await expect(dialog).toBeHidden();
