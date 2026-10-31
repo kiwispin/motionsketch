@@ -13,7 +13,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 // history stays small.
 const HISTORY_LIMIT = 100;
 // Bump when the What's new notes change, so the dot shows again.
-const WHATS_NEW_VERSION = '2026-10';
+const WHATS_NEW_VERSION = '2026-10-31';
+const GUIDE_KEY = 'motionSketchGuide';
 const ONION_BEFORE_TINT = '#2f6bff';
 const ONION_AFTER_TINT = '#19a35b';
 const LOOP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>';
@@ -141,6 +142,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.fileSaved = true;
                 this.zoom = 1.0;
                 this.panelsHidden = false;
+                this.guideStep = 0;
                 this.isHandTool = false;
                 this.spacePanActive = false;
                 this.spacePanUsed = false;
@@ -173,7 +175,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 window.addEventListener('load', () => this.fitToolsPanel());
                 this.resizeCanvas(this.canvasWidth, this.canvasHeight);
 
-                await this.loadStorage();
+                const hadProject = await this.loadStorage();
                 this.renderUI();
                 this.renderPalette();
                 this.updateCursorStyle();
@@ -185,6 +187,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 
                 const picker = document.getElementById('html-color-picker');
                 if (picker) picker.value = this.brushColor;
+                if (!hadProject && !this.readPref(GUIDE_KEY)) this.showWelcome(true);
             }
 
             // Marks the settings panel when it can scroll further, so its edges
@@ -366,6 +369,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.positionZoomControls();
                 if (this.showGrid) this.canvasWrapper.style.setProperty('--grid-size', `${this.snapSize * this.zoom}px`);
                 this.updateBrushPreview();
+                this.renderGuide();
             }
 
             setupEvents() {
@@ -534,6 +538,11 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                         (target.tagName === 'INPUT' && ['text', 'number', 'password', 'search', 'email', 'url', 'tel'].includes((target.type || '').toLowerCase()))
                     );
                     if (isTypingTarget) return;
+                    if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                        e.preventDefault();
+                        this.toggleShortcuts();
+                        return;
+                    }
                     if (target?.tagName === 'INPUT' && target.type === 'range' && e.key.startsWith('Arrow')) return;
 
                     const key = (e.key || '').toLowerCase();
@@ -873,6 +882,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 modal.style.display = 'flex';
                 modal.setAttribute('aria-hidden', 'false');
                 document.getElementById(focusId)?.focus();
+                this.renderGuide();
             }
 
             applySettings() {
@@ -2681,6 +2691,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     this.renderCanvas();
                     this.updateThumbnails([this.frameIndex]);
                     this.saveStorage();
+                    if (this.tool !== 'eraser') this.guideEvent('stroke');
                 }
                 if (this.dragMode) {
                     const finishedDragMode = this.dragMode;
@@ -3762,6 +3773,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 // Update floating group toolbar
                 this.updateGroupToolbar();
                 this.updateInspector();
+                this.updatePaperHint();
             }
 
             scheduleRender() {
@@ -4900,6 +4912,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.renderUI();
                 this.renderCanvas();
                 this.saveStorage();
+                this.guideEvent('frame');
                 setTimeout(() => {
                     const addBtn = document.getElementById('timeline-add');
                     if (addBtn) addBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
@@ -5143,6 +5156,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     this.renderCanvas();
                 } else {
                     this.isPlaying = true;
+                    this.guideEvent('play');
                     document.querySelector('#play-btn i').className = 'fas fa-stop';
                     document.getElementById('play-btn').style.background = '#ff3b30';
                     document.getElementById('play-btn').setAttribute('aria-label', 'Stop animation preview');
@@ -5426,6 +5440,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.syncTimelineSettings();
                 this.syncFrameActions();
                 this.renderMotionTracks();
+                this.renderGuide();
             }
 
             syncTimelineSettings() {
@@ -5643,6 +5658,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 const status = document.getElementById('save-status');
                 const text = document.getElementById('save-status-text');
                 if (!status || !text) return;
+                status.hidden = false;
                 text.textContent = { saving: 'Saving…', saved: 'Saved in this browser', error: 'Couldn’t save in this browser' }[state];
                 status.classList.toggle('is-saving', state === 'saving');
                 status.classList.toggle('is-error', state === 'error');
@@ -5687,9 +5703,12 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                             this.renderUI();
                             this.syncProjectNameUI();
                             this.renderCanvas();
+                            this.setSaveStatus('saved');
+                            return true;
                         }
                     }
                 } catch (e) { console.log('Error loading', e); }
+                return false;
             }
 
             exportFrame(transparent = false) {
@@ -6186,8 +6205,206 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     new: () => this.requestNewAnimation(),
                     open: () => this.openProject(),
                     save: () => this.saveProject(),
-                    'whats-new': () => this.showWhatsNew()
+                    'whats-new': () => this.showWhatsNew(),
+                    'getting-started': () => this.showWelcome(false),
+                    shortcuts: () => this.toggleShortcuts()
                 }[action])?.();
+            }
+
+            readPref(key) {
+                try { return localStorage.getItem(key); } catch (e) { return null; }
+            }
+
+            writePref(key, value) {
+                try { localStorage.setItem(key, value); } catch (e) { /* storage blocked */ }
+            }
+
+            toggleShortcuts() {
+                const modal = document.getElementById('shortcuts-modal');
+                if (modal?.getAttribute('aria-hidden') === 'false') this.closeModal('shortcuts-modal');
+                else this.openModal('shortcuts-modal', 'shortcuts-close');
+            }
+
+            // Getting started: a welcome card with the three steps. On a first
+            // visit What's new has nothing to tell, so it is marked as read.
+            showWelcome(firstVisit) {
+                if (firstVisit) {
+                    this.writePref('motionSketchWhatsNew', WHATS_NEW_VERSION);
+                    this.syncWhatsNew();
+                }
+                this.writePref(GUIDE_KEY, 'seen');
+                const unsaved = document.getElementById('welcome-unsaved');
+                if (unsaved) unsaved.hidden = !this.hasUnsavedWork();
+                const title = document.getElementById('welcome-unsaved-title');
+                if (title) title.textContent = `“${this.projectName || 'Untitled'}” isn’t saved as a file yet.`;
+                this.openModal('welcome-modal', 'welcome-start');
+            }
+
+            startGuide() {
+                this.closeModal('welcome-modal');
+                if (!['brush', 'rect', 'circle', 'line'].includes(this.tool)) this.setTool('brush');
+                this.guideStep = 1;
+                this.renderGuide();
+            }
+
+            endGuide() {
+                this.guideStep = 0;
+                this.writePref(GUIDE_KEY, 'done');
+                this.renderGuide();
+            }
+
+            guideEvent(type) {
+                const step = this.guideStep;
+                if (step === 1 && type === 'stroke') this.guideStep = 2;
+                else if (step === 2 && type === 'frame') {
+                    // Onion skin shows the last drawing, so the next one can follow on.
+                    if (!this.isOnion) {
+                        const panel = document.querySelector('.props-panel');
+                        const scroll = panel?.scrollTop;
+                        this.toggleOnion();
+                        if (panel) panel.scrollTop = scroll;
+                    }
+                    this.guideStep = 3;
+                } else if (step === 3 && type === 'stroke' && this.frameIndex > 0) this.guideStep = 4;
+                else if (step === 4 && type === 'play') this.guideStep = 5;
+                else return;
+                this.renderGuide();
+            }
+
+            // Draws the coach mark for the current step beside the real control.
+            renderGuide() {
+                const coach = document.getElementById('guide-coach');
+                const ring = document.getElementById('guide-ring');
+                if (!coach || !ring) return;
+                const step = this.guideStep;
+                // Out of the way while the panels are hidden or a dialog is open.
+                const show = Boolean(step) && !this.panelsHidden && !document.querySelector('.modal-overlay[aria-hidden="false"]');
+                coach.hidden = !show;
+                ring.hidden = true;
+                if (!show) return;
+                const touch = window.matchMedia?.('(pointer: coarse)').matches;
+                const press = touch ? 'Tap' : 'Press';
+                const dots = (n) => `<span class="guide-dots">${[1, 2, 3].map((i) => `<i class="${i < n ? 'done' : i === n ? 'on' : ''}"></i>`).join('')} Step ${n} of 3</span>`;
+                const top = (label) => `<div class="guide-top">${label}<button type="button" class="guide-skip" onclick="app.endGuide()">${step === 'sample' ? 'Close' : 'Skip guide'}</button></div>`;
+                const paper = document.getElementById('canvas-wrapper').getBoundingClientRect();
+                const ghost = this.frames[this.frameIndex - 1]?.strokes?.length ? this.getStrokeBounds(this.frames[this.frameIndex - 1].strokes[0]) : null;
+                const ghostY = ghost ? paper.top + (ghost.y + ghost.h / 2) / this.canvasHeight * paper.height : paper.top + paper.height * 0.36;
+                const steps = {
+                    1: { html: `${top(dots(1))}<b class="guide-title">Draw something</b><p>Use the Brush to draw on the white paper.</p><p class="quiet">Next, we’ll add a frame.</p>`, paper: paper.top + paper.height * 0.36 },
+                    2: { html: `${top(dots(2))}<b class="guide-title">Nice. Now add a frame</b><p>${press} <b>+</b> to make frame 2.${touch ? '' : ' <span class="quiet">Or press <kbd>A</kbd>.</span>'}</p>`, target: '#frames-list .add-frame-btn', side: 'right', ring: 'round' },
+                    3: { html: `${top(dots(2))}<b class="guide-title">Draw it again, a bit further along</b><p>The faint blue <span class="guide-ghost"></span> is your last frame. This is called onion skin.</p><p class="quiet">We switched Onion skin on for you.</p>`, paper: ghostY, softRing: '#onion-btn' },
+                    4: { html: `${top(dots(3))}<b class="guide-title">${press} Play</b><p>Watch your drawing move.</p>${touch ? '' : '<p class="quiet">Or press <kbd>Space</kbd>.</p>'}`, target: '#play-btn', side: 'top', ring: 'round' },
+                    5: { html: `<div class="guide-top"><span class="guide-dots"><i class="done"></i><i class="done"></i><i class="done"></i> All done</span></div><b class="guide-title">Nice. That’s animation!</b><p>Add more frames to make it longer. Small steps between drawings make it smoother.</p><div class="guide-btns"><button type="button" class="guide-alt" onclick="app.openSample()">See a sample</button><button type="button" class="btn-primary" onclick="app.endGuide()">Done</button></div>${touch ? '' : '<p class="quiet" style="margin-top:9px">Press <kbd>?</kbd> for keyboard shortcuts.</p>'}`, target: '#play-btn', side: 'top' },
+                    sample: { html: `${top('<span class="guide-dots sample"><i class="fas fa-star" aria-hidden="true" style="background:none;width:auto;height:auto;font-size:11px"></i> Sample</span>')}<b class="guide-title">Bouncing ball</b><p>12 frames. The ball moves with the <b>Motion</b> tool: the blue line is its path, and the yellow marks are its keys.</p><p>${press} Play. Then drag a key to change the bounce.</p><p class="quiet">This is your own copy, so change anything.</p>`, paper: paper.top + paper.height * 0.4 }
+                }[step];
+                const gap = 14;
+                // Beside the paper, on whichever side has room; narrower if need be.
+                const tools = document.querySelector('.tools-panel')?.getBoundingClientRect();
+                const props = document.querySelector('.props-panel')?.getBoundingClientRect();
+                const roomLeft = paper.left - (tools?.right || 0) - gap - 8;
+                const roomRight = (props?.left || window.innerWidth) - paper.right - gap - 8;
+                const besideWidth = Math.min(226, Math.max(roomLeft, roomRight));
+                coach.classList.toggle('touch', Boolean(touch));
+                coach.classList.remove('inside');
+                coach.style.width = step === 2 ? '300px' : (!steps.target && besideWidth >= 180 ? `${besideWidth}px` : '');
+                coach.innerHTML = `${steps.html}<span class="guide-arrow"></span>`;
+                const w = coach.offsetWidth;
+                const h = coach.offsetHeight;
+                let x;
+                let y;
+                let side = steps.side;
+                if (steps.target) {
+                    const box = document.querySelector(steps.target)?.getBoundingClientRect();
+                    if (!box) { coach.hidden = true; return; }
+                    if (steps.ring) {
+                        const pad = 5;
+                        ring.className = `guide-ring ${steps.ring}`;
+                        Object.assign(ring.style, { left: `${box.left - pad}px`, top: `${box.top - pad}px`, width: `${box.width + pad * 2}px`, height: `${box.height + pad * 2}px` });
+                        ring.hidden = false;
+                    }
+                    x = side === 'right' ? box.right + 6 : box.left + box.width / 2;
+                    y = side === 'right' ? box.top + box.height / 2 : box.top;
+                    if (side === 'right' && x + gap + w > window.innerWidth - 8) { side = 'top'; x = box.left + box.width / 2; y = box.top; }
+                } else {
+                    side = roomLeft >= w ? 'left' : roomRight >= w ? 'right' : 'inside';
+                    // With no room beside the paper it sits on it, and lets drawing through.
+                    coach.classList.toggle('inside', side === 'inside');
+                    x = side === 'left' ? paper.left : side === 'right' ? paper.right : paper.left + 12;
+                    y = steps.paper;
+                    if (steps.softRing) {
+                        const box = document.querySelector(steps.softRing)?.getBoundingClientRect();
+                        if (box?.width) {
+                            ring.className = 'guide-ring soft';
+                            Object.assign(ring.style, { left: `${box.left - 3}px`, top: `${box.top - 3}px`, width: `${box.width + 6}px`, height: `${box.height + 6}px` });
+                            ring.hidden = false;
+                        }
+                    }
+                }
+                let left = { left: x - gap - w, right: x + gap, top: x - 34, inside: x }[side];
+                let topY = { left: y - h / 2, right: y - h / 2, top: y - gap - h, inside: y - h / 2 }[side];
+                left = Math.max(8, Math.min(window.innerWidth - w - 8, left));
+                topY = Math.max(60, Math.min(window.innerHeight - h - 8, topY));
+                coach.style.left = `${Math.round(left)}px`;
+                coach.style.top = `${Math.round(topY)}px`;
+                const arrow = coach.querySelector('.guide-arrow');
+                arrow.hidden = side === 'inside';
+                if (side === 'left') Object.assign(arrow.style, { right: '-7px', top: `${y - topY - 7}px` });
+                if (side === 'right') Object.assign(arrow.style, { left: '-7px', top: `${y - topY - 7}px` });
+                if (side === 'top') Object.assign(arrow.style, { bottom: '-7px', left: `${x - left - 7}px` });
+            }
+
+            // The sample: a ball bouncing along the ground, moved by one Motion path.
+            openSample() {
+                this.guideStep = 0;
+                this.renderGuide();
+                // Like New, the sample replaces the animation, so warn first if it
+                // isn't saved as a file (the welcome card shows the warning).
+                if (this.hasUnsavedWork() && document.getElementById('welcome-modal')?.getAttribute('aria-hidden') !== 'false') {
+                    this.showWelcome(false);
+                    return;
+                }
+                this.closeModal('welcome-modal');
+                this.writePref(GUIDE_KEY, 'done');
+                this.confirmNewAnimation();
+                const dot = (x, y, color, size) => ({ type: 'brush', brushType: 'brush', color, size, opacity: 1, points: [{ x, y, p: 0.5 }] });
+                const line = (points, color, size) => ({ type: 'brush', brushType: 'brush', color, size, opacity: 1, points: points.map(([x, y]) => ({ x, y, p: 0.5 })) });
+                const ground = () => [
+                    line([[0, 524], [600, 524]], '#3b3b3b', 6),
+                    ...[70, 190, 345, 470, 560].map((x) => line([[x - 8, 520], [x - 4, 508], [x, 520], [x + 4, 506], [x + 8, 520]], '#4f9a58', 4))
+                ];
+                this.frames = Array.from({ length: 12 }, (_, index) => ({ strokes: index === 0 ? [dot(70, 110, '#e74c3c', 56)] : [], paperStrokes: ground(), hold: 1 }));
+                this.projectName = 'Bouncing ball';
+                this.syncProjectNameUI();
+                this.frameIndex = 0;
+                this.renderUI();
+                this.setTool('truck');
+                const ball = this.frames[0].strokes[0];
+                this.selectedObject = { stroke: ball, layer: 'ink', index: 0 };
+                this.calcBounds(ball);
+                this.startMotion();
+                const track = this.motionTracks[0];
+                // It lands on frames 4 and 10, and is at the top of a bounce on 7 and 12.
+                [[3, 120, 386], [6, 235, 170], [9, 350, 386], [11, 440, 250]].forEach(([frame, dx, dy]) => this.setMotionTrackKeyframe(track, frame, { dx, dy }, false));
+                track.keyframes.forEach((key) => { key.interpolation = key.frame === 6 || key.frame === 11 ? 'curved' : 'straight'; });
+                this.applyMotionTrack(track);
+                this.history = [];
+                this.redoStack = [];
+                this.selectFrame(4);
+                this.hideMotionHint();
+                this.updateThumbnails();
+                this.renderCanvas();
+                this.fileSaved = true;
+                this.saveStorage(false);
+                this.guideStep = 'sample';
+                this.renderGuide();
+            }
+
+            // "Draw here" while the only frame is empty.
+            updatePaperHint() {
+                const hint = document.getElementById('paper-hint');
+                if (!hint) return;
+                const empty = this.frames.length === 1 && !this.frames[0].strokes.length && !this.getPaperStrokes(this.frames[0]).length && !this.backgroundImage && !this.isPlaying;
+                if (hint.hidden === empty) hint.hidden = !empty;
             }
 
             // What's new: a dot on File until the latest notes are read.
@@ -6203,6 +6420,9 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 try { localStorage.setItem('motionSketchWhatsNew', WHATS_NEW_VERSION); } catch (e) { /* storage blocked */ }
                 this.syncWhatsNew();
                 this.openModal('whats-new-modal', 'whats-new-close');
+                // Focus goes to Got it at the bottom; start reading at the top.
+                const box = document.querySelector('#whats-new-modal .modal-box');
+                if (box) box.scrollTop = 0;
             }
 
             runExport(format) {
@@ -6250,6 +6470,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 modal.setAttribute('aria-hidden', 'true');
                 if (id === 'text-modal') this.editingTextObject = null;
                 this.modalReturnFocus?.focus();
+                this.renderGuide();
             }
             confirmNewAnimation(width = 600, height = 600) {
                 this.projectLoadRequest++;

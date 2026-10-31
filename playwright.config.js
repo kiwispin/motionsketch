@@ -6,6 +6,9 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   use: {
     baseURL: 'http://127.0.0.1:4177',
+    // Most tests are a returning student, so the first-visit welcome stays
+    // out of the way; first-run.spec.js starts from an empty browser.
+    storageState: './tests/e2e/fixtures/returning-student.json',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     launchOptions: process.env.PLAYWRIGHT_LD_LIBRARY_PATH

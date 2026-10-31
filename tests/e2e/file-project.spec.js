@@ -22,7 +22,7 @@ test('the File menu holds New, Open and Save project file, and closes like Expor
   const toggle = page.getByRole('button', { name: 'File', exact: true });
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByRole('menuitem')).toHaveText([/New animation/, /Open project file/, /Save project file/, /What’s new/]);
+  await expect(page.getByRole('menuitem')).toHaveText([/New animation/, /Open project file/, /Save project file/, /Getting started/, /Keyboard shortcuts/, /What’s new/]);
   await page.keyboard.press('Escape');
   await expect(page.locator('#file-menu')).toBeHidden();
   await expect(toggle).toBeFocused();
@@ -141,7 +141,7 @@ test('What’s new is in the File menu, with a dot until it has been read', asyn
 
   const dialog = page.getByRole('dialog', { name: 'What’s new in SketchMotion' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('strong')).toHaveText(['A fresh look', 'More room to draw', 'Truck is now Motion', 'A File menu', 'A safer New', 'One place for your project']);
+  await expect(dialog.locator('strong')).toHaveText(['A tidier timeline', 'Getting started', 'Keyboard shortcuts', 'Backspace is safer', 'A fresh look', 'More room to draw', 'Truck is now Motion', 'A File menu', 'A safer New', 'One place for your project']);
   await expect(page.locator('#whats-new-close')).toBeFocused();
   await page.getByRole('button', { name: 'Got it' }).click();
   await expect(dialog).toBeHidden();
