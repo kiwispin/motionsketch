@@ -18,6 +18,20 @@ async function seedFrames(page, count = 10, strokes = [{ x: 120, y: 120 }]) {
   }, { count, strokes });
 }
 
+async function dragKeyBadge(page, fromFrame, toFrame) {
+  const badge = page.locator(`.frame-key-badge[data-frame="${fromFrame}"]`);
+  const target = page.locator('#frames-list .frame-card').nth(toFrame);
+  await target.scrollIntoViewIfNeeded();
+  await badge.scrollIntoViewIfNeeded();
+  const from = await badge.boundingBox();
+  const to = await target.boundingBox();
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 + 10, from.y + from.height / 2, { steps: 2 });
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 5 });
+  await page.mouse.up();
+}
+
 async function dragSelectedObject(page, dx, dy) {
   const canvas = page.locator('#rendering-canvas');
   const box = await canvas.boundingBox();
@@ -46,10 +60,12 @@ test('Truck starts one key, previews outside the span, and adds endpoint/interme
   await page.locator('#tool-truck').click();
 
   await expect(page.locator('#truck-panel')).toHaveCount(0);
-  await expect(page.locator('#brush-size')).toBeVisible();
+  // The settings panel shows Motion's settings instead of the brush.
+  await expect(page.locator('#motion-settings')).toBeVisible();
+  await expect(page.locator('#brush-size')).toBeHidden();
   await expect(page.locator('#layer-ink')).toBeVisible();
-  await expect(page.locator('#movement-add-keyframe')).toBeVisible();
-  await page.locator('#movement-add-keyframe').click();
+  await expect(page.locator('#motion-key-action')).toBeVisible();
+  await page.locator('#motion-key-action').click();
   await expect.poll(() => page.evaluate(() => ({
     frames: window.app.frames.length,
     keys: window.app.motionTracks[0]?.keyframes.map((key) => key.frame),
@@ -91,26 +107,20 @@ test('Truck starts one key, previews outside the span, and adds endpoint/interme
 
   await page.locator('.frame-card').nth(5).click();
   await page.waitForFunction(() => window.app.frameIndex === 5 && Boolean(window.app.frames[5].strokes.find((stroke) => stroke.motionTrackId)));
-  await expect(page.locator('.motion-track-cell[data-frame="5"]')).not.toHaveClass(/keyframe/);
+  await expect(page.locator('.frame-key-badge[data-frame="5"]')).toHaveCount(0);
   await dragSelectedObject(page, 0, 60);
-  await page.locator('.motion-track-cell[data-frame="5"]').click();
-  await expect(page.locator('#movement-key-menu')).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.find((key) => key.frame === 5)?.interpolation)).toBe('curved');
-  await page.locator('.motion-track-cell[data-frame="5"]').click();
-  await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.find((key) => key.frame === 5)?.interpolation)).toBe('straight');
-  await page.locator('.motion-track-cell[data-frame="5"]').click();
-  await expect.poll(() => page.evaluate(() => ({
-    keys: window.app.motionTracks[0].keyframes.map((key) => key.frame),
-    path: window.app.motionTracks[0].keyframes.find((key) => key.frame === 5)?.interpolation,
-    frames: window.app.frames.length
-  }))).toEqual({ keys: [2, 5, 9], path: 'curved', frames: 10 });
-  await expect(page.locator('.motion-track-cell[data-frame="2"]')).toHaveClass(/straight/);
-  await expect(page.locator('.motion-track-cell[data-frame="5"]')).toHaveClass(/curved/);
-  await expect(page.locator('.motion-track-cell[data-frame="9"]')).toHaveClass(/straight/);
-  await page.locator('.motion-track-cell[data-frame="2"]').click();
-  await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.find((key) => key.frame === 2)?.interpolation)).toBe('straight');
-  await expect(page.locator('.motion-track-cell[data-frame="2"]')).toHaveClass(/straight/);
-  await expect(page.locator('.motion-track-cell[data-frame="2"]')).toHaveAttribute('title', /First key has no incoming path/);
+  await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.map((key) => key.frame))).toEqual([2, 5, 9]);
+  await expect(page.locator('.frame-key-badge')).toHaveCount(3);
+
+  // Straight or Curved sets the whole path; the first key has no path into it.
+  await page.locator('#motion-path-curved').click();
+  await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.map((key) => key.interpolation))).toEqual(['straight', 'curved', 'curved']);
+  await expect(page.locator('.frame-key-badge[data-frame="2"]')).not.toHaveClass(/curved/);
+  await expect(page.locator('.frame-key-badge[data-frame="5"]')).toHaveClass(/curved/);
+  await expect(page.locator('.frame-key-badge[data-frame="9"]')).toHaveClass(/curved/);
+  await page.locator('#motion-path-straight').click();
+  await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.map((key) => key.interpolation))).toEqual(['straight', 'straight', 'straight']);
+  await expect(page.locator('.frame-key-badge.curved')).toHaveCount(0);
   await page.locator('.frame-card').nth(5).click();
 
   const frameRemap = await page.evaluate(() => {
@@ -123,7 +133,7 @@ test('Truck starts one key, previews outside the span, and adds endpoint/interme
   expect(frameRemap).toEqual({ afterInsert: { frames: 11, keys: [2, 5, 10] }, afterDelete: { frames: 10, keys: [2, 5, 9] } });
 });
 
-test('Truck diamond retiming preserves offset, rejects collisions, and undoes once', async ({ page }) => {
+test('Dragging a key badge to another thumbnail retimes it, keeps its offset, rejects collisions, and undoes once', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.app && Array.isArray(window.app.frames));
   await seedFrames(page);
@@ -131,7 +141,7 @@ test('Truck diamond retiming preserves offset, rejects collisions, and undoes on
   const box = await canvas.boundingBox();
   await page.mouse.click(box.x + 120 * box.width / 600, box.y + 120 * box.height / 600);
   await page.locator('#tool-truck').click();
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   await expect.poll(() => page.evaluate(() => window.app.motionTracks[0]?.keyframes.map((key) => key.frame))).toEqual([2]);
   await page.locator('.frame-card').nth(9).click();
   await page.waitForFunction(() => window.app.selectedObject?.isMotionPreview === true);
@@ -144,31 +154,18 @@ test('Truck diamond retiming preserves offset, rejects collisions, and undoes on
   });
   await dragSelectedObject(page, 80, 0);
   await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.map((key) => key.frame))).toEqual([2, 9]);
-  await page.locator('.motion-track-cell[data-frame="9"]').click();
+  await page.locator('#motion-path-curved').click();
   await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.find((key) => key.frame === 9)?.interpolation)).toBe('curved');
   const endpointDx = await page.evaluate(() => window.app.motionTracks[0].keyframes.find((key) => key.frame === 9).dx);
 
-  const source = page.locator('.motion-track-cell[data-frame="9"]');
-  const target = page.locator('.motion-track-cell[data-frame="7"]');
-  await target.scrollIntoViewIfNeeded();
-  const sourceBox = await source.boundingBox();
-  const targetBox = await target.boundingBox();
-  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2);
-  await page.mouse.up();
+  await dragKeyBadge(page, 9, 7);
   await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.map((key) => key.frame))).toEqual([2, 7]);
   await expect.poll(() => page.evaluate(() => ({ dx: window.app.motionTracks[0].keyframes.find((key) => key.frame === 7)?.dx, interpolation: window.app.motionTracks[0].keyframes.find((key) => key.frame === 7)?.interpolation }))).toEqual({ dx: endpointDx, interpolation: 'curved' });
+  // The drag doesn't also pick a frame.
+  expect(await page.evaluate(() => window.app.frameIndex)).toBe(9);
 
-  const collisionSource = page.locator('.motion-track-cell[data-frame="7"]');
-  const collisionTarget = page.locator('.motion-track-cell[data-frame="2"]');
-  await collisionTarget.scrollIntoViewIfNeeded();
-  const collisionSourceBox = await collisionSource.boundingBox();
-  const collisionTargetBox = await collisionTarget.boundingBox();
-  await page.mouse.move(collisionSourceBox.x + collisionSourceBox.width / 2, collisionSourceBox.y + collisionSourceBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(collisionTargetBox.x + collisionTargetBox.width / 2, collisionTargetBox.y + collisionTargetBox.height / 2);
-  await page.mouse.up();
+  // A key can't land on a frame that already has one.
+  await dragKeyBadge(page, 7, 2);
   await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.map((key) => key.frame))).toEqual([2, 7]);
   await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.find((key) => key.frame === 7)?.interpolation)).toBe('curved');
 
@@ -236,13 +233,19 @@ test('Truck curved guides preserve cubic turns between adjacent keys', async ({ 
     app.truckSelectedTrackId = track.id;
     app.motionTracks = [track];
 
+    // Record the guide's paths while drawing on a real canvas.
     const paths = [];
     let path = null;
-    const ctx = {
-      save() {}, restore() {}, beginPath() { path = []; paths.push(path); },
-      moveTo(x, y) { path.push(['M', x, y]); }, lineTo(x, y) { path.push(['L', x, y]); },
-      stroke() {}, arc() {}, fill() {}
+    const real = document.createElement('canvas').getContext('2d');
+    const record = {
+      beginPath() { path = []; paths.push(path); real.beginPath(); },
+      moveTo(x, y) { path.push(['M', x, y]); real.moveTo(x, y); },
+      lineTo(x, y) { path.push(['L', x, y]); real.lineTo(x, y); }
     };
+    const ctx = new Proxy(real, {
+      get: (target, key) => record[key] || (typeof target[key] === 'function' ? target[key].bind(target) : target[key]),
+      set: (target, key, value) => { target[key] = value; return true; }
+    });
     app.drawMotionGuide(ctx);
 
     return {
@@ -267,16 +270,16 @@ test('Truck creates independent tracks for multiple objects and saves them', asy
   const box = await canvas.boundingBox();
   await page.mouse.click(box.x + 100 * box.width / 600, box.y + 120 * box.height / 600);
   await page.locator('#tool-truck').click();
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   await expect.poll(() => page.evaluate(() => window.app.motionTracks.length)).toBe(1);
   const secondBox = await canvas.boundingBox();
   await page.mouse.click(secondBox.x + 220 * secondBox.width / 600, secondBox.y + 120 * secondBox.height / 600);
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   await expect.poll(() => page.evaluate(() => ({
     tracks: window.app.motionTracks.length,
     keys: window.app.motionTracks.map((track) => track.keyframes.map((key) => key.frame)),
-    rows: document.querySelectorAll('.motion-track-row').length
-  }))).toEqual({ tracks: 2, keys: [[2], [2]], rows: 1 });
+    badges: document.querySelectorAll('.frame-key-badge').length
+  }))).toEqual({ tracks: 2, keys: [[2], [2]], badges: 1 });
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: /Download/ }).click();
@@ -299,7 +302,7 @@ test('Truck frame and object paste stay independent of later source retiming', a
   const box = await canvas.boundingBox();
   await page.mouse.click(box.x + 120 * box.width / 600, box.y + 120 * box.height / 600);
   await page.locator('#tool-truck').click();
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   const result = await page.evaluate(() => {
     const app = window.app;
     const track = app.motionTracks[0];
@@ -368,13 +371,13 @@ test('Truck removes intermediate and endpoint keys, preserves span, and undo res
   let box = await canvas.boundingBox();
   await page.mouse.click(box.x + 120 * box.width / 600, box.y + 120 * box.height / 600);
   await page.locator('#tool-truck').click();
-  await page.locator('#movement-add-keyframe').click();
-  await expect(page.locator('#movement-add-keyframe')).toBeEnabled();
+  await page.locator('#motion-key-action').click();
+  await expect(page.locator('#motion-key-action')).toBeEnabled();
 
   await page.locator('.frame-card').nth(3).click();
   await page.waitForFunction(() => window.app.selectedObject?.isMotionPreview === true);
-  await expect(page.locator('#movement-add-keyframe')).toBeEnabled();
-  await expect(page.locator('#movement-add-keyframe')).toHaveAttribute('aria-label', 'Add movement keyframe');
+  await expect(page.locator('#motion-key-action')).toBeEnabled();
+  await expect(page.locator('#motion-key-action')).toHaveAttribute('aria-label', 'Add key on this frame');
 
   await page.locator('.frame-card').nth(5).click();
   await page.waitForFunction(() => window.app.selectedObject?.isMotionPreview === true);
@@ -383,15 +386,13 @@ test('Truck removes intermediate and endpoint keys, preserves span, and undo res
   await page.waitForFunction(() => Boolean(window.app.frames[4].strokes.find((stroke) => stroke.motionTrackId)));
   await dragSelectedObject(page, 0, 35);
   await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.map((key) => key.frame))).toEqual([2, 4, 5]);
-  await expect(page.locator('#movement-previous-key')).toBeEnabled();
-  await expect(page.locator('#movement-next-key')).toBeEnabled();
-  await page.locator('#movement-previous-key').click();
+  await expect(page.locator('.motion-key-chip')).toHaveText(['Frame 3', 'Frame 5', 'Frame 6']);
+  await page.locator('.motion-key-chip', { hasText: 'Frame 3' }).click();
   await expect.poll(() => page.evaluate(() => window.app.frameIndex)).toBe(2);
-  await expect(page.locator('#movement-previous-key')).toBeDisabled();
-  await page.locator('#movement-next-key').click();
+  await page.locator('.motion-key-chip', { hasText: 'Frame 5' }).click();
   await expect.poll(() => page.evaluate(() => window.app.frameIndex)).toBe(4);
 
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   await expect.poll(() => page.evaluate(() => ({
     keys: window.app.motionTracks[0].keyframes.map((key) => key.frame),
     start: window.app.motionTracks[0].startFrame,
@@ -403,7 +404,7 @@ test('Truck removes intermediate and endpoint keys, preserves span, and undo res
   await expect.poll(() => page.evaluate(() => window.app.motionTracks[0].keyframes.map((key) => key.frame))).toEqual([2, 4, 5]);
 
   await page.locator('.frame-card').nth(5).click();
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   await expect.poll(() => page.evaluate(() => ({
     keys: window.app.motionTracks[0].keyframes.map((key) => key.frame),
     start: window.app.motionTracks[0].startFrame,
@@ -417,21 +418,21 @@ test('Truck removes intermediate and endpoint keys, preserves span, and undo res
   box = await canvas.boundingBox();
   await page.mouse.click(box.x + 120 * box.width / 600, box.y + 120 * box.height / 600);
   await page.locator('#tool-truck').click();
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   const expectedFrame = await page.evaluate(() => {
     const frame = window.app.cloneData(window.app.frames[2]);
     frame.strokes.forEach((stroke) => window.app.stripMotionMetadata(stroke));
     return frame;
   });
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   await expect.poll(() => page.evaluate(() => ({
     tracks: window.app.motionTracks.length,
     tagged: window.app.frames[2].strokes.some((stroke) => stroke.motionTrackId),
     frameIndex: window.app.frameIndex,
     frame: window.app.cloneData(window.app.frames[2])
   }))).toEqual({ tracks: 0, tagged: false, frameIndex: 2, frame: expectedFrame });
-  await expect(page.locator('#movement-add-keyframe')).toBeEnabled();
-  await expect(page.locator('#movement-add-keyframe')).toHaveAttribute('aria-label', 'Add movement keyframe');
+  await expect(page.locator('#motion-key-action')).toBeEnabled();
+  await expect(page.locator('#motion-key-action')).toHaveAttribute('aria-label', 'Add key on this frame');
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect.poll(() => page.evaluate(() => ({ tracks: window.app.motionTracks.length, keys: window.app.motionTracks[0]?.keyframes.map((key) => key.frame) }))).toEqual({ tracks: 1, keys: [2] });
 });
@@ -454,33 +455,33 @@ test('Truck shows only the selected track and starts a new track for a clicked u
   let box = await page.locator('#rendering-canvas').boundingBox();
   await page.mouse.click(box.x + 100 * box.width / 600, box.y + 120 * box.height / 600);
   await page.locator('#tool-truck').click();
-  await page.locator('#movement-add-keyframe').click();
-  await expect.poll(() => page.evaluate(() => ({ tracks: window.app.motionTracks.length, rows: document.querySelectorAll('.motion-track-row').length }))).toEqual({ tracks: 1, rows: 1 });
+  await page.locator('#motion-key-action').click();
+  await expect.poll(() => page.evaluate(() => ({ tracks: window.app.motionTracks.length, badges: document.querySelectorAll('.frame-key-badge').length }))).toEqual({ tracks: 1, badges: 1 });
 
   box = await page.locator('#rendering-canvas').boundingBox();
   await page.mouse.click(box.x + 220 * box.width / 600, box.y + 120 * box.height / 600);
-  await expect.poll(() => page.evaluate(() => ({ selectedTrack: window.app.getMotionTrackForSelection()?.id || null, rows: document.querySelectorAll('.motion-track-row').length, keys: document.querySelectorAll('.motion-track-cell.keyframe').length }))).toEqual({ selectedTrack: null, rows: 1, keys: 0 });
-  await expect(page.locator('#movement-add-keyframe')).toBeEnabled();
-  await page.locator('#movement-add-keyframe').click();
-  await expect.poll(() => page.evaluate(() => ({ tracks: window.app.motionTracks.length, keys: window.app.motionTracks.map((track) => track.keyframes.map((key) => key.frame)), rows: document.querySelectorAll('.motion-track-row').length }))).toEqual({ tracks: 2, keys: [[0], [0]], rows: 1 });
+  await expect.poll(() => page.evaluate(() => ({ selectedTrack: window.app.getMotionTrackForSelection()?.id || null, badges: document.querySelectorAll('.frame-key-badge').length }))).toEqual({ selectedTrack: null, badges: 0 });
+  await expect(page.locator('#motion-key-action')).toBeEnabled();
+  await page.locator('#motion-key-action').click();
+  await expect.poll(() => page.evaluate(() => ({ tracks: window.app.motionTracks.length, keys: window.app.motionTracks.map((track) => track.keyframes.map((key) => key.frame)), badges: document.querySelectorAll('.frame-key-badge').length }))).toEqual({ tracks: 2, keys: [[0], [0]], badges: 1 });
 
   box = await page.locator('#rendering-canvas').boundingBox();
   await page.mouse.click(box.x + 100 * box.width / 600, box.y + 120 * box.height / 600);
-  await expect.poll(() => page.evaluate(() => ({ selectedTrack: window.app.getMotionTrackForSelection()?.id, rows: document.querySelectorAll('.motion-track-row').length, keys: document.querySelectorAll('.motion-track-cell.keyframe').length }))).toMatchObject({ rows: 1, keys: 1 });
+  await expect.poll(() => page.evaluate(() => ({ selectedTrack: window.app.getMotionTrackForSelection()?.id, badges: document.querySelectorAll('.frame-key-badge').length }))).toMatchObject({ badges: 1 });
   const firstTrackId = await page.evaluate(() => window.app.getMotionTrackForSelection().id);
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   await expect.poll(() => page.evaluate((id) => ({ tracks: window.app.motionTracks.length, otherStillPresent: window.app.motionTracks.some((track) => track.id !== id), firstTagged: window.app.frames[0].strokes.some((stroke) => stroke.motionTrackId === id), frameCount: window.app.frames.length }), firstTrackId)).toEqual({ tracks: 1, otherStillPresent: true, firstTagged: false, frameCount: 1 });
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect.poll(() => page.evaluate((id) => ({ tracks: window.app.motionTracks.length, restored: window.app.motionTracks.some((track) => track.id === id), frameCount: window.app.frames.length }), firstTrackId)).toEqual({ tracks: 2, restored: true, frameCount: 1 });
 
   box = await page.locator('#rendering-canvas').boundingBox();
   await page.mouse.click(box.x + 500 * box.width / 600, box.y + 500 * box.height / 600);
-  await expect(page.locator('#movement-selected-label')).toHaveText('Click an object to animate it');
-  await expect(page.locator('#movement-add-keyframe')).toBeDisabled();
-  await expect(page.locator('.motion-track-row')).toHaveCount(0);
+  await expect(page.locator('#motion-empty')).toHaveText('Click an object on the canvas to animate it.');
+  await expect(page.locator('#motion-key-action')).toBeHidden();
+  await expect(page.locator('.frame-key-badge')).toHaveCount(0);
 });
 
-test('Truck keeps the selected ball row across frame navigation and endpoint movement', async ({ page }) => {
+test('Motion keeps the selected ball\'s keys across frame navigation and endpoint movement', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.app && Array.isArray(window.app.frames));
   await page.locator('#brush-size').fill('40');
@@ -500,25 +501,24 @@ test('Truck keeps the selected ball row across frame navigation and endpoint mov
   await page.locator('#tool-select').click();
   await page.mouse.click(box.x + 100 * box.width / 600, box.y + 120 * box.height / 600);
   await page.locator('#tool-truck').click();
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   box = await page.locator('#rendering-canvas').boundingBox();
   await page.mouse.click(box.x + 220 * box.width / 600, box.y + 120 * box.height / 600);
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   const selectedSecondId = await page.evaluate(() => window.app.getMotionTrackForSelection().id);
 
   await page.locator('.frame-card').nth(1).click();
   await page.waitForFunction(() => window.app.selectedObject?.isMotionPreview === true);
   await expect.poll(() => page.evaluate((id) => ({
-    rowId: document.querySelector('.motion-track-row')?.dataset.trackId || null,
-    diamonds: [...document.querySelectorAll('.motion-track-cell.keyframe')].map((cell) => Number(cell.dataset.frame)),
+    badges: [...document.querySelectorAll('.frame-key-badge')].map((badge) => Number(badge.dataset.frame)),
     selectedId: window.app.getMotionTrackForSelection()?.id || null
-  }), selectedSecondId)).toEqual({ rowId: selectedSecondId, diamonds: [0], selectedId: selectedSecondId });
+  }), selectedSecondId)).toEqual({ badges: [0], selectedId: selectedSecondId });
 
   await dragSelectedObject(page, 70, 0);
   await expect.poll(() => page.evaluate((id) => ({
     keys: window.app.getMotionTrack(id)?.keyframes.map((key) => key.frame),
-    rowId: document.querySelector('.motion-track-row')?.dataset.trackId || null
-  }), selectedSecondId)).toEqual({ keys: [0, 1], rowId: selectedSecondId });
+    badges: [...document.querySelectorAll('.frame-key-badge')].map((badge) => Number(badge.dataset.frame))
+  }), selectedSecondId)).toEqual({ keys: [0, 1], badges: [0, 1] });
 
   await page.locator('.frame-card').nth(0).click();
   box = await page.locator('#rendering-canvas').boundingBox();
@@ -540,7 +540,7 @@ test('Truck frame duplication keeps animated artwork, selection, and movement po
   const box = await canvas.boundingBox();
   await page.mouse.click(box.x + 120 * box.width / 600, box.y + 120 * box.height / 600);
   await page.locator('#tool-truck').click();
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
 
   const before = await page.evaluate(() => {
     const app = window.app;
@@ -566,9 +566,8 @@ test('Truck frame duplication keeps animated artwork, selection, and movement po
       keys: track?.keyframes.map((key) => key.frame),
       currentTagged: app.frames[3]?.strokes.some((stroke) => stroke.motionTrackId === track?.id),
       selectedTrack: app.getMotionTrackForSelection()?.id || null,
-      rowId: document.querySelector('.motion-track-row')?.dataset.trackId || null,
-      frameScroll: app.framesList.scrollLeft,
-      movementScroll: document.getElementById('movement-track-scroll')?.scrollLeft || 0
+      badges: [...document.querySelectorAll('.frame-key-badge')].map((badge) => Number(badge.dataset.frame)),
+      frameScroll: app.framesList.scrollLeft
     };
   })).toEqual({
     frames: 9,
@@ -577,9 +576,8 @@ test('Truck frame duplication keeps animated artwork, selection, and movement po
     keys: [2],
     currentTagged: true,
     selectedTrack: before.trackId,
-    rowId: before.trackId,
-    frameScroll: before.scrollLeft,
-    movementScroll: before.scrollLeft
+    badges: [2],
+    frameScroll: before.scrollLeft
   });
 });
 
@@ -623,7 +621,7 @@ test('Duplicating the last frame reveals the Add Frame control', async ({ page }
   expect(metrics.addVisible).toBe(true);
 });
 
-test('Truck movement keyframes stay aligned with thumbnails across the full scroll range', async ({ page }) => {
+test('Motion keys sit on their thumbnails across the full scroll range', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
   await page.waitForFunction(() => window.app && Array.isArray(window.app.frames));
@@ -633,78 +631,21 @@ test('Truck movement keyframes stay aligned with thumbnails across the full scro
   const box = await canvas.boundingBox();
   await page.mouse.click(box.x + 120 * box.width / 600, box.y + 120 * box.height / 600);
   await page.locator('#tool-truck').click();
-  await page.locator('#movement-add-keyframe').click();
-
-  const metrics = await page.evaluate(() => {
+  await page.locator('#motion-key-action').click();
+  await page.evaluate(() => {
     const app = window.app;
-    const frames = app.framesList;
-    const movement = document.getElementById('movement-track-scroll');
-    const maxFrames = frames.scrollWidth - frames.clientWidth;
-    const maxMovement = movement.scrollWidth - movement.clientWidth;
-    frames.scrollLeft = maxFrames;
-    frames.dispatchEvent(new Event('scroll'));
-    const syncedAtEnd = {
-      frameScroll: frames.scrollLeft,
-      movementScroll: movement.scrollLeft,
-      maxFrames,
-      maxMovement
-    };
-    const frameCard = frames.querySelector('.frame-card:last-of-type');
-    const movementCell = document.querySelector('.motion-track-cell:last-child');
-    const frameRect = frameCard?.getBoundingClientRect();
-    const movementRect = movementCell?.getBoundingClientRect();
-    return {
-      syncedAtEnd,
-      centerDelta: frameRect && movementRect
-        ? Math.abs((frameRect.left + frameRect.width / 2) - (movementRect.left + movementRect.width / 2))
-        : Infinity
-    };
+    app.setMotionTrackKeyframe(app.motionTracks[0], 39, { dx: 60, dy: 0 });
+    app.renderMotionTracks();
+    app.framesList.scrollLeft = app.framesList.scrollWidth;
   });
 
-  expect(metrics.syncedAtEnd.maxFrames).toBe(metrics.syncedAtEnd.maxMovement);
-  expect(metrics.syncedAtEnd.frameScroll).toBe(metrics.syncedAtEnd.movementScroll);
-  expect(metrics.centerDelta).toBeLessThanOrEqual(0.5);
-});
-
-test('Truck movement controls stay pinned and the keyframe row stays inside the panel', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/');
-  await page.waitForFunction(() => window.app && Array.isArray(window.app.frames));
-  await seedFrames(page, 40);
-
-  const canvas = await page.locator('#rendering-canvas').boundingBox();
-  await page.mouse.click(canvas.x + 120 * canvas.width / 600, canvas.y + 120 * canvas.height / 600);
-  await page.locator('#tool-truck').click();
-  await page.locator('#movement-add-keyframe').click();
-
-  const metrics = await page.evaluate(() => {
-    const app = window.app;
-    const frames = app.framesList;
-    const movement = document.getElementById('movement-track-scroll');
-    const controls = document.getElementById('movement-track-controls');
-    const list = document.getElementById('movement-tracks');
-    const maxFrames = frames.scrollWidth - frames.clientWidth;
-    frames.scrollLeft = maxFrames;
-    frames.dispatchEvent(new Event('scroll'));
-    const movementRect = movement.getBoundingClientRect();
-    const controlsRect = controls.getBoundingClientRect();
-    const listRect = list.getBoundingClientRect();
-    return {
-      movementLeft: movementRect.left,
-      movementRight: movementRect.right,
-      controlsLeft: controlsRect.left,
-      controlsRight: controlsRect.right,
-      listBottom: listRect.bottom,
-      movementBottom: movementRect.bottom,
-      movementScroll: movement.scrollLeft,
-      frameScroll: frames.scrollLeft
-    };
-  });
-
-  expect(metrics.controlsLeft).toBeCloseTo(metrics.movementLeft, 0);
-  expect(metrics.controlsRight).toBeCloseTo(metrics.movementRight, 0);
-  expect(metrics.listBottom).toBeLessThanOrEqual(metrics.movementBottom);
-  expect(metrics.movementScroll).toBe(metrics.frameScroll);
+  const inside = await page.evaluate(() => [2, 39].map((frame) => {
+    const card = window.app.framesList.querySelectorAll('.frame-card')[frame].getBoundingClientRect();
+    const badge = document.querySelector(`.frame-key-badge[data-frame="${frame}"]`)?.getBoundingClientRect();
+    return Boolean(badge) && badge.left >= card.left && badge.right <= card.right && badge.top >= card.top && badge.bottom <= card.bottom;
+  }));
+  expect(inside).toEqual([true, true]);
+  await expect(page.locator('.frame-key-badge[data-frame="39"]')).toBeInViewport();
 });
 
 test('Truck creates a single lazy key on drag, ignores clicks, and undoes to the original ball', async ({ page }) => {
@@ -777,10 +718,10 @@ test('Truck drag updates an existing key and adds a new-frame key without changi
   let box = await page.locator('#rendering-canvas').boundingBox();
   await page.mouse.click(box.x + 100 * box.width / 600, box.y + 120 * box.height / 600);
   await page.locator('#tool-truck').click();
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   box = await page.locator('#rendering-canvas').boundingBox();
   await page.mouse.click(box.x + 220 * box.width / 600, box.y + 120 * box.height / 600);
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   const ids = await page.evaluate(() => window.app.motionTracks.map((track) => track.id));
 
   await dragSelectedObject(page, 40, 0);
@@ -832,7 +773,7 @@ test('Select edits and groups animated artwork without a Truck warning', async (
   let box = await canvas.boundingBox();
   await page.mouse.click(box.x + 120 * box.width / 600, box.y + 120 * box.height / 600);
   await page.locator('#tool-truck').click();
-  await page.locator('#movement-add-keyframe').click();
+  await page.locator('#motion-key-action').click();
   const trackId = await page.evaluate(() => window.app.motionTracks[0].id);
 
   await page.locator('#tool-select').click();
@@ -856,7 +797,7 @@ test('Select edits and groups animated artwork without a Truck warning', async (
     tracks: window.app.motionTracks.length
   }))).toEqual({ group: true, tracks: 0 });
   const notice = await page.locator('#save-indicator').textContent();
-  expect(notice || '').not.toContain('Use Truck');
+  expect(notice || '').not.toContain('Use Motion');
 });
 
 for (const viewport of [
@@ -890,7 +831,7 @@ for (const viewport of [
     await page.evaluate(() => window.app.setTool('brush'));
     const before = await snapshot();
     await page.locator('#tool-truck').click();
-    await expect(page.locator('#movement-add-keyframe')).toBeVisible();
+    await expect(page.locator('#motion-settings')).toBeVisible();
     const truck = await snapshot();
     await page.locator('#tool-brush-anchor').click();
     await page.locator('#tool-brush-standard').click();

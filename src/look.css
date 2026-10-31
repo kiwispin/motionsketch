@@ -162,7 +162,7 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; background: v
     .tools-panel .tool-btn.active::after { font-weight: 500; }
     .tools-panel .onion-icon { width: 1.2rem; height: 1.2rem; }
     .tools-panel #tool-select::after { content: "Select"; }
-    .tools-panel #tool-truck::after { content: "Truck"; }
+    .tools-panel #tool-truck::after { content: "Motion"; }
     .tools-panel #tool-brush-anchor::after { content: "Brush"; }
     .tools-panel #tool-shape-anchor::after { content: "Shapes"; }
     .tools-panel #tool-text::after { content: "Text"; }
@@ -231,14 +231,11 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; background: v
 @media (min-width: 901px) {
     .app-header { top: 0; left: 0; right: 0; height: 52px; padding: 0 16px; border-radius: 0; border-width: 0 0 1px; box-shadow: none; }
     .timeline-panel { left: 0; right: 0; bottom: 0; height: 152px; border-radius: 0; border-width: 1px 0 0; box-shadow: none; }
-    .timeline-panel.has-motion { height: 214px; padding-bottom: 0; }
     .timeline-frames-row { min-height: 0; }
     .workspace { top: 52px; left: 88px; right: 264px; bottom: 152px; }
     .tools-panel, .props-panel { top: 64px; bottom: 164px; }
     .tools-panel { left: 12px; }
     .props-panel { right: 12px; }
-    body.has-motion-timeline .tools-panel,
-    body.has-motion-timeline .props-panel { bottom: 226px; }
     .group-toolbar { top: 64px; }
     #save-indicator { top: 64px; right: 24px; }
 }
@@ -253,8 +250,7 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; background: v
     .zoom-divider { display: block; }
     body.panels-hidden .props-panel { display: none; }
     body.panels-hidden .timeline-panel { height: 45px; }
-    body.panels-hidden .timeline-frames-row,
-    body.panels-hidden .movement-track-scroll { display: none; }
+    body.panels-hidden .timeline-frames-row { display: none; }
     body.panels-hidden .tools-panel { bottom: 57px; }
     body.panels-hidden .workspace { right: 12px; bottom: 45px; }
     body.panels-hidden #panels-show { display: flex; }

@@ -72,11 +72,10 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.motionTracks = [];
                 this.motionTrackCounter = 0;
                 this.truckSelectedTrackId = null;
-                this.motionScrollBound = false;
-                this.motionScrollSyncing = false;
-                this.motionScrollActive = false;
                 this.truckEndFrame = 1;
-                this.motionKeyDrag = null;
+                this.keyBadgeDrag = null;
+                this.pathKeyDrag = null;
+                this.pathHover = null;
                 this.motionDragSaved = false;
                 this.motionDirectEditDirty = false;
                 this.frameIndex = 0;
@@ -325,16 +324,6 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
             }
 
             // How far the motion timeline, when open, reaches into the canvas area.
-            getMotionTimelineReserve(workspace) {
-                const timeline = document.querySelector('.timeline-panel');
-                if (!timeline) return 0;
-                const wasOpen = timeline.classList.contains('has-motion');
-                timeline.classList.add('has-motion');
-                const top = timeline.getBoundingClientRect().top;
-                timeline.classList.toggle('has-motion', wasOpen);
-                return Math.max(0, Math.ceil(workspace.getBoundingClientRect().bottom - top));
-            }
-
             // Zoom floats at the bottom-right of the visible canvas area, above
             // the timeline whichever height it currently has.
             positionZoomControls() {
@@ -353,12 +342,8 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 const workspace = document.querySelector('.workspace');
                 if (!workspace) return;
 
-                // Keep room below the canvas for the taller motion timeline, so the
-                // canvas neither moves nor hides under it when the Truck tool opens.
-                const reserve = this.getMotionTimelineReserve(workspace);
-                workspace.style.paddingBottom = `${reserve}px`;
                 const availW = workspace.clientWidth - 48;
-                const availH = workspace.clientHeight - 48 - reserve;
+                const availH = workspace.clientHeight - 48;
                 const aspect = this.canvasWidth / this.canvasHeight;
                 let w, h;
 
@@ -440,7 +425,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                         return;
                     }
                     this.updateCursorPos(e);
-                    if (this.isDrawing || this.selectedObject || this.isSelectingBox) move(e);
+                    if (this.isDrawing || this.selectedObject || this.isSelectingBox || this.pathKeyDrag || (this.tool === 'truck' && this.truckSelectedTrackId)) move(e);
                 });
 
                 c.addEventListener('pointerenter', () => { if (this.isDrawingTool()) this.cursorEl.style.display = 'block'; });
@@ -479,7 +464,6 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     }
                 });
                 window.addEventListener('pointerup', (e) => {
-                    if (this.motionKeyDrag) this.finishMotionKeyDrag();
                     if (this.panStart && workspace) {
                         workspace.classList.remove('is-panning');
                         workspace.releasePointerCapture?.(e.pointerId);
@@ -1527,7 +1511,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 // Truck is the movement editor. Select remains the artwork editor,
                 // even when the selected artwork also has a motion track.
                 if (this.tool !== 'truck' || !this.getMotionTrackForSelection()) return false;
-                this.showExportNotice('Use Truck to edit movement on this artwork', true);
+                this.showExportNotice('Use Motion to change how this artwork moves', true);
                 return true;
             }
 
@@ -1716,7 +1700,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 
             startMotion() {
                 if (this.activeLayer !== 'ink') {
-                    this.showExportNotice('Truck movement is available for foreground artwork', true);
+                    this.showExportNotice('Motion works on foreground artwork', true);
                     return false;
                 }
                 if (!this.selectedObject) {
@@ -1787,38 +1771,6 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 return hasKey ? this.removeMotionKeyframe() : this.addMotionKeyframe();
             }
 
-            selectAdjacentMotionKey(direction) {
-                const track = this.getMotionTrackForSelection();
-                if (!track) return false;
-                const keys = [...track.keyframes].sort((a, b) => a.frame - b.frame);
-                const target = direction < 0
-                    ? [...keys].reverse().find((keyframe) => keyframe.frame < this.frameIndex)
-                    : keys.find((keyframe) => keyframe.frame > this.frameIndex);
-                if (!target) return false;
-                return this.selectFrame(target.frame);
-            }
-
-            toggleMotionKeyInterpolation(trackId, frameIndex) {
-                const track = this.getMotionTrack(trackId);
-                const frame = Number.parseInt(frameIndex, 10);
-                const keyframes = [...(track?.keyframes || [])].sort((a, b) => a.frame - b.frame);
-                const keyIndex = keyframes.findIndex((keyframe) => keyframe.frame === frame);
-                if (!track || keyIndex <= 0) return false;
-                const keyframe = track.keyframes.find((candidate) => candidate.frame === frame);
-                if (!keyframe) return false;
-                const current = keyframe.interpolation || track.interpolation || 'straight';
-                const value = current === 'curved' ? 'straight' : 'curved';
-                this.saveState();
-                keyframe.interpolation = value;
-                this.applyMotionTrack(track);
-                this.selectMotionTrack(track.id, false);
-                this.renderUI(true);
-                this.renderCanvas();
-                this.updateThumbnails();
-                this.saveStorage();
-                return true;
-            }
-
             removeMotionKeyframe() {
                 const track = this.getMotionTrackForSelection();
                 const frame = this.frameIndex;
@@ -1882,8 +1834,9 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 });
                 this.applyMotionTrack(track);
                 this.renderUI(true);
+                this.renderMotionTracks();
                 this.renderCanvas();
-                this.queueEditedThumbnails();
+                this.updateThumbnails();
                 this.saveStorage();
             }
 
@@ -1942,6 +1895,11 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 if (state.palette) { this.palette = state.palette; this.renderPalette(); }
                 if (state.width && state.height) this.resizeCanvas(state.width, state.height);
                 this.selectedObject = null;
+                // Motion keeps the moving artwork selected, so its path and keys stay in view.
+                if (this.tool === 'truck') {
+                    if (this.getMotionTrack(this.truckSelectedTrackId)) this.selectMotionTrack(this.truckSelectedTrackId, false);
+                    else this.truckSelectedTrackId = null;
+                }
                 this.renderCanvas();
                 this.renderUI();
                 this.saveStorage();
@@ -2071,6 +2029,17 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 // ── End Ctrl+Click ───────────────────────────────────────────────
 
                 if (this.tool === 'truck') {
+                    this.hideMotionHint();
+                    const onPath = this.hitMotionPath(pos);
+                    if (onPath?.isKey) {
+                        this.pathKeyDrag = { track: onPath.track, frame: onPath.frame, start: pos, offset: this.getMotionOffset(onPath.track, onPath.frame), moved: false };
+                        this.canvas.style.cursor = 'grabbing';
+                        return;
+                    }
+                    if (onPath) {
+                        this.selectFrame(onPath.frame);
+                        return;
+                    }
                     let found = this.hitTest(pos);
                     const currentStroke = this.selectedObject?.isPersistentGroup
                         ? this.selectedObject.persistentGroupStroke
@@ -2295,6 +2264,11 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 if (this.isPlaying) return;
 
                 if (this.tool === 'truck') {
+                    if (this.pathKeyDrag) {
+                        this.dragPathKey(pos);
+                        return;
+                    }
+                    if (this.dragMode !== 'motion-move') this.updatePathHover(pos);
                     if (this.dragMode === 'motion-move' && this.dragStart) {
                         const { dx, dy } = this.getMoveDelta(pos);
                         if (!dx && !dy && !this.motionDragSaved) return;
@@ -2624,6 +2598,10 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
             }
 
             onUp() {
+                if (this.pathKeyDrag) {
+                    this.finishPathKeyDrag();
+                    return;
+                }
                 if (this.isSelectingBox) {
                     this.isSelectingBox = false;
 
@@ -3402,56 +3380,246 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
             }
 
-            drawMotionGuide(ctx) {
-                if (this.tool !== 'truck' || this.isPlaying) return;
-                const track = this.getMotionTrack(this.truckSelectedTrackId) || this.getMotionTrackForSelection();
-                if (!track) return;
-                const baseBounds = this.getStrokeBounds(track.baseObject);
-                const baseCenter = { x: baseBounds.x + baseBounds.w / 2, y: baseBounds.y + baseBounds.h / 2 };
-                const points = [];
-                const guideStart = Number(track.startFrame);
-                const guideEnd = Number(track.endFrame);
-                const guideSpan = Math.max(0, guideEnd - guideStart);
-                const guideSteps = Math.max(1, Math.ceil(guideSpan * 4));
-                for (let step = 0; step <= guideSteps; step++) {
-                    const frame = guideStart + (guideSpan * step / guideSteps);
-                    const offset = this.getMotionOffset(track, frame);
-                    points.push({ x: baseCenter.x + offset.dx, y: baseCenter.y + offset.dy });
+            // Motion path on the canvas: a dot for every frame, and keys in the
+            // timeline's yellow that can be dragged to change the path.
+            getPathScale() {
+                const width = this.canvas.getBoundingClientRect().width;
+                return width ? this.canvasWidth / width : 1;
+            }
+
+            getPathTrack() {
+                if (this.tool !== 'truck' || this.isPlaying || this.activeLayer !== 'ink') return null;
+                return this.getMotionTrack(this.truckSelectedTrackId) || this.getMotionTrackForSelection();
+            }
+
+            getPathPoint(track, frame) {
+                const bounds = this.getStrokeBounds(track.baseObject);
+                const offset = this.getMotionOffset(track, frame);
+                return { x: bounds.x + bounds.w / 2 + offset.dx, y: bounds.y + bounds.h / 2 + offset.dy };
+            }
+
+            // The key or frame dot under the pointer. The artwork on this frame
+            // wins, so it can always be dragged even when a dot sits under it.
+            hitMotionPath(pos) {
+                const track = this.getPathTrack();
+                if (!track) return null;
+                if (this.selectedObject?.bounds && this.isInBounds(pos, this.selectedObject.bounds)) return null;
+                // Fingers need a bigger target than a mouse.
+                const reach = (window.matchMedia?.('(pointer: coarse)').matches ? 22 : 14) * this.getPathScale();
+                const excluded = new Set(track.excludedFrames || []);
+                let best = null;
+                for (let frame = track.startFrame; frame <= track.endFrame; frame++) {
+                    if (frame === this.frameIndex) continue;
+                    const isKey = track.keyframes.some((key) => key.frame === frame);
+                    if (!isKey && excluded.has(frame)) continue;
+                    const point = this.getPathPoint(track, frame);
+                    const distance = Math.hypot(point.x - pos.x, point.y - pos.y);
+                    if (distance <= reach && (!best || distance < best.distance)) best = { track, frame, isKey, distance };
                 }
-                if (points.length < 2) return;
-                const keyframePoints = (track.keyframes || []).map((keyframe) => ({
-                    x: baseCenter.x + keyframe.dx,
-                    y: baseCenter.y + keyframe.dy
-                }));
+                return best;
+            }
+
+            updatePathHover(pos) {
+                const hit = this.hitMotionPath(pos);
+                this.canvas.style.cursor = hit ? (hit.isKey ? 'grab' : 'pointer') : '';
+                if ((hit?.frame ?? null) === (this.pathHover?.frame ?? null)) return;
+                this.pathHover = hit ? { frame: hit.frame, isKey: hit.isKey } : null;
+                this.renderCanvas();
+            }
+
+            dragPathKey(pos) {
+                const drag = this.pathKeyDrag;
+                const dx = pos.x - drag.start.x;
+                const dy = pos.y - drag.start.y;
+                if (!drag.moved) {
+                    if (Math.hypot(dx, dy) < 3 * this.getPathScale()) return;
+                    this.saveState();
+                    drag.moved = true;
+                }
+                this.setMotionTrackKeyframe(drag.track, drag.frame, { dx: drag.offset.dx + dx, dy: drag.offset.dy + dy });
+                this.renderCanvas();
+            }
+
+            // A drag moves the key; a click on it goes to its frame.
+            finishPathKeyDrag() {
+                const drag = this.pathKeyDrag;
+                this.pathKeyDrag = null;
+                this.canvas.style.cursor = '';
+                if (!drag.moved) {
+                    this.selectFrame(drag.frame);
+                    return;
+                }
+                this.renderMotionTracks();
+                this.renderCanvas();
+                this.updateThumbnails();
+                this.saveStorage();
+            }
+
+            drawMotionGuide(ctx) {
+                const track = this.getPathTrack();
+                this.updateMotionKeyBar(track);
+                if (!track) return;
+                const k = this.getPathScale();
+                const blue = '#3478F6';
+                const start = Number(track.startFrame);
+                const end = Number(track.endFrame);
+                const keys = [...track.keyframes].sort((a, b) => a.frame - b.frame);
+                const isKey = (frame) => keys.some((key) => key.frame === frame);
+                const hover = this.pathKeyDrag?.moved ? this.pathKeyDrag.frame : this.pathHover?.frame;
                 ctx.save();
-                ctx.strokeStyle = 'rgba(10, 132, 255, 0.78)';
-                ctx.lineWidth = 1.25;
-                ctx.beginPath();
-                ctx.moveTo(points[0].x, points[0].y);
-                points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
-                ctx.stroke();
-                // Short perpendicular ties make the guide read as a thin train track.
-                for (let index = 0; index < points.length; index += Math.max(1, Math.floor(points.length / 8))) {
-                    const point = points[index];
-                    const before = points[Math.max(0, index - 1)];
-                    const after = points[Math.min(points.length - 1, index + 1)];
-                    const length = Math.hypot(after.x - before.x, after.y - before.y) || 1;
-                    const nx = -(after.y - before.y) / length * 4;
-                    const ny = (after.x - before.x) / length * 4;
-                    ctx.beginPath();
-                    ctx.moveTo(point.x - nx, point.y - ny);
-                    ctx.lineTo(point.x + nx, point.y + ny);
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                if (end > start) {
+                    const steps = (end - start) * 8;
+                    const points = [];
+                    for (let step = 0; step <= steps; step++) points.push(this.getPathPoint(track, start + (end - start) * step / steps));
+                    const trace = () => {
+                        ctx.beginPath();
+                        points.forEach((point, index) => (index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
+                    };
+                    // A pale edge keeps the line readable over any drawing.
+                    trace();
+                    ctx.lineWidth = 6 * k;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+                    ctx.stroke();
+                    trace();
+                    ctx.lineWidth = 3 * k;
+                    ctx.strokeStyle = blue;
                     ctx.stroke();
                 }
-                keyframePoints.forEach((point) => {
+                // One dot per frame: close together is slow, far apart is fast.
+                const excluded = new Set(track.excludedFrames || []);
+                for (let frame = start; frame <= end; frame++) {
+                    if (frame === this.frameIndex || excluded.has(frame) || isKey(frame)) continue;
+                    const point = this.getPathPoint(track, frame);
                     ctx.beginPath();
-                    ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+                    ctx.arc(point.x, point.y, (frame === hover ? 6.5 : 5) * k, 0, Math.PI * 2);
                     ctx.fillStyle = '#fff';
                     ctx.fill();
-                    ctx.strokeStyle = 'rgba(10, 132, 255, 0.9)';
+                    ctx.lineWidth = 2.5 * k;
+                    ctx.strokeStyle = blue;
                     ctx.stroke();
+                    if (frame === hover) this.drawPathLabel(ctx, `Frame ${frame + 1}`, point, k);
+                }
+                // Hovering or dragging a key shows a ghost of the artwork there.
+                if (hover != null && isKey(hover)) {
+                    const ghost = this.cloneData(track.baseObject);
+                    const offset = this.getMotionOffset(track, hover);
+                    this.translateStrokeObject(ghost, offset.dx, offset.dy);
+                    ctx.globalAlpha = 0.35;
+                    this.drawObject(ctx, ghost, false, 'ink');
+                    ctx.globalAlpha = 1;
+                }
+                keys.forEach((key, index) => {
+                    const point = this.getPathPoint(track, key.frame);
+                    const curved = index > 0 && (key.interpolation || track.interpolation) === 'curved';
+                    const here = key.frame === this.frameIndex;
+                    this.drawPathKey(ctx, point, curved, (here || key.frame === hover ? 10 : 8) * k, k);
+                    if (!here) this.drawPathLabel(ctx, key.frame === hover ? `Frame ${key.frame + 1} · drag to move` : String(key.frame + 1), point, k);
                 });
                 ctx.restore();
+            }
+
+            // Keys match the timeline: a diamond for straight, a circle for curved.
+            drawPathKey(ctx, point, curved, size, k) {
+                ctx.save();
+                ctx.translate(point.x, point.y);
+                ctx.beginPath();
+                if (curved) {
+                    ctx.arc(0, 0, size * 0.85, 0, Math.PI * 2);
+                } else {
+                    ctx.rotate(Math.PI / 4);
+                    ctx.rect(-size * 0.7, -size * 0.7, size * 1.4, size * 1.4);
+                }
+                ctx.fillStyle = '#ffcc00';
+                ctx.fill();
+                ctx.lineWidth = 2 * k;
+                ctx.strokeStyle = '#1d1b20';
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            drawPathLabel(ctx, text, point, k) {
+                ctx.save();
+                ctx.font = `600 ${11 * k}px Inter, 'Segoe UI', system-ui, sans-serif`;
+                const width = ctx.measureText(text).width + 10 * k;
+                const height = 17 * k;
+                let x = point.x + 13 * k;
+                if (x + width > this.canvasWidth) x = point.x - 13 * k - width;
+                const y = Math.max(height / 2, point.y - 13 * k);
+                ctx.beginPath();
+                if (ctx.roundRect) ctx.roundRect(x, y - height / 2, width, height, 6 * k);
+                else ctx.rect(x, y - height / 2, width, height);
+                ctx.fillStyle = 'rgba(29, 27, 32, 0.86)';
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, x + 5 * k, y + 0.5 * k);
+                ctx.restore();
+            }
+
+            // Motion moves artwork but can't resize it, so a dashed ring marks
+            // the selection instead of handles.
+            drawMotionRing(ctx) {
+                const b = this.selectedObject.bounds;
+                if (!b) return;
+                const k = this.getPathScale();
+                const pad = 7 * k;
+                const angle = this.selectedObject.isGroup ? this.selectedObject.angle : this.selectedObject.stroke?.angle;
+                ctx.save();
+                if (angle) {
+                    const cx = b.x + b.w / 2;
+                    const cy = b.y + b.h / 2;
+                    ctx.translate(cx, cy);
+                    ctx.rotate(angle);
+                    ctx.translate(-cx, -cy);
+                }
+                ctx.beginPath();
+                if (ctx.roundRect) ctx.roundRect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2, Math.min(b.w, b.h) / 2 + pad);
+                else ctx.rect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
+                ctx.setLineDash([6 * k, 5 * k]);
+                ctx.lineWidth = 2 * k;
+                ctx.strokeStyle = '#3478F6';
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // On a key's frame, a small bar under the artwork can remove the key.
+            updateMotionKeyBar(track) {
+                const bar = document.getElementById('motion-key-bar');
+                if (!bar) return;
+                const keys = [...(track?.keyframes || [])].sort((a, b) => a.frame - b.frame);
+                const keyIndex = keys.findIndex((key) => key.frame === this.frameIndex);
+                const show = keyIndex > -1 && !this.pathKeyDrag && this.dragMode !== 'motion-move' && Boolean(this.selectedObject);
+                bar.hidden = !show;
+                if (!show) return;
+                const key = keys[keyIndex];
+                const curved = keyIndex > 0 && (key.interpolation || track.interpolation) === 'curved';
+                bar.querySelector('.motion-key-icon')?.classList.toggle('curved', curved);
+                const label = document.getElementById('motion-key-bar-label');
+                if (label) label.textContent = `Key on frame ${key.frame + 1}`;
+                const k = this.getPathScale();
+                const point = this.getPathPoint(track, this.frameIndex);
+                const half = this.getStrokeBounds(track.baseObject).h / 2;
+                const below = point.y + half + 16 * k;
+                const above = below + 44 * k > this.canvasHeight;
+                bar.classList.toggle('above', above);
+                bar.style.left = `${point.x / this.canvasWidth * 100}%`;
+                bar.style.top = `${(above ? point.y - half - 16 * k : below) / this.canvasHeight * 100}%`;
+            }
+
+            showMotionHint() {
+                const hint = document.getElementById('motion-hint');
+                if (!hint) return;
+                clearTimeout(this.motionHintTimer);
+                hint.hidden = false;
+                this.motionHintTimer = setTimeout(() => { hint.hidden = true; }, 6000);
+            }
+
+            hideMotionHint() {
+                clearTimeout(this.motionHintTimer);
+                const hint = document.getElementById('motion-hint');
+                if (hint) hint.hidden = true;
             }
 
             rectIntersect(r1, r2) {
@@ -3854,6 +4022,10 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
             }
 
             drawSelectionUI(ctx) {
+                if (this.tool === 'truck') {
+                    this.drawMotionRing(ctx);
+                    return;
+                }
                 const b = this.selectedObject.bounds;
                 ctx.save();
 
@@ -4110,10 +4282,16 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 
             setTool(t) {
                 if (this.isHandTool) this.setHandTool(false);
-                // Truck works in the motion timeline, so it needs the panels.
+                // Motion's keys and settings are in the panels, so it needs them.
                 if (t === 'truck' && this.panelsHidden) this.setPanelsHidden(false);
                 this.clearQuickLineTimer();
                 this.quickLineActive = false;
+                if (t === 'truck' && this.tool !== 'truck') this.showMotionHint();
+                if (t !== 'truck') {
+                    this.hideMotionHint();
+                    this.pathHover = null;
+                    this.canvas.style.cursor = '';
+                }
                 this.tool = t;
                 document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
                 const btn = document.getElementById('tool-' + t);
@@ -4332,6 +4510,10 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     const mode = drawing ? 'draw' : 'other';
                     if (panel.dataset.mode !== mode) panel.dataset.mode = mode;
                 };
+                if (this.tool === 'truck' && !this.isHandTool) {
+                    if (panel.dataset.mode !== 'motion') panel.dataset.mode = 'motion';
+                    return;
+                }
                 if (this.selectedObject) {
                     const names = { brush: 'Stroke', rect: 'Rectangle', circle: 'Circle', line: 'Line', text: 'Text', fill: 'Fill', group: 'Group' };
                     const heading = this.selectedObject.isPersistentGroup ? 'Group selected'
@@ -4353,7 +4535,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     eraser: ['Eraser', 'Drag over marks to erase them.'],
                     bucket: ['Fill', 'Click the canvas to fill the active layer.'],
                     select: ['Select', 'Click an object to move, resize, rotate, or edit it.'],
-                    truck: ['Motion path', 'Click an object, then drag it on different frames to animate its movement.']
+                    truck: ['Motion', 'Click an object, then drag it on different frames to animate its movement.']
                 };
                 const key = this.isHandTool ? 'hand' : (this.tool === 'brush' ? (this.brushType || 'brush') : this.tool);
                 const [toolTitle, toolDescription] = labels[key] || labels.brush;
@@ -4763,7 +4945,6 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 }
                 this.animateAddedFrame(insertAt);
                 if (duplicateWasLastFrame) this.pulseAddFrameButton();
-                this.syncMotionTimelineScroll(this.framesList);
                 this.renderCanvas();
                 this.saveStorage();
                 return true;
@@ -4830,7 +5011,6 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 }
                 this.animateAddedFrame(inserted[inserted.length - 1]);
                 if (duplicateWasLastFrame) this.pulseAddFrameButton();
-                this.syncMotionTimelineScroll(this.framesList);
                 this.renderCanvas();
                 this.saveStorage();
                 return true;
@@ -4963,29 +5143,54 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
             }
 
             updateMotionPanel() {
-                const label = document.getElementById('movement-selected-label');
-                const addButton = document.getElementById('movement-add-keyframe');
-                const previousButton = document.getElementById('movement-previous-key');
-                const nextButton = document.getElementById('movement-next-key');
                 const track = this.getMotionTrackForSelection();
-                const keys = [...(track?.keyframes || [])].sort((a, b) => a.frame - b.frame);
-                const currentKey = keys.find((keyframe) => keyframe.frame === this.frameIndex);
-                if (track) {
-                    if (label) label.textContent = `Movement · frame ${this.frameIndex + 1}`;
-                } else {
-                    if (label) label.textContent = this.selectedObject ? `Frame ${this.frameIndex + 1}: drag the object to move it` : 'Click an object to animate it';
+                this.updateMotionSettings(track, [...(track?.keyframes || [])].sort((a, b) => a.frame - b.frame));
+            }
+
+            // The Motion settings panel: path shape, the keys, and Add or Remove
+            // for this frame.
+            updateMotionSettings(track, keys) {
+                const settings = document.getElementById('motion-settings');
+                if (!settings) return;
+                // With artwork picked but not yet moving, Add key starts its motion.
+                settings.classList.toggle('is-ready', Boolean(track || this.selectedObject));
+                const keysLabel = document.getElementById('motion-keys-label');
+                if (keysLabel) keysLabel.hidden = !keys.length;
+                const curvedCount = keys.slice(1).filter((key) => (key.interpolation || track?.interpolation) === 'curved').length;
+                const shape = keys.length < 2 ? null : curvedCount === keys.length - 1 ? 'curved' : curvedCount === 0 ? 'straight' : null;
+                ['straight', 'curved'].forEach((value) => {
+                    const button = document.getElementById(`motion-path-${value}`);
+                    if (!button) return;
+                    button.classList.toggle('active', shape === value);
+                    button.setAttribute('aria-pressed', String(shape === value));
+                    button.disabled = keys.length < 2;
+                });
+                const list = document.getElementById('motion-keys');
+                if (list) {
+                    list.replaceChildren(...keys.map((key, index) => {
+                        const chip = document.createElement('button');
+                        const icon = document.createElement('span');
+                        const here = key.frame === this.frameIndex;
+                        chip.type = 'button';
+                        chip.className = `motion-key-chip${here ? ' active' : ''}`;
+                        chip.setAttribute('aria-pressed', String(here));
+                        chip.title = `Go to frame ${key.frame + 1}`;
+                        icon.className = 'motion-key-icon';
+                        icon.classList.toggle('curved', index > 0 && (key.interpolation || track.interpolation) === 'curved');
+                        chip.append(icon, `Frame ${key.frame + 1}`);
+                        chip.onclick = () => this.selectFrame(key.frame);
+                        return chip;
+                    }));
                 }
-                if (addButton) addButton.disabled = !this.selectedObject;
-                if (addButton) {
-                    addButton.textContent = currentKey ? '− Key' : '+ Key';
-                    addButton.setAttribute('aria-label', currentKey ? 'Remove movement keyframe' : 'Add movement keyframe');
-                    addButton.title = currentKey ? 'Remove keyframe at current frame' : 'Add keyframe at current frame';
-                }
-                if (previousButton) {
-                    previousButton.disabled = !track || !keys.some((keyframe) => keyframe.frame < this.frameIndex);
-                }
-                if (nextButton) {
-                    nextButton.disabled = !track || !keys.some((keyframe) => keyframe.frame > this.frameIndex);
+                const action = document.getElementById('motion-key-action');
+                if (action) {
+                    const onKey = keys.some((key) => key.frame === this.frameIndex);
+                    action.innerHTML = onKey
+                        ? '<i class="fas fa-trash" aria-hidden="true"></i><span>Remove key on this frame</span>'
+                        : '<i class="fas fa-plus" aria-hidden="true"></i><span>Add key on this frame</span>';
+                    action.title = onKey ? 'Remove key on this frame' : 'Add key on this frame';
+                    action.setAttribute('aria-label', action.title);
+                    action.disabled = !this.selectedObject;
                 }
             }
 
@@ -5010,159 +5215,87 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 return true;
             }
 
-            finishMotionKeyDrag() {
-                const drag = this.motionKeyDrag;
-                if (!drag) return;
-                this.motionKeyDrag = null;
-                if (drag.moved) {
-                    this.suppressMotionKeyClick = true;
-                    setTimeout(() => { this.suppressMotionKeyClick = false; }, 0);
-                }
-                const track = this.getMotionTrack(drag.trackId);
-                if (drag.moved && track) this.retimeMotionKeyframe(track, drag.fromFrame, drag.targetFrame);
-            }
-
-            updateMotionTrackActiveUI() {
-                const container = document.getElementById('movement-tracks');
-                if (!container) return;
-                container.querySelectorAll('.motion-track-row').forEach((row) => {
-                    const track = this.getMotionTrack(row.dataset.trackId);
-                    row.querySelectorAll('.motion-track-cell').forEach((cell) => {
-                        const frame = Number.parseInt(cell.dataset.frame, 10);
-                        cell.classList.toggle('current', frame === this.frameIndex);
-                        cell.classList.toggle('selected', Boolean(track?.keyframes.some((key) => key.frame === frame)));
-                    });
-                });
-            }
-
-            syncMotionTimelineScroll(source) {
-                const framesTrack = this.framesList;
-                const movementScroll = document.getElementById('movement-track-scroll');
-                if (!framesTrack || !movementScroll || !this.motionScrollActive || this.motionScrollSyncing) return;
-
-                const sharedMax = Math.max(0, Math.min(
-                    framesTrack.scrollWidth - framesTrack.clientWidth,
-                    movementScroll.scrollWidth - movementScroll.clientWidth
-                ));
-                const requested = source ? source.scrollLeft : framesTrack.scrollLeft;
-                const nextScroll = Math.max(0, Math.min(requested, sharedMax));
-
-                this.motionScrollSyncing = true;
-                if (framesTrack.scrollLeft !== nextScroll) framesTrack.scrollLeft = nextScroll;
-                if (movementScroll.scrollLeft !== nextScroll) movementScroll.scrollLeft = nextScroll;
-                this.motionScrollSyncing = false;
-            }
-
-            syncMotionTimelineLayout() {
-                const framesTrack = this.framesList;
-                const movementList = document.getElementById('movement-tracks');
-                if (!framesTrack || !movementList) return;
-
-                const frameStyles = getComputedStyle(framesTrack);
-                const sampleCard = framesTrack.querySelector('.frame-card');
-                const addFrame = framesTrack.querySelector('.add-frame-btn');
-                const gap = Number.parseFloat(frameStyles.columnGap || frameStyles.gap) || 0;
-                const cellWidth = sampleCard?.getBoundingClientRect().width || 90;
-                const addMargin = addFrame ? Number.parseFloat(getComputedStyle(addFrame).marginLeft) || 0 : 0;
-                const addWidth = addFrame?.getBoundingClientRect().width || 0;
-
-                // Both strips use the same left padding, cell width, and gap.
-                // Mirror the trailing Add Frame footprint in the movement row
-                // so both scroll ranges are identical at the far right.
-                movementList.style.setProperty('--movement-cell-width', `${cellWidth}px`);
-                movementList.style.setProperty('--movement-cell-gap', `${gap}px`);
-                movementList.style.setProperty('--movement-track-end-space', `${addFrame ? gap + addMargin + addWidth : 0}px`);
-            }
-
+            // Motion's keys show as badges on their frames' thumbnails. Dragging a
+            // badge to another thumbnail changes when that key happens.
             renderMotionTracks() {
-                const container = document.getElementById('movement-tracks');
-                const scroll = document.getElementById('movement-track-scroll');
-                const panel = document.querySelector('.timeline-panel');
-                if (!container || !scroll || !panel) return;
-                container.innerHTML = '';
-                const showMotion = this.tool === 'truck';
-                const selectedTrack = this.getMotionTrackForSelection();
-                const visibleTracks = selectedTrack ? [selectedTrack] : (this.tool === 'truck' && this.selectedObject ? [null] : []);
-                this.motionScrollActive = showMotion && visibleTracks.length > 0;
-                panel.classList.toggle('has-motion', showMotion);
-                document.body.classList.toggle('has-motion-timeline', showMotion);
-                this.fitToolsPanel();
-                this.positionZoomControls();
-                this.syncMotionTimelineLayout();
-                visibleTracks.forEach((track, trackIndex) => {
-                    const row = document.createElement('div');
-                    row.className = 'motion-track-row';
-                    row.dataset.trackId = track?.id || '';
-                    for (let frame = 0; frame < this.frames.length; frame++) {
-                        const cell = document.createElement('button');
-                        cell.type = 'button';
-                        cell.className = 'motion-track-cell';
-                        cell.dataset.frame = String(frame);
-                        cell.dataset.trackId = track?.id || '';
-                        if (frame === 0) cell.dataset.trackLabel = track ? `M${this.motionTracks.indexOf(track) + 1}` : 'New';
-                        cell.title = track ? `Movement frame ${frame + 1}` : `New movement frame ${frame + 1}`;
-                        cell.setAttribute('aria-label', track ? `Movement frame ${frame + 1}` : `New movement frame ${frame + 1}`);
-                        const keyframe = track?.keyframes.find((key) => key.frame === frame);
-                        const keyIndex = track ? [...track.keyframes].sort((a, b) => a.frame - b.frame).findIndex((key) => key.frame === frame) : -1;
-                        cell.classList.toggle('keyframe', Boolean(keyframe));
-                        cell.classList.toggle('curved', Boolean(keyframe && keyIndex > 0 && (keyframe.interpolation || track?.interpolation) === 'curved'));
-                        cell.classList.toggle('straight', Boolean(keyframe && (!cell.classList.contains('curved') || keyIndex === 0)));
-                        if (keyframe) {
-                            const interpolation = keyframe.interpolation || track?.interpolation || 'straight';
-                            cell.title = keyIndex > 0
-                                ? `Movement frame ${frame + 1} · ${interpolation} path; click to toggle, drag to retime`
-                                : `Movement frame ${frame + 1} · First key has no incoming path`;
-                        }
-                        cell.onpointerdown = (event) => {
-                            if (!track || !cell.classList.contains('keyframe')) return;
-                            event.preventDefault();
-                            event.stopPropagation();
-                            cell.setPointerCapture?.(event.pointerId);
-                            this.motionKeyDrag = {
-                                trackId: track.id,
-                                fromFrame: frame,
-                                targetFrame: frame,
-                                moved: false
-                            };
-                        };
-                        cell.onpointermove = (event) => {
-                            const drag = this.motionKeyDrag;
-                            if (!track || !drag || drag.trackId !== track.id) return;
-                            const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.motion-track-cell');
-                            if (!target || target.dataset.trackId !== track.id) return;
-                            const targetFrame = Number.parseInt(target.dataset.frame, 10);
-                            if (Number.isInteger(targetFrame)) {
-                                drag.targetFrame = targetFrame;
-                                drag.moved = drag.moved || targetFrame !== drag.fromFrame;
-                            }
-                        };
-                        cell.onpointerup = () => this.finishMotionKeyDrag();
-                        cell.onpointercancel = () => { this.motionKeyDrag = null; };
-                        cell.onclick = (event) => {
-                            event.stopPropagation();
-                            if (this.suppressMotionKeyClick) return;
-                            this.selectFrame(frame);
-                            if (track) {
-                                this.selectMotionTrack(track.id);
-                                if (keyframe && keyIndex > 0) this.toggleMotionKeyInterpolation(track.id, frame);
-                            }
-                        };
-                        row.appendChild(cell);
-                    }
-                    container.appendChild(row);
+                const cards = [...(this.framesList?.querySelectorAll('.frame-card') || [])];
+                cards.forEach((card) => card.querySelector('.frame-key-badge')?.remove());
+                const track = this.tool === 'truck' ? (this.getMotionTrack(this.truckSelectedTrackId) || this.getMotionTrackForSelection()) : null;
+                const keys = [...(track?.keyframes || [])].sort((a, b) => a.frame - b.frame);
+                keys.forEach((key, index) => {
+                    const card = cards[key.frame];
+                    if (!card) return;
+                    const badge = document.createElement('span');
+                    badge.className = 'frame-key-badge';
+                    badge.classList.toggle('curved', index > 0 && (key.interpolation || track.interpolation) === 'curved');
+                    badge.dataset.frame = String(key.frame);
+                    badge.title = `Key on frame ${key.frame + 1}. Drag it to another frame to change when it happens.`;
+                    badge.draggable = false;
+                    badge.innerHTML = '<i aria-hidden="true"></i>';
+                    badge.onpointerdown = (event) => this.startKeyBadgeDrag(event, track, key.frame, badge);
+                    badge.onclick = (event) => {
+                        event.stopPropagation();
+                        if (!this.suppressKeyBadgeClick) this.selectFrame(key.frame);
+                    };
+                    card.appendChild(badge);
                 });
-                if (!this.motionScrollBound) {
-                    const framesTrack = this.framesList;
-                    framesTrack?.addEventListener('scroll', () => this.syncMotionTimelineScroll(framesTrack));
-                    scroll.addEventListener('scroll', () => this.syncMotionTimelineScroll(scroll));
-                    this.motionScrollBound = true;
-                }
-                // The movement row may be shown after the frame strip has already
-                // been scrolled. Establish the shared position immediately instead
-                // of waiting for the next user scroll event.
-                this.syncMotionTimelineScroll();
-                this.updateMotionTrackActiveUI();
                 this.updateMotionPanel();
+            }
+
+            startKeyBadgeDrag(event, track, fromFrame, badge) {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                event.stopPropagation();
+                badge.setPointerCapture?.(event.pointerId);
+                const drag = { fromFrame, targetFrame: null, startX: event.clientX, startY: event.clientY, flying: null, tip: null };
+                this.keyBadgeDrag = drag;
+                const cards = () => [...this.framesList.querySelectorAll('.frame-card')];
+                const clearTarget = () => cards().forEach((card) => card.classList.remove('key-drop'));
+                const move = (e) => {
+                    if (!drag.flying) {
+                        if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 4) return;
+                        drag.flying = badge.cloneNode(true);
+                        drag.flying.classList.add('flying');
+                        drag.tip = document.createElement('div');
+                        drag.tip.className = 'key-drop-tip';
+                        drag.tip.hidden = true;
+                        document.body.append(drag.flying, drag.tip);
+                        badge.classList.add('lifted');
+                    }
+                    drag.flying.style.left = `${e.clientX}px`;
+                    drag.flying.style.top = `${e.clientY}px`;
+                    clearTarget();
+                    const card = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('.frame-card');
+                    const frame = card ? cards().indexOf(card) : -1;
+                    // A key can't land on a frame that already has one.
+                    const free = frame > -1 && frame !== fromFrame && !track.keyframes.some((key) => key.frame === frame);
+                    drag.targetFrame = free ? frame : null;
+                    drag.tip.hidden = !free;
+                    if (!free) return;
+                    card.classList.add('key-drop');
+                    const box = card.getBoundingClientRect();
+                    drag.tip.textContent = `Move key to frame ${frame + 1}`;
+                    drag.tip.style.left = `${box.left + box.width / 2}px`;
+                    drag.tip.style.top = `${box.top - 8}px`;
+                };
+                const end = (e) => {
+                    badge.removeEventListener('pointermove', move);
+                    badge.removeEventListener('pointerup', end);
+                    badge.removeEventListener('pointercancel', end);
+                    this.keyBadgeDrag = null;
+                    clearTarget();
+                    drag.flying?.remove();
+                    drag.tip?.remove();
+                    badge.classList.remove('lifted');
+                    if (!drag.flying) return;
+                    // The click that follows a drag shouldn't also pick a frame.
+                    this.suppressKeyBadgeClick = true;
+                    setTimeout(() => { this.suppressKeyBadgeClick = false; }, 0);
+                    if (e.type === 'pointerup' && drag.targetFrame !== null) this.retimeMotionKeyframe(track, fromFrame, drag.targetFrame);
+                };
+                badge.addEventListener('pointermove', move);
+                badge.addEventListener('pointerup', end);
+                badge.addEventListener('pointercancel', end);
             }
 
             renderUI(minimal = false) {
@@ -5262,7 +5395,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 if (nextButton) nextButton.disabled = this.frameIndex === this.frames.length - 1;
             }
 
-            handleDragStart(e, index) { this.draggedFrameIndex = index; e.dataTransfer.effectAllowed = 'move'; e.currentTarget.style.opacity = '0.5'; }
+            handleDragStart(e, index) { if (this.keyBadgeDrag) { e.preventDefault(); return; } this.draggedFrameIndex = index; e.dataTransfer.effectAllowed = 'move'; e.currentTarget.style.opacity = '0.5'; }
             handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
             handleDragEnter(e) { e.currentTarget.classList.add('drag-over'); }
             handleDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
@@ -5296,7 +5429,6 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 cards.forEach((c, i) => c.classList.toggle('active', i === this.frameIndex));
                 this.updateFrameSelectionUI();
                 this.syncFramePosition();
-                this.updateMotionTrackActiveUI();
             }
 
             renderFrameToContext(targetCtx, frame, transparent = false) {
@@ -5417,7 +5549,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                         this.db.set('currentProject', jsonStr).then(() => {
                             const ind = document.getElementById('save-indicator');
                             ind.innerHTML = '<i class="fas fa-check"></i> Saved in this browser';
-                            ind.style.background = 'rgba(46, 204, 113, 0.9)';
+                            ind.style.background = 'rgb(22, 128, 61)';
                             ind.style.opacity = 1;
                             setTimeout(() => ind.style.opacity = 0, 1500);
                         }).catch(e => console.log("IDB Error", e));
@@ -5689,7 +5821,8 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 const indicator = document.getElementById('save-indicator');
                 if (!indicator) return;
                 indicator.innerHTML = `<i class="fas fa-${isError ? 'exclamation-triangle' : 'check'}"></i> ${message}`;
-                indicator.style.background = isError ? 'rgba(255, 59, 48, 0.92)' : 'rgba(46, 204, 113, 0.9)';
+                // Dark enough for white text to read clearly (WCAG AA).
+                indicator.style.background = isError ? 'rgb(196, 43, 28)' : 'rgb(22, 128, 61)';
                 indicator.style.opacity = 1;
                 setTimeout(() => indicator.style.opacity = 0, 2200);
             }
@@ -6110,7 +6243,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 
                 const selectedTrack = this.getMotionTrackForSelection();
                 if (selectedTrack) {
-                    this.showExportNotice('Animated movement deleted', false);
+                    this.showExportNotice('Animated motion deleted', false);
                     this.motionTracks = this.motionTracks.filter((track) => track.id !== selectedTrack.id);
                     this.frames.forEach((frame) => { frame.strokes = frame.strokes.filter((stroke) => stroke.motionTrackId !== selectedTrack.id); });
                 }

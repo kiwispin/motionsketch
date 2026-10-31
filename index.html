@@ -472,6 +472,32 @@
         .bg-color-swatch { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 5px; background: #ffffff; box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.5); }
         .bg-color-row input[type="color"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
         .props-panel[data-mode="other"] .brush-preview { display: none; }
+        /* Motion: the panel shows the path's settings instead of the brush. */
+        .props-panel[data-mode="motion"] > .prop-group:not(.layer-group):not(.motion-settings):not(#onion-settings) { display: none; }
+        .props-panel:not([data-mode="motion"]) .motion-settings { display: none; }
+        .motion-body { display: grid; gap: 8px; }
+        .motion-settings:not(.is-ready) .motion-body, .motion-settings.is-ready .motion-empty { display: none; }
+        .motion-empty, .motion-tip { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-muted); }
+        .motion-sub { margin-top: 4px; font-size: 13px; color: var(--text-muted); }
+        .motion-settings .layer-option:disabled { opacity: 0.5; cursor: default; }
+        .motion-keys { display: flex; flex-wrap: wrap; gap: 6px; }
+        .motion-key-chip { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border-panel); background: transparent; color: var(--text-main); font: inherit; font-size: 13px; cursor: pointer; }
+        .motion-key-chip:hover { background: var(--btn-hover); }
+        .motion-key-chip.active { border-color: var(--accent-blue); box-shadow: inset 0 0 0 1px var(--accent-blue); font-weight: 500; }
+        .motion-key-icon { display: inline-block; flex: none; width: 9px; height: 9px; background: #ffcc00; border: 1.5px solid #1d1b20; border-radius: 1px; transform: rotate(45deg); }
+        .motion-key-icon.curved { width: 10px; height: 10px; border-radius: 50%; transform: none; }
+        .motion-key-action { width: 100%; justify-content: center; }
+        .motion-tip { margin-top: 6px; }
+        .motion-key-bar, .motion-hint { position: absolute; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; background: rgba(29, 27, 32, 0.92); color: #fff; font-size: 12.5px; font-weight: 500; line-height: 1.3; white-space: nowrap; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28); }
+        .motion-key-bar { transform: translateX(-50%); }
+        .motion-key-bar.above { transform: translate(-50%, -100%); }
+        .motion-key-bar button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 0; border-radius: 7px; background: rgba(255, 255, 255, 0.12); color: #fff; font: inherit; cursor: pointer; }
+        .motion-key-bar button:hover { background: rgba(255, 255, 255, 0.2); }
+        .motion-hint { top: 14px; left: 50%; display: block; width: max-content; max-width: calc(100% - 24px); transform: translateX(-50%); font-weight: 400; text-align: center; white-space: normal; pointer-events: none; animation: motion-hint 6s ease forwards; }
+        .motion-hint .motion-key-icon { margin: 0 4px; vertical-align: -1px; }
+        .motion-key-bar[hidden], .motion-hint[hidden] { display: none; }
+        @keyframes motion-hint { 0% { opacity: 0; } 6%, 85% { opacity: 1; } 100% { opacity: 0; } }
+        @media (prefers-reduced-motion: reduce) { .motion-hint { animation: none; } }
         .swatch:hover { transform: scale(1.1); }
         [data-theme="light"] .swatch.active { border-color: #000; }
         .swatch.active { border-color: white; }
@@ -635,8 +661,6 @@
         .frame-scrub-tick { position: absolute; top: 7px; width: 2px; height: 8px; margin-left: -1px; border-radius: 1px; background: var(--text-muted); opacity: .45; pointer-events: none; }
         .frame-playhead { position: absolute; top: 2px; min-width: 26px; height: 18px; padding: 0 5px; transform: translateX(-50%); border-radius: 9px; background: var(--accent-blue); color: white; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; pointer-events: none; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); }
         .frame-scrub.scrubbing .frame-playhead { transform: translateX(-50%) scale(1.12); }
-        /* The movement row needs the room while Truck is open. */
-        .timeline-panel.has-motion .frame-scrub { display: none; }
         .frame-card img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
         .frame-card.active { border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.3); transform: translateY(-2px); }
         .frame-card.frame-selected { border-color: #ff9f0a; box-shadow: inset 0 0 0 2px rgba(255, 159, 10, 0.9), 0 0 0 2px rgba(255, 159, 10, 0.25); }
@@ -790,70 +814,18 @@
             margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--border-panel);
             border-radius: 10px; background: var(--input-bg); display: grid; gap: 3px;
         }
-        /* Give the movement strip enough room for both its fixed controls and
-           the keyframe row.  The extra pixels keep the row from being clipped
-           by the panel's rounded bottom edge. */
-        .timeline-panel.has-motion { height: 222px; padding-bottom: 6px; }
-        .timeline-panel.has-motion .timeline-frames-row { min-height: 88px; }
-        .timeline-panel.has-motion .frames-track { padding-top: 6px; padding-bottom: 6px; }
-        .movement-track-scroll {
-            display: none; height: auto; min-height: 80px; max-height: 80px; flex: 0 0 auto; overflow-x: auto; overflow-y: auto;
-            border-top: 1px solid var(--border-panel); scrollbar-width: thin;
-        }
-        body.has-motion-timeline .movement-track-scroll { display: block; }
-        .movement-track-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
-        .movement-track-scroll::-webkit-scrollbar-thumb { background: rgba(128,140,160,.5); border-radius: 999px; }
-        /* Match the movement row's columns to the thumbnail strip. The extra
-           end space mirrors the trailing Add Frame control so the final
-           keyframe never drifts when the two tracks are scrolled together. */
-        .movement-track-list {
-            min-width: max-content;
-            padding: 0 20px;
-            padding-right: calc(20px + var(--movement-track-end-space, 0px));
-        }
-        .movement-track-controls {
-            /* The movement strip shares the thumbnail scroller's horizontal
-               position.  Keep its label and keyframe controls pinned to the
-               viewport so they never disappear while the frames move. */
-            position: sticky; top: 0; left: 0; z-index: 4; box-sizing: border-box;
-            width: 100%; min-width: 100%; min-height: 34px; display: flex; align-items: center; gap: 8px; padding: 3px 20px;
-            border-bottom: 1px solid var(--border-panel); background: var(--input-bg); color: var(--text-muted); font-size: .75rem;
-        }
-        .movement-track-controls .movement-selected { min-width: 150px; flex: 0 1 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .movement-key-controls { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
-        .movement-key-controls .btn-ghost { min-width: 28px; height: 28px; padding: 0 8px; font-size: .8rem; line-height: 1; justify-content: center; white-space: nowrap; }
-        .movement-key-toggle { font-weight: 700; background: rgba(10, 132, 255, .18) !important; }
-        .motion-track-row {
-            display: grid;
-            grid-auto-flow: column;
-            grid-auto-columns: var(--movement-cell-width, 90px);
-            gap: var(--movement-cell-gap, 12px);
-            height: 34px;
-            align-items: center;
-        }
-        .motion-track-cell {
-            width: var(--movement-cell-width, 90px); height: 26px; border: 1px solid transparent; border-radius: 5px; background: transparent;
-            color: var(--text-muted); position: relative; cursor: pointer; padding: 0;
-        }
-        .motion-track-cell.current { border-color: var(--accent-blue); background: rgba(10,132,255,.12); }
-        .motion-track-cell.keyframe::before {
-            content: ""; width: 10px; height: 10px; position: absolute; left: 50%; top: 50%;
-            transform: translate(-50%, -50%) rotate(45deg); background: var(--accent-blue); border-radius: 2px;
-        }
-        .motion-track-cell.keyframe.curved::before { transform: translate(-50%, -50%); border-radius: 50%; }
-        .motion-track-cell.keyframe.selected::before { background: #ffcc00; }
-        .motion-track-cell:first-child::after {
-            content: attr(data-track-label); position: absolute; left: 4px; bottom: 2px;
-            font-size: 10px; line-height: 1; color: var(--text-muted); pointer-events: none;
-        }
+        /* Motion's keys on the thumbnails: drag one to another frame to retime it. */
+        .frame-key-badge { position: absolute; left: 4px; bottom: 4px; z-index: 2; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; background: rgba(29, 27, 32, 0.82); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); cursor: grab; touch-action: none; }
+        .frame-key-badge i { width: 9px; height: 9px; background: #ffcc00; border: 1.5px solid #1d1b20; border-radius: 1px; transform: rotate(45deg); }
+        .frame-key-badge.curved i { width: 10px; height: 10px; border-radius: 50%; transform: none; }
+        .frame-key-badge.lifted { opacity: 0.3; }
+        .frame-key-badge.flying { position: fixed; left: 0; top: 0; bottom: auto; z-index: 300; transform: translate(-50%, -50%) scale(1.15); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4); pointer-events: none; }
+        .frame-card.key-drop { outline: 2px dashed #ffcc00; outline-offset: 2px; }
+        .key-drop-tip { position: fixed; z-index: 300; transform: translate(-50%, -100%); padding: 6px 10px; border-radius: 8px; background: rgba(29, 27, 32, 0.94); color: #fff; font-size: 12.5px; font-weight: 500; white-space: nowrap; pointer-events: none; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3); }
+        .key-drop-tip[hidden] { display: none; }
         body.truck-active .tools-panel { overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
         .inspector-context strong { font-size: 0.85rem; }
         .inspector-context span { color: var(--text-muted); font-size: 0.75rem; line-height: 1.35; }
-
-        .timeline-panel.has-motion { height: 222px; }
-        @media (min-width: 901px) {
-            body.has-motion-timeline .props-panel { bottom: 230px; }
-        }
 
         /* Says what Play will do: "Loop" (on) or "Play once" (outlined). */
         #loop-mode-btn { gap: 6px; min-width: 116px; justify-content: center; padding: 5px 10px; border: 1px solid var(--border-panel); white-space: nowrap; color: var(--text-muted); }
@@ -977,6 +949,12 @@
             .props-panel #onion-settings:not([hidden]) { flex-direction: row; align-items: center; gap: 12px; }
             .props-panel #onion-settings .slider-row { width: 150px; grid-template-columns: 44px minmax(0, 1fr) 30px; }
             .props-panel #onion-settings .onion-tint { white-space: nowrap; }
+            /* Motion's settings sit in one row: the path, then Add or Remove.
+               The keys are in the timeline just below, so their list is left out. */
+            .props-panel .motion-body { display: flex; align-items: center; gap: 10px; }
+            .props-panel .motion-sub, .props-panel .motion-tip, .props-panel .motion-keys { display: none; }
+            .props-panel .motion-body .layer-switch { width: 170px; }
+            .props-panel .motion-empty { white-space: nowrap; }
             .props-panel .slider-icon { display: inline-block; }
             .props-panel .color-input-wrap { width: 52px; height: 44px; }
             .props-panel { overflow-x: auto; }
@@ -1002,14 +980,10 @@
 
         @media (min-width: 901px) {
             .props-panel { bottom: 240px; }
-            body.has-motion-timeline .tools-panel,
-            body.has-motion-timeline .props-panel { bottom: 252px; }
         }
 
         @media (max-height: 700px) and (min-width: 901px) {
-            body.has-motion-timeline .tools-panel,
-            .props-panel,
-            body.has-motion-timeline .props-panel { bottom: 180px; }
+            .props-panel { bottom: 180px; }
         }
 
         @media (max-width: 600px) {
@@ -1035,13 +1009,6 @@
             .props-panel .layer-switch { width: auto; }
             .props-panel .slider-row { width: 126px; }
             .timeline-panel { left: 10px; right: 10px; bottom: 10px; height: 154px; }
-            .timeline-panel.has-motion { height: 208px; }
-            .timeline-panel.has-motion .timeline-frames-row { min-height: 75px; }
-            .movement-track-scroll { min-height: 80px; max-height: 80px; }
-            .movement-track-controls { min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
-            .motion-track-row { height: 34px; }
-            .motion-track-row { grid-auto-columns: 70px; gap: 12px; }
-            .motion-track-cell { width: 70px; }
             .frame-card { min-width: 70px; height: 55px; }
             .frames-track .add-frame-btn { min-width: 40px; height: 40px; }
             .flyout-menu { left: 48px; }
@@ -1219,7 +1186,7 @@
         <button type="button" class="tool-btn" id="tool-select" onclick="app.setTool('select')" aria-label="Select tool (V)" title="Select (V)">
             <i class="fas fa-mouse-pointer"></i>
         </button>
-        <button type="button" class="tool-btn" id="tool-truck" onclick="app.setTool('truck')" aria-label="Motion path tool" title="Motion path (Truck): animate an object moving between frames">
+        <button type="button" class="tool-btn" id="tool-truck" onclick="app.setTool('truck')" aria-label="Motion tool" title="Motion: animate an object moving between frames">
             <i class="fas fa-route"></i>
         </button>
 
@@ -1284,6 +1251,22 @@
             <div class="layer-tools" role="group" aria-label="Background layer">
                 <button type="button" class="layer-tool" id="bg-lock" onclick="app.toggleBackgroundLock()" aria-pressed="false" aria-label="Lock background" title="Lock the background so it can't be drawn on, erased or moved"><i class="fas fa-lock" aria-hidden="true"></i><span>Lock</span></button>
                 <button type="button" class="layer-tool" id="bg-hide" onclick="app.toggleBackgroundHidden()" aria-pressed="false" aria-label="Hide background" title="Hide the background while you draw. It still exports."><i class="fas fa-eye-slash" aria-hidden="true"></i><span>Hide</span></button>
+            </div>
+        </div>
+
+        <div class="prop-group motion-settings" id="motion-settings">
+            <div class="prop-label">Motion</div>
+            <p class="motion-empty" id="motion-empty">Click an object on the canvas to animate it.</p>
+            <div class="motion-body">
+                <div class="motion-sub" id="motion-path-label">Path</div>
+                <div class="layer-switch" role="group" aria-labelledby="motion-path-label">
+                    <button type="button" class="layer-option" id="motion-path-straight" onclick="app.setMotionPath('straight')" aria-pressed="false" title="Straight lines between the keys">Straight</button>
+                    <button type="button" class="layer-option" id="motion-path-curved" onclick="app.setMotionPath('curved')" aria-pressed="false" title="A smooth curve through the keys">Curved</button>
+                </div>
+                <div class="motion-sub" id="motion-keys-label" hidden>Keys</div>
+                <div class="motion-keys" id="motion-keys" role="group" aria-labelledby="motion-keys-label"></div>
+                <button type="button" class="layer-tool motion-key-action" id="motion-key-action" onclick="app.toggleMotionKeyframe()"><i class="fas fa-plus" aria-hidden="true"></i><span>Add key on this frame</span></button>
+                <p class="motion-tip">Each dot on the path is one frame. Dots close together move slowly. Far apart move fast.</p>
             </div>
         </div>
 
@@ -1365,6 +1348,8 @@
         <div class="canvas-wrapper" id="canvas-wrapper">
             <canvas id="background-canvas" width="600" height="600"></canvas>
             <canvas id="rendering-canvas" width="600" height="600"></canvas>
+            <div class="motion-hint" id="motion-hint" role="status" hidden>Drag an object on different frames to make it move. Drag a <span class="motion-key-icon" aria-hidden="true"></span> key to change its path.</div>
+            <div class="motion-key-bar" id="motion-key-bar" hidden><span class="motion-key-icon" aria-hidden="true"></span><span id="motion-key-bar-label">Key on frame 1</span><button type="button" onclick="app.removeMotionKeyframe()" title="Remove this key"><i class="fas fa-trash" aria-hidden="true"></i> Remove</button></div>
         </div>
         <div class="selection-marquee" id="selection-marquee" hidden></div>
     </div>
@@ -1413,17 +1398,6 @@
         </div>
         <div class="timeline-frames-row">
             <div class="frames-track" id="frames-list"></div>
-        </div>
-        <div class="movement-track-scroll" id="movement-track-scroll" role="region" aria-label="Movement tracks">
-            <div class="movement-track-controls" id="movement-track-controls">
-                <span class="movement-selected" id="movement-selected-label">Select foreground artwork</span>
-                <div class="movement-key-controls" aria-label="Movement keyframe controls">
-                    <button type="button" class="btn-ghost" id="movement-previous-key" onclick="app.selectAdjacentMotionKey(-1)" aria-label="Previous movement key" title="Previous movement key">‹ Key</button>
-                    <button type="button" class="btn-ghost movement-key-toggle" id="movement-add-keyframe" onclick="app.toggleMotionKeyframe()" aria-label="Add movement keyframe" title="Add keyframe at current frame">+</button>
-                    <button type="button" class="btn-ghost" id="movement-next-key" onclick="app.selectAdjacentMotionKey(1)" aria-label="Next movement key" title="Next movement key">Key ›</button>
-                </div>
-            </div>
-            <div class="movement-track-list" id="movement-tracks"></div>
         </div>
     </div>
 
