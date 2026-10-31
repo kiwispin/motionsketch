@@ -22,7 +22,7 @@ test('the File menu holds New, Open and Save project file, and closes like Expor
   const toggle = page.getByRole('button', { name: 'File', exact: true });
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByRole('menuitem')).toHaveText([/New animation/, /Open project file/, /Save project file/]);
+  await expect(page.getByRole('menuitem')).toHaveText([/New animation/, /Open project file/, /Save project file/, /What’s new/]);
   await page.keyboard.press('Escape');
   await expect(page.locator('#file-menu')).toBeHidden();
   await expect(toggle).toBeFocused();
@@ -130,4 +130,25 @@ test('in the Project name box, Enter applies and Escape closes', async ({ page }
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: 'Project' })).toBeHidden();
   expect(await page.evaluate(() => window.app.projectName)).toBe('Typed name');
+});
+
+test('What’s new is in the File menu, with a dot until it has been read', async ({ page }) => {
+  const toggle = page.getByRole('button', { name: 'File', exact: true });
+  await expect(toggle).toHaveClass(/has-news/);
+  await toggle.click();
+  await expect(page.locator('#whats-new-item')).toHaveClass(/has-news/);
+  await page.getByRole('menuitem', { name: /What’s new/ }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'What’s new in SketchMotion' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('strong')).toHaveText(['A fresh look', 'More room to draw', 'Truck is now Motion', 'A File menu', 'A safer New', 'One place for your project']);
+  await expect(page.locator('#whats-new-close')).toBeFocused();
+  await page.getByRole('button', { name: 'Got it' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(toggle).not.toHaveClass(/has-news/);
+
+  // Once read, the dot stays gone.
+  await page.reload();
+  await page.waitForFunction(() => window.app && window.app.frames);
+  await expect(page.getByRole('button', { name: 'File', exact: true })).not.toHaveClass(/has-news/);
 });

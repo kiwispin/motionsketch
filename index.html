@@ -277,6 +277,20 @@
         .file-storage { display: grid; gap: 7px; padding: 8px 12px 10px; }
         .file-storage .storage-label { margin: 0; font-size: 0.8rem; text-align: left; }
         .file-storage .storage-track { width: 100%; height: 6px; }
+        /* What's new: a dot on File until the latest notes are read. */
+        .has-news { position: relative; }
+        .has-news::after { content: ""; position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-blue); box-shadow: 0 0 0 2px var(--bg-panel); pointer-events: none; }
+        .export-menu-item.has-news::after { top: 50%; right: 12px; transform: translateY(-50%); }
+        .modal-box.whats-new-box { width: min(540px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; text-align: left; }
+        .whats-new-box .modal-title { margin-bottom: 2px; }
+        .whats-new-date { margin: 0 0 14px; font-size: 0.85rem; color: var(--text-muted); }
+        .whats-new-list { list-style: none; margin: 0 0 22px; padding: 0; display: grid; gap: 14px; }
+        .whats-new-list li { display: grid; grid-template-columns: 32px 1fr; gap: 12px; font-size: 0.9rem; line-height: 1.45; color: var(--text-muted); }
+        .whats-new-list li > i { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: var(--btn-hover); color: var(--accent-blue); }
+        .whats-new-list strong { display: block; color: var(--text-main); font-weight: 600; }
+        .whats-new-list b { color: var(--text-main); font-weight: 500; }
+        .whats-new-list kbd { padding: 0 5px; border: 1px solid var(--border-panel); border-radius: 4px; font: inherit; font-size: 0.8rem; color: var(--text-main); }
+        .whats-new-box .modal-btns { justify-content: flex-end; }
         /* New warns when the animation isn't saved as a file, because it replaces it. */
         .new-unsaved { display: grid; grid-template-columns: auto 1fr; gap: 12px; margin: 4px 0 14px; padding: 14px; border-radius: 12px; text-align: left; background: rgba(255, 196, 0, 0.1); border: 1px solid rgba(255, 196, 0, 0.45); font-size: 0.9rem; line-height: 1.45; }
         .new-unsaved > i { color: #ffc400; margin-top: 3px; }
@@ -285,7 +299,8 @@
         .new-saved { margin: 4px 0 14px; color: #3fb36b; font-size: 0.9rem; }
         .new-unsaved[hidden], .new-saved[hidden] { display: none; }
         /* Project: name, canvas size, background image and speed in one place. */
-        .project-box { width: min(460px, calc(100vw - 32px)); text-align: left; }
+        /* Two classes, so these win over the shared .modal-box size. */
+        .modal-box.project-box { width: min(460px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; text-align: left; }
         .project-box .modal-title { margin-bottom: 18px; }
         .project-section { display: block; margin: 18px 0 8px; font-size: 0.85rem; font-weight: 600; color: var(--text-main); }
         .project-field { width: 100%; box-sizing: border-box; padding: 9px 11px; border: 1px solid var(--border-panel); border-radius: 8px; background: var(--input-bg); color: var(--text-main); font: inherit; }
@@ -1129,6 +1144,22 @@
         </div>
     </div>
 
+    <div id="whats-new-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="whats-new-title" aria-hidden="true" tabindex="-1">
+        <div class="modal-box whats-new-box" role="document">
+            <div class="modal-title" id="whats-new-title">What’s new in SketchMotion</div>
+            <p class="whats-new-date">October 2026</p>
+            <ul class="whats-new-list">
+                <li><i class="fas fa-palette" aria-hidden="true"></i><div><strong>A fresh look</strong>New colours, an easier-to-read font, and a name under every tool.</div></li>
+                <li><i class="fas fa-expand" aria-hidden="true"></i><div><strong>More room to draw</strong>The paper is bigger. On a computer, press <kbd>Tab</kbd> while drawing, or the button by the zoom, to hide the panels. Press <kbd>Tab</kbd> or <kbd>Esc</kbd> to bring them back.</div></li>
+                <li><i class="fas fa-route" aria-hidden="true"></i><div><strong>Truck is now Motion</strong>See the path your object takes, with a dot for every frame: dots close together move slowly, far apart move fast. Drag a yellow key on the canvas to change the path, or drag a key on the thumbnails to change when it happens. Straight or Curved is in the panel.</div></li>
+                <li><i class="fas fa-folder" aria-hidden="true"></i><div><strong>A File menu</strong>New, Open and Save project file are under <b>File</b>, next to your project’s name. “Download” is now called “Save project file”.</div></li>
+                <li><i class="fas fa-shield-alt" aria-hidden="true"></i><div><strong>A safer New</strong>If your animation isn’t saved as a file, New warns you and offers to save it first.</div></li>
+                <li><i class="fas fa-film" aria-hidden="true"></i><div><strong>One place for your project</strong>The <b>Project</b> button holds the name, canvas size, background image and speed.</div></li>
+            </ul>
+            <div class="modal-btns"><button class="btn-primary" id="whats-new-close" onclick="app.closeModal('whats-new-modal')">Got it</button></div>
+        </div>
+    </div>
+
     <div id="gif-warning-modal" class="modal-overlay gif-warning-modal" role="dialog" aria-modal="true" aria-labelledby="gif-warning-title" aria-describedby="gif-warning-description" aria-hidden="true" tabindex="-1">
         <div class="modal-box" role="document">
             <div class="modal-title" id="gif-warning-title">Long GIF export</div>
@@ -1217,6 +1248,8 @@
                 <button class="export-menu-item" type="button" role="menuitem" onclick="app.runFileAction('new')"><i class="fas fa-plus" aria-hidden="true"></i><span>New animation…</span></button>
                 <button class="export-menu-item" type="button" role="menuitem" onclick="app.runFileAction('open')"><i class="fas fa-folder-open" aria-hidden="true"></i><span>Open project file…</span></button>
                 <button class="export-menu-item" type="button" role="menuitem" onclick="app.runFileAction('save')"><i class="fas fa-download" aria-hidden="true"></i><span>Save project file<small>Keep a copy, or hand it in</small></span></button>
+                <div class="export-menu-divider" role="separator"></div>
+                <button class="export-menu-item" type="button" role="menuitem" id="whats-new-item" onclick="app.runFileAction('whats-new')"><i class="fas fa-gift" aria-hidden="true"></i><span>What’s new</span></button>
                 <div class="export-menu-divider" role="separator"></div>
                 <div class="file-storage" title="How much of this browser's storage your project uses">
                     <div class="storage-label">Browser storage</div>

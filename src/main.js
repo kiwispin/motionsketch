@@ -12,6 +12,8 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 // Undo snapshots store each frame once and reuse unchanged frames, so a long
 // history stays small.
 const HISTORY_LIMIT = 100;
+// Bump when the What's new notes change, so the dot shows again.
+const WHATS_NEW_VERSION = '2026-10';
 const ONION_BEFORE_TINT = '#2f6bff';
 const ONION_AFTER_TINT = '#19a35b';
 const LOOP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>';
@@ -160,6 +162,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 
             async init() {
                 this.loadTheme();
+                this.syncWhatsNew();
                 this.setupEvents();
                 this.setupEditableNumbers();
                 this.handleResize();
@@ -6151,7 +6154,27 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 
             runFileAction(action) {
                 this.setFileMenuOpen(false);
-                ({ new: () => this.requestNewAnimation(), open: () => this.openProject(), save: () => this.saveProject() }[action])?.();
+                ({
+                    new: () => this.requestNewAnimation(),
+                    open: () => this.openProject(),
+                    save: () => this.saveProject(),
+                    'whats-new': () => this.showWhatsNew()
+                }[action])?.();
+            }
+
+            // What's new: a dot on File until the latest notes are read.
+            syncWhatsNew() {
+                let seen = null;
+                try { seen = localStorage.getItem('motionSketchWhatsNew'); } catch (e) { /* storage blocked */ }
+                const fresh = seen !== WHATS_NEW_VERSION;
+                document.getElementById('file-menu-toggle')?.classList.toggle('has-news', fresh);
+                document.getElementById('whats-new-item')?.classList.toggle('has-news', fresh);
+            }
+
+            showWhatsNew() {
+                try { localStorage.setItem('motionSketchWhatsNew', WHATS_NEW_VERSION); } catch (e) { /* storage blocked */ }
+                this.syncWhatsNew();
+                this.openModal('whats-new-modal', 'whats-new-close');
             }
 
             runExport(format) {
