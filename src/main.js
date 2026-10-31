@@ -13,12 +13,287 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 // history stays small.
 const HISTORY_LIMIT = 100;
 // Bump when the What's new notes change, so the dot shows again.
-const WHATS_NEW_VERSION = '2026-10-31c';
+const WHATS_NEW_VERSION = '2026-10-31d';
 const GUIDE_KEY = 'motionSketchGuide';
 const ONION_BEFORE_TINT = '#2f6bff';
 const ONION_AFTER_TINT = '#19a35b';
 const LOOP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>';
 const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h13"/><path d="M11 7l5 5-5 5"/><path d="M20 5v14"/></svg>';
+
+// Hold to tidy: holding still at the end of a brush line turns it into the
+// shape it looks like (a line, curve, zigzag, circle, oval, triangle, square,
+// rectangle or other straight-sided shape).
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const pathLength = (pts) => pts.reduce((sum, p, i) => i ? sum + dist(pts[i - 1], p) : 0, 0);
+
+function resample(pts, n) {
+  const step = pathLength(pts) / (n - 1);
+  if (!step) return Array.from({ length: n }, () => ({ x: pts[0].x, y: pts[0].y }));
+  const out = [{ x: pts[0].x, y: pts[0].y }];
+  let acc = 0;
+  for (let i = 1; i < pts.length && out.length < n; i++) {
+    let a = pts[i - 1];
+    const b = pts[i];
+    let d = dist(a, b);
+    while (acc + d >= step && out.length < n) {
+      const t = (step - acc) / d;
+      a = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      out.push(a);
+      d = dist(a, b);
+      acc = 0;
+    }
+    acc += d;
+  }
+  while (out.length < n) out.push({ x: pts[pts.length - 1].x, y: pts[pts.length - 1].y });
+  return out;
+}
+
+function segDist(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+  return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+}
+
+// Douglas-Peucker on pts[i0..i1], returning the indices it keeps.
+function rdp(pts, i0, i1, eps, out = [i0]) {
+  let far = -1, farD = eps;
+  for (let i = i0 + 1; i < i1; i++) {
+    const d = segDist(pts[i], pts[i0], pts[i1]);
+    if (d > farD) { farD = d; far = i; }
+  }
+  if (far >= 0) { rdp(pts, i0, far, eps, out); rdp(pts, far, i1, eps, out); }
+  else out.push(i1);
+  return out;
+}
+
+const turn = (a, b, c) => {
+  const t = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(b.y - a.y, b.x - a.x);
+  return Math.abs(Math.atan2(Math.sin(t), Math.cos(t)));
+};
+const DEG = Math.PI / 180;
+
+// A real corner turns a fair way, and turns right there, not by bending gently
+// past it as a circle does. Weaker corners (wobbles) are dropped one at a
+// time; what is left is returned with whether every corner is real.
+function keepCorners(pts, idx, closed) {
+  const n = pts.length, k = 4;
+  const at = (j) => closed ? pts[(j + n) % n] : pts[Math.max(0, Math.min(n - 1, j))];
+  const strength = (list, c) => {
+    const prev = pts[list[(c - 1 + list.length) % list.length]], next = pts[list[(c + 1) % list.length]];
+    const big = turn(prev, pts[list[c]], next);
+    const local = turn(at(list[c] - k), pts[list[c]], at(list[c] + k));
+    return Math.min(big / (30 * DEG), local / (big * 0.6));
+  };
+  const list = [...idx];
+  const first = closed ? 0 : 1, min = closed ? 3 : 2;
+  while (list.length > min) {
+    let weakest = -1, weak = 1;
+    for (let c = first; c < list.length - (closed ? 0 : 1); c++) {
+      const s = strength(list, c);
+      if (s < weak) { weak = s; weakest = c; }
+    }
+    if (weakest < 0) break;
+    list.splice(weakest, 1);
+  }
+  let real = true;
+  for (let c = first; c < list.length - (closed ? 0 : 1); c++) if (strength(list, c) < 1) real = false;
+  return { list, real };
+}
+
+function polyError(pts, verts, closed) {
+  const edges = closed ? verts.length : verts.length - 1;
+  let sum = 0;
+  pts.forEach((p) => {
+    let best = Infinity;
+    for (let e = 0; e < edges; e++) best = Math.min(best, segDist(p, verts[e], verts[(e + 1) % verts.length]));
+    sum += best;
+  });
+  return sum / pts.length;
+}
+
+function fitCircle(pts) {
+  const n = pts.length;
+  const mx = pts.reduce((s, p) => s + p.x, 0) / n, my = pts.reduce((s, p) => s + p.y, 0) / n;
+  let suu = 0, svv = 0, suv = 0, suuu = 0, svvv = 0, suvv = 0, svuu = 0;
+  pts.forEach((p) => {
+    const u = p.x - mx, v = p.y - my;
+    suu += u * u; svv += v * v; suv += u * v;
+    suuu += u * u * u; svvv += v * v * v; suvv += u * v * v; svuu += v * u * u;
+  });
+  const det = suu * svv - suv * suv;
+  if (Math.abs(det) < 1e-6) return null;
+  const bu = (suuu + suvv) / 2, bv = (svvv + svuu) / 2;
+  const uc = (bu * svv - bv * suv) / det, vc = (suu * bv - suv * bu) / det;
+  const c = { x: mx + uc, y: my + vc };
+  const r = Math.sqrt(uc * uc + vc * vc + (suu + svv) / n);
+  const err = Math.sqrt(pts.reduce((s, p) => s + (dist(p, c) - r) ** 2, 0) / n);
+  return { c, r, err };
+}
+
+function fitEllipse(pts) {
+  const n = pts.length;
+  const mx = pts.reduce((s, p) => s + p.x, 0) / n, my = pts.reduce((s, p) => s + p.y, 0) / n;
+  let xx = 0, yy = 0, xy = 0;
+  pts.forEach((p) => { xx += (p.x - mx) ** 2; yy += (p.y - my) ** 2; xy += (p.x - mx) * (p.y - my); });
+  let angle = 0.5 * Math.atan2(2 * xy, xx - yy);
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const us = pts.map((p) => (p.x - mx) * cos + (p.y - my) * sin);
+  const vs = pts.map((p) => -(p.x - mx) * sin + (p.y - my) * cos);
+  const uMin = Math.min(...us), uMax = Math.max(...us), vMin = Math.min(...vs), vMax = Math.max(...vs);
+  const a = (uMax - uMin) / 2, b = (vMax - vMin) / 2;
+  const cu = (uMax + uMin) / 2, cv = (vMax + vMin) / 2;
+  const c = { x: mx + cu * cos - cv * sin, y: my + cu * sin + cv * cos };
+  if (a < 1 || b < 1) return null;
+  const err = pts.reduce((s, p, i) => s + Math.abs(Math.hypot((us[i] - cu) / a, (vs[i] - cv) / b) - 1) * (a + b) / 2, 0) / n;
+  return { c, a, b, angle, err };
+}
+
+// Snap an angle to level or upright when it is within a few degrees.
+const level = (angle, step, within) => {
+  const snapped = Math.round(angle / step) * step;
+  return Math.abs(angle - snapped) < within ? snapped : angle;
+};
+
+function smoothPoints(pts, closed) {
+  const L = pathLength(pts);
+  const n = Math.max(closed ? 12 : 6, Math.min(240, Math.round(L / Math.max(5, L / 60))));
+  let out = resample(pts, n);
+  if (closed) out.pop();
+  for (let pass = 0; pass < 6; pass++) {
+    out = out.map((p, i) => {
+      if (!closed && (i === 0 || i === out.length - 1)) return p;
+      const a = out[(i - 1 + out.length) % out.length], b = out[(i + 1) % out.length];
+      return { x: (a.x + 2 * p.x + b.x) / 4, y: (a.y + 2 * p.y + b.y) / 4 };
+    });
+  }
+  if (closed) out.push({ ...out[0] });
+  return out;
+}
+
+const ellipsePoints = (c, a, b, angle, count = 72) => Array.from({ length: count + 1 }, (_, i) => {
+  const t = (i / count) * Math.PI * 2;
+  const u = a * Math.cos(t), v = b * Math.sin(t);
+  return { x: c.x + u * Math.cos(angle) - v * Math.sin(angle), y: c.y + u * Math.sin(angle) + v * Math.cos(angle) };
+});
+
+function tidyClosed(ring, diag) {
+  const n = ring.length;
+  // Start the corner search at the point furthest from the middle, so the
+  // place the student started drawing doesn't count as a corner.
+  const mid = { x: ring.reduce((s, p) => s + p.x, 0) / n, y: ring.reduce((s, p) => s + p.y, 0) / n };
+  let s0 = 0;
+  ring.forEach((p, i) => { if (dist(p, mid) > dist(ring[s0], mid)) s0 = i; });
+  const pts = [...ring.slice(s0), ...ring.slice(0, s0)];
+  let s1 = 0;
+  pts.forEach((p, i) => { if (dist(p, pts[0]) > dist(pts[s1], pts[0])) s1 = i; });
+  const loop = [...pts, pts[0]];
+  const eps = Math.max(4, diag * 0.06);
+  const found = [...rdp(loop, 0, s1, eps).slice(0, -1), ...rdp(loop, s1, loop.length - 1, eps).slice(0, -1)];
+  const { list: idx, real } = keepCorners(pts, found, true);
+
+  const ellipse = fitEllipse(pts);
+  const verts = idx.map((i) => pts[i]);
+  const corners = idx.map((v, k) => turn(pts[idx[(k - 1 + idx.length) % idx.length]], pts[v], pts[idx[(k + 1) % idx.length]]));
+  const polyErr = polyError(pts, verts, true);
+
+  if (real && verts.length <= 12 && polyErr < diag * 0.04 && (!ellipse || polyErr < ellipse.err * 0.8)) {
+    if (verts.length === 4 && corners.every((t) => Math.abs(t - 90 * DEG) < 22 * DEG)) {
+      // Rectangle: average the side directions, then straighten if nearly level.
+      const dirs = verts.map((v, k) => Math.atan2(verts[(k + 1) % 4].y - v.y, verts[(k + 1) % 4].x - v.x));
+      let angle = Math.atan2(dirs.reduce((s, d) => s + Math.sin(4 * d), 0), dirs.reduce((s, d) => s + Math.cos(4 * d), 0)) / 4;
+      angle = level(angle, Math.PI / 2, 8 * DEG);
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      const us = verts.map((p) => p.x * cos + p.y * sin).sort((a, b) => a - b);
+      const vs = verts.map((p) => -p.x * sin + p.y * cos).sort((a, b) => a - b);
+      let w = (us[2] + us[3] - us[0] - us[1]) / 2, h = (vs[2] + vs[3] - vs[0] - vs[1]) / 2;
+      const cu = (us[0] + us[1] + us[2] + us[3]) / 4, cv = (vs[0] + vs[1] + vs[2] + vs[3]) / 4;
+      const square = Math.min(w, h) / Math.max(w, h) > 0.85;
+      if (square) w = h = (w + h) / 2;
+      const corner = (su, sv) => {
+        const u = cu + su * w / 2, v = cv + sv * h / 2;
+        return { x: u * cos - v * sin, y: u * sin + v * cos };
+      };
+      const box = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+      return { name: square ? 'Square' : 'Rectangle', points: [...box, { ...box[0] }], sharp: true, closed: true };
+    }
+    const name = verts.length === 3 ? 'Triangle' : 'Shape';
+    return { name, points: [...verts.map((p) => ({ ...p })), { ...verts[0] }], sharp: true, closed: true };
+  }
+
+  if (ellipse && ellipse.err < diag * 0.06) {
+    const { c } = ellipse;
+    let { a, b } = ellipse;
+    if (Math.min(a, b) / Math.max(a, b) > 0.85) {
+      const r = (a + b) / 2;
+      return { name: 'Circle', points: ellipsePoints(c, r, r, 0), closed: true };
+    }
+    const angle = level(ellipse.angle, Math.PI / 2, 10 * DEG);
+    return { name: 'Oval', points: ellipsePoints(c, a, b, angle), closed: true };
+  }
+  return { name: 'Smooth shape', points: smoothPoints(loop, true), closed: true };
+}
+
+function tidyOpen(pts, diag) {
+  const start = pts[0], end = pts[pts.length - 1];
+  const chord = dist(start, end);
+  const bulge = Math.max(...pts.map((p) => segDist(p, start, end)));
+  if (chord > 0 && bulge < chord * 0.1) return { name: 'Line', points: [{ ...start }, { ...end }], sharp: true };
+
+  const eps = Math.max(4, diag * 0.05);
+  // A neat arc first: a bendy line that fits part of a circle.
+  const circle = fitCircle(pts);
+  if (circle && circle.err < circle.r * 0.06 && circle.r < diag * 3) {
+    const steps = pts.slice(1).map((p, i) => {
+      const d = Math.atan2(p.y - circle.c.y, p.x - circle.c.x) - Math.atan2(pts[i].y - circle.c.y, pts[i].x - circle.c.x);
+      return Math.atan2(Math.sin(d), Math.cos(d));
+    });
+    const sweep = steps.reduce((s, d) => s + d, 0);
+    const backwards = steps.reduce((s, d) => Math.sign(d) !== Math.sign(sweep) ? s + Math.abs(d) : s, 0);
+    if (backwards < Math.abs(sweep) * 0.1 && Math.abs(sweep) < Math.PI * 1.9) {
+      const a0 = Math.atan2(start.y - circle.c.y, start.x - circle.c.x);
+      const count = Math.max(8, Math.round(Math.abs(sweep) / (6 * DEG)));
+      const arc = Array.from({ length: count + 1 }, (_, i) => {
+        const a = a0 + sweep * i / count;
+        return { x: circle.c.x + circle.r * Math.cos(a), y: circle.c.y + circle.r * Math.sin(a) };
+      });
+      return { name: 'Curve', points: arc };
+    }
+  }
+
+  const { list: idx, real } = keepCorners(pts, rdp(pts, 0, pts.length - 1, eps), false);
+  const verts = idx.map((i) => pts[i]);
+  if (real && idx.length >= 3 && idx.length <= 10 && polyError(pts, verts, false) < diag * 0.03) {
+    return { name: 'Zigzag', points: verts.map((p) => ({ ...p })), sharp: true };
+  }
+  return { name: 'Curve', points: smoothPoints(pts, false) };
+}
+
+// Work out what a held brush line should become, or null to leave it alone.
+function tidyStroke(raw) {
+  if (raw.length < 2 || pathLength(raw) < 12) return null;
+  const xs = raw.map((p) => p.x), ys = raw.map((p) => p.y);
+  const diag = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) || 1;
+  const pts = resample(raw, 96);
+
+  // Closed when the end comes back near the start; any overshoot past the
+  // start is trimmed off.
+  let close = -1, closeD = Math.max(12, diag * 0.18);
+  for (let i = Math.floor(pts.length * 0.6); i < pts.length; i++) {
+    const d = dist(pts[i], pts[0]);
+    if (d < closeD) { closeD = d; close = i; }
+  }
+  if (close > 0) {
+    const ring = resample(pts.slice(0, close + 1), 96);
+    ring.pop();
+    let area = 0;
+    ring.forEach((p, i) => { const q = ring[(i + 1) % ring.length]; area += p.x * q.y - q.x * p.y; });
+    const rx = ring.map((p) => p.x), ry = ring.map((p) => p.y);
+    const boxArea = (Math.max(...rx) - Math.min(...rx)) * (Math.max(...ry) - Math.min(...ry));
+    if (Math.abs(area / 2) > boxArea * 0.25) return tidyClosed(ring, diag);
+  }
+  return tidyOpen(pts, diag);
+}
 
         class IDBHelper {
             constructor(dbName, storeName) {
@@ -98,7 +373,8 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.quickLineTimer = null;
                 this.quickLineActive = false;
                 this.quickLineDelay = 550;
-                this.quickLineMinDistance = 12;
+                this.quickShape = null;
+                this.shapeLabelTimer = null;
                 this.frameAddPulseTimer = null;
                 this.frameAddedTimer = null;
 
@@ -2298,6 +2574,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 this.saveState();
                 this.isDrawing = true;
                 this.quickLineActive = false;
+                this.quickShape = null;
                 this.clearQuickLineTimer();
                 this.selectedObject = null;
                 this.dragStart = pos;
@@ -2581,7 +2858,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     if (this.tool === 'brush') {
                         const p = (typeof pressure === 'number') ? pressure : 0.5;
                         if (this.quickLineActive) {
-                            this.setQuickLineEnd(pos, p);
+                            this.adjustQuickShape(pos);
                         } else {
                             this.currentStroke.points.push({ x: pos.x, y: pos.y, p: p });
                             this.queueQuickLine(pos, p);
@@ -2691,8 +2968,10 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     if (!this.quickLineActive && this.tool === 'brush' && this.currentStroke.points.length > 5) {
                         this.currentStroke.points = this.simplifyPoints(this.currentStroke.points, 1.5);
                     }
+                    if (this.quickShape) this.keepDrawnLineForUndo();
                     this.isDrawing = false;
                     this.quickLineActive = false;
+                    this.quickShape = null;
                     this.currentStroke = null;
                     this.renderCanvas();
                     this.updateThumbnails([this.frameIndex]);
@@ -2735,27 +3014,75 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
             }
 
             activateQuickLine() {
-                if (!this.isDrawing || !this.currentStroke || this.quickLineActive) return;
-                const start = this.currentStroke.points[0];
-                const end = this.quickLineEnd || this.currentStroke.points[this.currentStroke.points.length - 1];
-                if (!start || !end) return;
+                if (!this.isDrawing || !this.currentStroke || this.quickLineActive || this.tool !== 'brush') return;
+                const drawn = this.currentStroke.points;
+                const tidy = tidyStroke(drawn);
+                if (!tidy) return;
 
-                const dist = Math.hypot(end.x - start.x, end.y - start.y);
-                if (dist < this.quickLineMinDistance) return;
-
+                // Moving while still holding resizes the shape. Lines and curves
+                // also turn, with the end following the pointer; closed shapes
+                // grow from their middle.
+                const p = drawn.reduce((sum, point) => sum + (point.p ?? 0.5), 0) / drawn.length;
+                const points = tidy.points.map((point) => ({ x: point.x, y: point.y, p }));
+                const grab = this.quickLineEnd || drawn[drawn.length - 1];
+                const ring = points.slice(0, -1);
+                this.quickShape = {
+                    drawn: drawn.map((point) => ({ ...point })),
+                    base: points,
+                    grab: { x: grab.x, y: grab.y },
+                    anchor: tidy.closed
+                        ? { x: ring.reduce((sum, q) => sum + q.x, 0) / ring.length, y: ring.reduce((sum, q) => sum + q.y, 0) / ring.length }
+                        : { x: points[0].x, y: points[0].y },
+                    turns: !tidy.closed
+                };
                 this.quickLineActive = true;
-                this.setQuickLineEnd(end, end.p);
+                this.currentStroke.points = points.map((point) => ({ ...point }));
+                if (tidy.sharp) this.currentStroke.sharp = true;
+                this.showShapeLabel(tidy.name, grab);
                 this.renderCanvas();
             }
 
-            setQuickLineEnd(pos, pressure = 0.5) {
-                if (!this.currentStroke || !this.currentStroke.points.length) return;
-                const start = this.currentStroke.points[0];
-                this.currentStroke.points = [
-                    { x: start.x, y: start.y, p: start.p !== undefined ? start.p : 0.5 },
-                    { x: pos.x, y: pos.y, p: pressure !== undefined ? pressure : 0.5 }
-                ];
-                this.quickLineEnd = { x: pos.x, y: pos.y, p: pressure };
+            adjustQuickShape(pos) {
+                const shape = this.quickShape;
+                if (!shape || !this.currentStroke) return;
+                const { anchor, grab } = shape;
+                const reach = Math.hypot(grab.x - anchor.x, grab.y - anchor.y);
+                if (reach < 4) return;
+                const scale = Math.hypot(pos.x - anchor.x, pos.y - anchor.y) / reach;
+                const angle = shape.turns ? Math.atan2(pos.y - anchor.y, pos.x - anchor.x) - Math.atan2(grab.y - anchor.y, grab.x - anchor.x) : 0;
+                const cos = Math.cos(angle) * scale, sin = Math.sin(angle) * scale;
+                this.currentStroke.points = shape.base.map((point) => {
+                    const x = point.x - anchor.x, y = point.y - anchor.y;
+                    return { x: anchor.x + x * cos - y * sin, y: anchor.y + x * sin + y * cos, p: point.p };
+                });
+            }
+
+            // One undo after tidying brings back the line as it was drawn.
+            keepDrawnLineForUndo() {
+                const stroke = this.currentStroke;
+                const { points, sharp } = stroke;
+                stroke.points = this.simplifyPoints(this.quickShape.drawn, 1.5);
+                delete stroke.sharp;
+                this.saveState();
+                stroke.points = points;
+                if (sharp) stroke.sharp = true;
+            }
+
+            showShapeLabel(name, at) {
+                const label = document.getElementById('shape-label');
+                const wrapper = document.getElementById('canvas-wrapper');
+                if (!label || !wrapper) return;
+                const box = this.canvas.getBoundingClientRect();
+                const outer = wrapper.getBoundingClientRect();
+                label.textContent = name;
+                label.style.left = `${box.left - outer.left + at.x * box.width / this.canvasWidth}px`;
+                label.style.top = `${box.top - outer.top + at.y * box.height / this.canvasHeight}px`;
+                // Restart the fade each time.
+                label.hidden = true;
+                void label.offsetWidth;
+                label.hidden = false;
+                clearTimeout(this.shapeLabelTimer);
+                this.shapeLabelTimer = setTimeout(() => { label.hidden = true; }, 1600);
             }
 
             simplifyPoints(points, tolerance) {
@@ -4258,7 +4585,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                     }
 
                     ctx.moveTo(firstPoint.x, firstPoint.y);
-                    if (['brush', 'eraser'].includes(stroke.type) && stroke.points.length > 2) {
+                    if (['brush', 'eraser'].includes(stroke.type) && !stroke.sharp && stroke.points.length > 2) {
                         // Freehand strokes curve through the midpoints between
                         // points instead of joining them with straight lines.
                         for (let i = 1; i < stroke.points.length - 1; i++) {
@@ -4369,6 +4696,7 @@ const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
                 if (t === 'truck' && this.panelsHidden) this.setPanelsHidden(false);
                 this.clearQuickLineTimer();
                 this.quickLineActive = false;
+                this.quickShape = null;
                 if (t === 'truck' && this.tool !== 'truck') this.showMotionHint();
                 if (t !== 'truck') {
                     this.hideMotionHint();
