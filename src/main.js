@@ -13,12 +13,89 @@ const BACKGROUND_IMAGE_MAX_PIXELS = 16_000_000;
 // history stays small.
 const HISTORY_LIMIT = 100;
 // Bump when the What's new notes change, so the dot shows again.
-const WHATS_NEW_VERSION = '2026-11-01b';
+const WHATS_NEW_VERSION = '2026-11-06';
 const GUIDE_KEY = 'motionSketchGuide';
 const ONION_BEFORE_TINT = '#2f6bff';
 const ONION_AFTER_TINT = '#19a35b';
 const LOOP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>';
 const PLAY_ONCE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h13"/><path d="M11 7l5 5-5 5"/><path d="M20 5v14"/></svg>';
+
+// Smudge: a soft brush that picks up the colours already on the frame and
+// drags them along, blending them as it goes. Each point keeps the colour it
+// carried, so a smudge stays a line like any other.
+const hexToRgb = (hex) => {
+    const value = /^#[0-9a-f]{6}$/i.test(hex || '') ? hex : '#000000';
+    return [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));
+};
+const rgbToHex = (rgb) => '#' + rgb.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+
+// The average colour around a point in a picture of the frame.
+function sampleColour(pixels, width, height, x, y, radius) {
+    const step = Math.max(1, radius / 3);
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let dy = -radius; dy <= radius; dy += step) {
+        for (let dx = -radius; dx <= radius; dx += step) {
+            if (dx * dx + dy * dy > radius * radius) continue;
+            const px = Math.round(x + dx), py = Math.round(y + dy);
+            if (px < 0 || py < 0 || px >= width || py >= height) continue;
+            const i = (py * width + px) * 4;
+            r += pixels[i]; g += pixels[i + 1]; b += pixels[i + 2]; n++;
+        }
+    }
+    return n ? [r / n, g / n, b / n] : [255, 255, 255];
+}
+
+// Some browsers (Safari) accept a canvas blur but ignore it, so blur a small
+// square and look for colour just outside it.
+let canvasBlurWorks = null;
+function canvasCanBlur() {
+    if (canvasBlurWorks === null) {
+        const c = document.createElement('canvas');
+        c.width = c.height = 20;
+        const t = c.getContext('2d', { willReadFrequently: true });
+        t.filter = 'blur(2px)';
+        t.fillRect(8, 8, 4, 4);
+        canvasBlurWorks = t.getImageData(6, 10, 1, 1).data[3] > 0;
+    }
+    return canvasBlurWorks;
+}
+
+// Three box blurs look like a Gaussian blur; used where the canvas can't blur.
+// Colour is blurred weighted by alpha, so soft edges don't turn dark.
+function boxBlurCanvas(ctx, sigma) {
+    const w = ctx.canvas.width, h = ctx.canvas.height;
+    const image = ctx.getImageData(0, 0, w, h), d = image.data;
+    const r = Math.max(1, Math.round(sigma * 0.95));
+    const a = new Float32Array(d.length), b = new Float32Array(d.length);
+    for (let i = 0; i < d.length; i += 4) {
+        const alpha = d[i + 3] / 255;
+        a[i] = d[i] * alpha; a[i + 1] = d[i + 1] * alpha; a[i + 2] = d[i + 2] * alpha; a[i + 3] = d[i + 3];
+    }
+    const pass = (src, dst, horizontal) => {
+        const len = horizontal ? w : h, lines = horizontal ? h : w;
+        const at = (line, k) => {
+            const kk = Math.min(len - 1, Math.max(0, k));
+            return (horizontal ? line * w + kk : kk * w + line) * 4;
+        };
+        for (let line = 0; line < lines; line++) {
+            for (let ch = 0; ch < 4; ch++) {
+                let sum = 0;
+                for (let k = -r; k <= r; k++) sum += src[at(line, k) + ch];
+                for (let k = 0; k < len; k++) {
+                    dst[at(line, k) + ch] = sum / (2 * r + 1);
+                    sum += src[at(line, k + r + 1) + ch] - src[at(line, k - r) + ch];
+                }
+            }
+        }
+    };
+    for (let n = 0; n < 3; n++) { pass(a, b, true); pass(b, a, false); }
+    for (let i = 0; i < d.length; i += 4) {
+        const alpha = a[i + 3] / 255;
+        d[i + 3] = a[i + 3];
+        if (alpha > 0) { d[i] = a[i] / alpha; d[i + 1] = a[i + 1] / alpha; d[i + 2] = a[i + 2] / alpha; }
+    }
+    ctx.putImageData(image, 0, 0);
+}
 
 // Hold to tidy: holding still at the end of a brush line turns it into the
 // shape it looks like (a line, curve, zigzag, circle, oval, triangle, square,
@@ -377,6 +454,10 @@ function tidyStroke(raw) {
                 this.shapeLabelTimer = null;
                 this.pointerAt = null;
                 this.sizeWheel = 0;
+                this.smudgeCarry = 60;
+                this.smudgeSoftness = 50;
+                this.smudgeState = null;
+                this.smudgeImages = new WeakMap();
                 this.frameAddPulseTimer = null;
                 this.frameAddedTimer = null;
 
@@ -919,6 +1000,7 @@ function tidyStroke(raw) {
                     if (key === '-') { e.preventDefault(); this.adjustZoom(-0.1); }
 
                     if (key === 'b') this.setTool('brush');
+                    if (key === 's') this.setBrushType('smudge');
                     if (key === 'e') this.setTool('eraser');
                     if (key === 'v') this.setTool('select');
                     if (key === 'f') this.setTool('bucket');
@@ -1018,7 +1100,7 @@ function tidyStroke(raw) {
                 this.cursorEl.style.width = preview.cursorWidth + 'px';
                 this.cursorEl.style.height = preview.cursorHeight + 'px';
 
-                if (this.tool === 'eraser') {
+                if (this.tool === 'eraser' || (this.tool === 'brush' && this.brushType === 'smudge')) {
                     this.cursorEl.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
                     this.cursorEl.style.borderColor = '#000';
                 } else {
@@ -1080,9 +1162,13 @@ function tidyStroke(raw) {
 
                 // Keep the compact wave preview responsive to the same brush
                 // type, color, opacity, and selected size as the canvas cursor.
-                mark.style.stroke = color;
+                mark.style.stroke = type === 'smudge' ? 'url(#smudge-preview-gradient)' : color;
                 mark.style.strokeWidth = previewStrokeWidth.toFixed(2);
-                mark.style.opacity = '1';
+                mark.style.opacity = type === 'smudge' ? String(this.opacity) : '1';
+                if (type === 'smudge') {
+                    mark.style.filter = `blur(${(this.smudgeSoftness / 100) * previewStrokeWidth * 0.3}px)`;
+                    return;
+                }
                 const lightStroke = type === 'eraser' || String(this.brushColor).toLowerCase() === '#ffffff';
                 mark.style.filter = lightStroke
                     ? 'drop-shadow(0 0 1px rgba(0, 0, 0, 0.55))'
@@ -2604,7 +2690,7 @@ function tidyStroke(raw) {
                     fillColor: null,
                     sx: 1, sy: 1,
                     angle: 0,
-                    symmetric: this.tool === 'brush' && this.symmetryEnabled
+                    symmetric: this.tool === 'brush' && this.brushType !== 'smudge' && this.symmetryEnabled
                 };
 
                 if (this.tool === 'eraser') {
@@ -2613,10 +2699,51 @@ function tidyStroke(raw) {
                     return;
                 }
 
+                if (this.tool === 'brush' && this.brushType === 'smudge') this.startSmudge(pos);
+
                 const list = this.getActiveStrokeList();
                 list.push(this.currentStroke);
                 this.renderCanvas();
                 this.queueQuickLine(pos, p);
+            }
+
+            // A smudge picks up colour from a picture of the frame as it looks
+            // when the smudge starts, so it never picks up itself.
+            startSmudge(pos) {
+                const canvas = document.createElement('canvas');
+                canvas.width = this.canvasWidth;
+                canvas.height = this.canvasHeight;
+                const sampleCtx = canvas.getContext('2d', { willReadFrequently: true });
+                this.renderFrameToContext(sampleCtx, this.frames[this.frameIndex]);
+                const pixels = sampleCtx.getImageData(0, 0, this.canvasWidth, this.canvasHeight).data;
+                const carried = sampleColour(pixels, this.canvasWidth, this.canvasHeight, pos.x, pos.y, this.brushSize * 0.35);
+                this.smudgeState = { pixels, carried, carry: this.smudgeCarry };
+                const stroke = this.currentStroke;
+                stroke.softness = this.smudgeSoftness;
+                stroke.color = rgbToHex(carried);
+                stroke.points[0].c = stroke.color;
+            }
+
+            // Every few pixels the carried colour mixes a little with the colour
+            // underneath. Carry sets how slowly: 0 takes on a new colour within
+            // about 10 pixels, 100 drags it for hundreds.
+            moveSmudge(pos, pressure) {
+                const stroke = this.currentStroke, state = this.smudgeState;
+                if (!stroke || !state) return;
+                const step = Math.max(2, stroke.size * 0.08);
+                const keepPer10px = 0.5 + 0.49 * (state.carry / 100);
+                const keep = Math.pow(keepPer10px, step / 10);
+                let last = stroke.points[stroke.points.length - 1];
+                let distance = Math.hypot(pos.x - last.x, pos.y - last.y);
+                while (distance >= step) {
+                    const t = step / distance;
+                    const x = last.x + (pos.x - last.x) * t, y = last.y + (pos.y - last.y) * t;
+                    const under = sampleColour(state.pixels, this.canvasWidth, this.canvasHeight, x, y, stroke.size * 0.35);
+                    state.carried = state.carried.map((v, i) => v * keep + under[i] * (1 - keep));
+                    last = { x, y, p: pressure, c: rgbToHex(state.carried) };
+                    stroke.points.push(last);
+                    distance = Math.hypot(pos.x - x, pos.y - y);
+                }
             }
 
             onMove(pos, pressure = 0.5) {
@@ -2870,7 +2997,9 @@ function tidyStroke(raw) {
 
                     if (this.tool === 'brush') {
                         const p = (typeof pressure === 'number') ? pressure : 0.5;
-                        if (this.quickLineActive) {
+                        if (this.smudgeState) {
+                            this.moveSmudge(pos, p);
+                        } else if (this.quickLineActive) {
                             this.adjustQuickShape(pos);
                         } else {
                             this.currentStroke.points.push({ x: pos.x, y: pos.y, p: p });
@@ -2978,13 +3107,14 @@ function tidyStroke(raw) {
 
                 if (this.isDrawing) {
                     this.clearQuickLineTimer();
-                    if (!this.quickLineActive && this.tool === 'brush' && this.currentStroke.points.length > 5) {
+                    if (!this.quickLineActive && this.tool === 'brush' && !this.smudgeState && this.currentStroke.points.length > 5) {
                         this.currentStroke.points = this.simplifyPoints(this.currentStroke.points, 1.5);
                     }
                     if (this.quickShape) this.keepDrawnLineForUndo();
                     this.isDrawing = false;
                     this.quickLineActive = false;
                     this.quickShape = null;
+                    this.smudgeState = null;
                     this.currentStroke = null;
                     this.renderCanvas();
                     this.updateThumbnails([this.frameIndex]);
@@ -3027,7 +3157,7 @@ function tidyStroke(raw) {
             }
 
             activateQuickLine() {
-                if (!this.isDrawing || !this.currentStroke || this.quickLineActive || this.tool !== 'brush') return;
+                if (!this.isDrawing || !this.currentStroke || this.quickLineActive || this.tool !== 'brush' || this.smudgeState) return;
                 const drawn = this.currentStroke.points;
                 const tidy = tidyStroke(drawn);
                 if (!tidy) return;
@@ -4537,6 +4667,11 @@ function tidyStroke(raw) {
 
                 const type = stroke.brushType || 'brush';
 
+                if (stroke.type === 'brush' && type === 'smudge') {
+                    this.drawSmudge(ctx, stroke, simpleMode);
+                    return;
+                }
+
                 if (simpleMode || ['brush', 'eraser', 'rect', 'circle', 'line'].includes(stroke.type) || ['pencil', 'marker', 'highlighter'].includes(type)) {
                     if (stroke.points.length === 1 && stroke.type !== 'rect' && stroke.type !== 'circle' && stroke.type !== 'line') {
                         const p = stroke.points[0];
@@ -4676,6 +4811,122 @@ function tidyStroke(raw) {
                 }
             }
 
+            smudgeBlur(stroke) {
+                return (stroke.size || 1) * ((stroke.softness ?? 50) / 100) * 0.3;
+            }
+
+            // Points of a resized smudge, in the space it is drawn in before its
+            // scale (sx/sy) is applied, as for other brush strokes.
+            getSmudgeDrawing(stroke) {
+                const scale = this.getBrushScale(stroke);
+                const scaled = scale.x !== 1 || scale.y !== 1;
+                const bounds = this.getPointBounds(stroke.points);
+                const centre = { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 };
+                const points = scaled
+                    ? stroke.points.map((point) => ({ ...point, x: centre.x + (point.x - centre.x) / scale.x, y: centre.y + (point.y - centre.y) / scale.y }))
+                    : stroke.points;
+                return { scale, scaled, centre, points };
+            }
+
+            // A smudge is a soft line whose colour changes along it. It is drawn
+            // once onto a small canvas of its own, blurred there, and reused
+            // until it changes. Onion skins (simpleMode) get a plain line.
+            drawSmudge(ctx, stroke, simpleMode) {
+                const { scale, scaled, centre, points } = this.getSmudgeDrawing(stroke);
+                ctx.save();
+                if (scaled) {
+                    ctx.translate(centre.x, centre.y);
+                    ctx.scale(scale.x, scale.y);
+                    ctx.translate(-centre.x, -centre.y);
+                }
+                if (simpleMode) {
+                    ctx.lineWidth = stroke.size;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(points[0].x, points[0].y);
+                    points.forEach((point) => ctx.lineTo(point.x, point.y));
+                    ctx.stroke();
+                    ctx.restore();
+                    return;
+                }
+                const image = this.getSmudgeImage(stroke, points, ctx);
+                ctx.globalAlpha *= stroke.opacity ?? 1;
+                if (image) ctx.drawImage(image.canvas, image.x, image.y, image.w, image.h);
+                ctx.restore();
+            }
+
+            getSmudgeImage(stroke, points, ctx) {
+                const transform = ctx.getTransform?.();
+                const zoom = transform ? Math.hypot(transform.a, transform.b) : 1;
+                const blur = this.smudgeBlur(stroke);
+                const pad = stroke.size / 2 + blur * 3 + 2;
+                const bounds = this.getPointBounds(points);
+                const x = Math.floor(bounds.x - pad), y = Math.floor(bounds.y - pad);
+                const w = Math.ceil(bounds.w + pad * 2), h = Math.ceil(bounds.h + pad * 2);
+                // Sharp enough for the zoom it is shown at, within a size limit.
+                let resolution = [0.25, 0.5, 1, 2, 3].find((step) => step >= zoom) || 3;
+                resolution = Math.min(resolution, Math.sqrt(8e6 / Math.max(1, w * h)));
+                // While Safari draws a smudge, it is blurred only when the line is
+                // finished, as its blur is too slow to repeat on every movement.
+                const blurNow = canvasCanBlur() || stroke !== this.currentStroke;
+                const first = points[0], last = points[points.length - 1];
+                const key = [points.length, first.x, first.y, last.x, last.y, stroke.size, stroke.softness, resolution, blurNow].join('|');
+
+                let images = this.smudgeImages.get(stroke);
+                if (!images) { images = new Map(); this.smudgeImages.set(stroke, images); }
+                const zoomKey = String(resolution);
+                const cached = images.get(zoomKey);
+                if (cached?.key === key) return cached;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.ceil(w * resolution));
+                canvas.height = Math.max(1, Math.ceil(h * resolution));
+                const layer = canvas.getContext('2d', { willReadFrequently: !canvasCanBlur() });
+                layer.setTransform(resolution, 0, 0, resolution, -x * resolution, -y * resolution);
+                layer.lineWidth = stroke.size;
+                layer.lineCap = 'round';
+                layer.lineJoin = 'round';
+                const colourOf = (point) => point.c || stroke.color || '#000000';
+                if (points.length === 1) {
+                    layer.fillStyle = colourOf(first);
+                    layer.beginPath();
+                    layer.arc(first.x, first.y, stroke.size / 2, 0, Math.PI * 2);
+                    layer.fill();
+                }
+                for (let i = 1; i < points.length; i++) {
+                    const a = points[i - 1], b = points[i];
+                    const gradient = layer.createLinearGradient(a.x, a.y, b.x, b.y);
+                    gradient.addColorStop(0, colourOf(a));
+                    gradient.addColorStop(1, colourOf(b));
+                    layer.strokeStyle = gradient;
+                    layer.beginPath();
+                    layer.moveTo(a.x, a.y);
+                    layer.lineTo(b.x, b.y);
+                    layer.stroke();
+                }
+
+                let result = canvas;
+                const blurPixels = blur * resolution;
+                if (blurNow && blurPixels > 0.3) {
+                    if (canvasCanBlur()) {
+                        result = document.createElement('canvas');
+                        result.width = canvas.width;
+                        result.height = canvas.height;
+                        const blurred = result.getContext('2d');
+                        blurred.filter = `blur(${blurPixels}px)`;
+                        blurred.drawImage(canvas, 0, 0);
+                    } else {
+                        layer.setTransform(1, 0, 0, 1, 0, 0);
+                        boxBlurCanvas(layer, blurPixels);
+                    }
+                }
+                const image = { key, canvas: result, x, y, w, h };
+                images.set(zoomKey, image);
+                if (images.size > 3) images.delete(images.keys().next().value);
+                return image;
+            }
+
             hexToRgba(hex, alpha) {
                 let r = 0, g = 0, b = 0;
                 if (hex && hex.length === 7) {
@@ -4742,6 +4993,7 @@ function tidyStroke(raw) {
                         if (this.brushType === 'pencil') brushIcon.className = 'fas fa-pencil-alt main-icon';
                         if (this.brushType === 'marker') brushIcon.className = 'fas fa-pen main-icon';
                         if (this.brushType === 'highlighter') brushIcon.className = 'fas fa-highlighter main-icon';
+                        if (this.brushType === 'smudge') brushIcon.className = 'fas fa-hand-point-up main-icon';
                     } else {
                         brushAnchor.classList.remove('active');
                     }
@@ -4928,6 +5180,7 @@ function tidyStroke(raw) {
                 const title = document.getElementById('inspector-title');
                 const panel = document.querySelector('.props-panel');
                 if (!title || !panel) return;
+                panel.classList.remove('smudging');
                 const show = (heading, hint, drawing) => {
                     if (title.textContent !== heading) title.textContent = heading;
                     if (title.title !== hint) title.title = hint;
@@ -4952,6 +5205,7 @@ function tidyStroke(raw) {
                     pencil: ['Pencil', 'Draw crisp freehand marks on the active layer.'],
                     marker: ['Marker', 'Draw soft, opaque strokes on the active layer.'],
                     highlighter: ['Highlighter', 'Draw translucent highlight strokes on the active layer.'],
+                    smudge: ['Smudge', 'Drag from one colour into another to blend them.'],
                     rect: ['Rectangle', 'Drag on the canvas to create a rectangle.'],
                     circle: ['Circle', 'Drag on the canvas to create a circle.'],
                     line: ['Line', 'Drag on the canvas to create a line.'],
@@ -4962,6 +5216,7 @@ function tidyStroke(raw) {
                     truck: ['Motion', 'Click an object, then drag it on different frames to animate its movement.']
                 };
                 const key = this.isHandTool ? 'hand' : (this.tool === 'brush' ? (this.brushType || 'brush') : this.tool);
+                panel.classList.toggle('smudging', key === 'smudge');
                 const [toolTitle, toolDescription] = labels[key] || labels.brush;
                 const drawing = !this.isHandTool && ['brush', 'eraser', 'rect', 'circle', 'line'].includes(this.tool);
                 show(toolTitle, `${toolDescription} Active layer: ${this.activeLayer === 'ink' ? 'Foreground' : 'Background'}.`, drawing);
@@ -5070,6 +5325,17 @@ function tidyStroke(raw) {
                 const steps = Math.trunc(this.sizeWheel / 100);
                 this.sizeWheel -= steps * 100;
                 this.nudgeBrushSize(-steps, this.getPos(e));
+            }
+
+            setSmudgeCarry(value) {
+                this.smudgeCarry = Number(value);
+                document.getElementById('smudge-carry-disp').textContent = value;
+            }
+
+            setSmudgeSoftness(value) {
+                this.smudgeSoftness = Number(value);
+                document.getElementById('smudge-softness-disp').textContent = value;
+                this.updateBrushPreview();
             }
 
             setOpacity(v) {
@@ -6136,6 +6402,27 @@ function tidyStroke(raw) {
                 this.showExportNotice(`${transparent ? 'Transparent ' : ''}frame ${frameNumber} exported`);
             }
 
+            // A smudge in an SVG: short lines in the colours along it, blurred
+            // together. The blur filter goes with the other definitions.
+            smudgeToSvg(stroke, points, defs) {
+                const colourOf = (point) => hexToRgb(point.c || stroke.color);
+                const blur = this.smudgeBlur(stroke);
+                let filter = '';
+                if (blur > 0.3) {
+                    const id = `smudge-blur-${defs.length}`;
+                    defs.push(`<filter id="${id}" filterUnits="userSpaceOnUse" x="${-this.canvasWidth}" y="${-this.canvasHeight}" width="${this.canvasWidth * 3}" height="${this.canvasHeight * 3}" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="${blur.toFixed(2)}"/></filter>`);
+                    filter = ` filter="url(#${id})"`;
+                }
+                const parts = points.length === 1
+                    ? [`<circle cx="${points[0].x}" cy="${points[0].y}" r="${stroke.size / 2}" fill="${rgbToHex(colourOf(points[0]))}"/>`]
+                    : points.slice(1).map((point, i) => {
+                        const a = colourOf(points[i]), b = colourOf(point);
+                        const colour = rgbToHex(a.map((v, k) => (v + b[k]) / 2));
+                        return `<line x1="${points[i].x.toFixed(1)}" y1="${points[i].y.toFixed(1)}" x2="${point.x.toFixed(1)}" y2="${point.y.toFixed(1)}" stroke="${colour}"/>`;
+                    });
+                return `<g opacity="${stroke.opacity ?? 1}"${filter} fill="none" stroke-width="${stroke.size}" stroke-linecap="round">${parts.join('')}</g>`;
+            }
+
             exportSVG() {
                 const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]);
                 const maskDefs = [];
@@ -6178,6 +6465,7 @@ function tidyStroke(raw) {
                     let output;
                     if (object.type === 'circle' && points.length > 1) { const [a, b] = points; const radius = Math.hypot(b.x - a.x, b.y - a.y); output = `<circle cx="${a.x}" cy="${a.y}" r="${radius}" ${style}/>`; }
                     else if (object.type === 'rect' && points.length > 1) { const [a, b] = points; output = `<rect x="${Math.min(a.x,b.x)}" y="${Math.min(a.y,b.y)}" width="${Math.abs(b.x-a.x)}" height="${Math.abs(b.y-a.y)}" ${style}/>`; }
+                    else if (object.type === 'brush' && object.brushType === 'smudge') output = this.smudgeToSvg(object, pathPoints, maskDefs);
                     else output = `<polyline points="${path}" ${style}/>`;
                     if (useBrushScale) {
                         output = `<g transform="translate(${brushCenter.x} ${brushCenter.y}) scale(${brushScale.x} ${brushScale.y}) translate(${-brushCenter.x} ${-brushCenter.y})">${output}</g>`;

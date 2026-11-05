@@ -600,6 +600,10 @@
         .bg-color-swatch { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 5px; background: #ffffff; box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.5); }
         .bg-color-row input[type="color"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
         .props-panel[data-mode="other"] .brush-preview { display: none; }
+        .smudge-settings { display: none; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+        .props-panel.smudging .smudge-settings { display: grid; }
+        .props-panel.smudging .colour-group { display: none; }
+        .smudge-hint { margin: 0; font-size: 0.75rem; line-height: 1.4; color: var(--text-muted); }
         /* Motion: the panel shows the path's settings instead of the brush. */
         .props-panel[data-mode="motion"] > .prop-group:not(.layer-group):not(.motion-settings):not(#onion-settings) { display: none; }
         .props-panel:not([data-mode="motion"]) .motion-settings { display: none; }
@@ -1091,6 +1095,7 @@
             .props-panel .layer-tool span { display: none; }
             .props-panel .slider-row { width: 155px; }
             .props-panel .slider-label { display: none; }
+            .props-panel.smudging .smudge-settings { display: none; }
             .props-panel #onion-settings:not([hidden]) { flex-direction: row; align-items: center; gap: 12px; }
             .props-panel #onion-settings .slider-row { width: 150px; grid-template-columns: 44px minmax(0, 1fr) 30px; }
             .props-panel #onion-settings .onion-tint { white-space: nowrap; }
@@ -1295,7 +1300,7 @@
     <div id="shortcuts-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" aria-hidden="true" tabindex="-1">
         <div class="modal-box shortcuts-box" role="document">
             <div class="shortcuts-head"><div class="modal-title" id="shortcuts-title">Keyboard shortcuts</div><span>Press <kbd>?</kbd> to open or close this</span></div>
-            <div class="shortcuts-cols"><div><div class="shortcut-group"><h3>Tools</h3><dl><dt><kbd>B</kbd></dt><dd>Brush</dd><dt><kbd>E</kbd></dt><dd>Eraser</dd><dt><kbd>F</kbd></dt><dd>Fill</dd><dt><kbd>V</kbd></dt><dd>Select</dd><dt><kbd>T</kbd></dt><dd>Text</dd><dt><kbd>R</kbd></dt><dd>Rectangle</dd><dt><kbd>C</kbd></dt><dd>Circle</dd><dt><kbd>L</kbd></dt><dd>Line</dd><dt><kbd>H</kbd></dt><dd>Hand, on or off</dd><dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>Smaller or bigger brush</dd></dl></div></div><div><div class="shortcut-group"><h3>Frames</h3><dl><dt><kbd>A</kbd></dt><dd>Add a frame<small>N works too</small></dd><dt><kbd>D</kbd></dt><dd>Duplicate this frame</dd><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Previous or next frame</dd><dt><kbd>Delete</kbd></dt><dd>Delete what’s selected<small>In the timeline, it deletes the frame</small></dd></dl></div><div class="shortcut-group"><h3>Play and view</h3><dl><dt><kbd>Space</kbd></dt><dd>Play or stop<small>Tap it</small></dd><dt>Hold <kbd>Space</kbd></dt><dd>Drag to move around</dd><dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Zoom in or out</dd><dt><kbd>0</kbd></dt><dd>Fit the paper on screen</dd><dt><kbd>Tab</kbd></dt><dd>Hide or show the panels</dd><dt><kbd>Esc</kbd></dt><dd>Close a menu or box</dd><dt><kbd>?</kbd></dt><dd>Show these shortcuts</dd></dl></div></div><div><div class="shortcut-group"><h3>Edit</h3><dl><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Z</kbd></dt><dd>Undo</dd><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Y</kbd></dt><dd>Redo<small>Ctrl + Shift + Z works too</small></dd><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>C</kbd></dt><dd>Copy</dd><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>V</kbd></dt><dd>Paste</dd><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>A</kbd></dt><dd>Select everything</dd><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>G</kbd></dt><dd>Group</dd><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Shift</kbd><span class="plus">+</span><kbd>G</kbd></dt><dd>Ungroup</dd></dl></div><div class="shortcut-group"><h3>With the mouse</h3><dl><dt><kbd>Ctrl</kbd> + scroll</dt><dd>Zoom</dd><dt><kbd>Shift</kbd> + scroll</dt><dd>Bigger or smaller brush</dd><dt>Hold still</dt><dd>At the end of a brush line, tidies it into a shape<small>Ctrl + Z gets your line back</small></dd><dt><kbd>Shift</kbd> + click</dt><dd>Pick a run of frames</dd><dt><kbd>Ctrl</kbd> + click</dt><dd>Pick more frames, or more things with Select</dd></dl></div></div></div>
+            <div class="shortcuts-cols"><div><div class="shortcut-group"><h3>Tools</h3><dl><dt><kbd>B</kbd></dt><dd>Brush</dd><dt><kbd>E</kbd></dt><dd>Eraser</dd><dt><kbd>S</kbd></dt><dd>Smudge</dd><dt><kbd>F</kbd></dt><dd>Fill</dd><dt><kbd>V</kbd></dt><dd>Select</dd><dt><kbd>T</kbd></dt><dd>Text</dd><dt><kbd>R</kbd></dt><dd>Rectangle</dd><dt><kbd>C</kbd></dt><dd>Circle</dd><dt><kbd>L</kbd></dt><dd>Line</dd><dt><kbd>H</kbd></dt><dd>Hand, on or off</dd><dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>Smaller or bigger brush</dd></dl></div></div><div><div class="shortcut-group"><h3>Frames</h3><dl><dt><kbd>A</kbd></dt><dd>Add a frame<small>N works too</small></dd><dt><kbd>D</kbd></dt><dd>Duplicate this frame</dd><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Previous or next frame</dd><dt><kbd>Delete</kbd></dt><dd>Delete what’s selected<small>In the timeline, it deletes the frame</small></dd></dl></div><div class="shortcut-group"><h3>Play and view</h3><dl><dt><kbd>Space</kbd></dt><dd>Play or stop<small>Tap it</small></dd><dt>Hold <kbd>Space</kbd></dt><dd>Drag to move around</dd><dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Zoom in or out</dd><dt><kbd>0</kbd></dt><dd>Fit the paper on screen</dd><dt><kbd>Tab</kbd></dt><dd>Hide or show the panels</dd><dt><kbd>Esc</kbd></dt><dd>Close a menu or box</dd><dt><kbd>?</kbd></dt><dd>Show these shortcuts</dd></dl></div></div><div><div class="shortcut-group"><h3>Edit</h3><dl><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Z</kbd></dt><dd>Undo</dd><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Y</kbd></dt><dd>Redo<small>Ctrl + Shift + Z works too</small></dd><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>C</kbd></dt><dd>Copy</dd><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>V</kbd></dt><dd>Paste</dd><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>A</kbd></dt><dd>Select everything</dd><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>G</kbd></dt><dd>Group</dd><dt><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Shift</kbd><span class="plus">+</span><kbd>G</kbd></dt><dd>Ungroup</dd></dl></div><div class="shortcut-group"><h3>With the mouse</h3><dl><dt><kbd>Ctrl</kbd> + scroll</dt><dd>Zoom</dd><dt><kbd>Shift</kbd> + scroll</dt><dd>Bigger or smaller brush</dd><dt>Hold still</dt><dd>At the end of a brush line, tidies it into a shape<small>Ctrl + Z gets your line back</small></dd><dt><kbd>Shift</kbd> + click</dt><dd>Pick a run of frames</dd><dt><kbd>Ctrl</kbd> + click</dt><dd>Pick more frames, or more things with Select</dd></dl></div></div></div>
             <div class="shortcuts-foot"><span>On a Mac, use <kbd>⌘</kbd> instead of Ctrl.</span><button type="button" class="btn-primary" id="shortcuts-close" onclick="app.closeModal('shortcuts-modal')">Close</button></div>
         </div>
     </div>
@@ -1306,9 +1311,10 @@
     <div id="whats-new-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="whats-new-title" aria-hidden="true" tabindex="-1">
         <div class="modal-box whats-new-box" role="document">
             <div class="modal-title" id="whats-new-title">What’s new in SketchMotion</div>
-            <p class="whats-new-date">Updated 1 November 2026</p>
+            <p class="whats-new-date">Updated 6 November 2026</p>
             <h3 class="whats-new-heading">New</h3>
             <ul class="whats-new-list">
+                <li><i class="fas fa-hand-point-up" aria-hidden="true"></i><div><strong>Smudge</strong>A new brush for blending colours. Choose <b>Smudge</b> under Brushes, or press <kbd>S</kbd>, then drag from one colour into another. <b>Carry</b> sets how far the colour is dragged, and <b>Softness</b> how soft the edges are.</div></li>
                 <li><i class="fas fa-circle-dot" aria-hidden="true"></i><div><strong>Change brush size quickly</strong>Hold <kbd>Shift</kbd> and scroll over the canvas to make the brush bigger or smaller, or press <kbd>[</kbd> and <kbd>]</kbd>. It works for the eraser and shapes too.</div></li>
                 <li><i class="fas fa-sliders" aria-hidden="true"></i><div><strong>A tidier settings panel</strong>Layer, Brush and Colour have more room between them, so each is easy to spot. Background colour is now under Layer, and <b>More colours</b>, under the swatches, picks any colour you like. The ring on the swatches now moves to the colour you pick.</div></li>
                 <li><i class="fas fa-shapes" aria-hidden="true"></i><div><strong>Hold to tidy a shape</strong>At the end of a brush line, hold still for a moment. A wobbly line becomes straight, as before, and now curves, zigzags, circles, ovals, triangles, squares and rectangles get tidied too. Keep holding and move to resize it. Not what you meant? <kbd>Ctrl</kbd>+<kbd>Z</kbd> gets your own line back.</div></li>
@@ -1485,6 +1491,7 @@
                 <button type="button" class="tool-btn" id="tool-pencil" onclick="event.stopPropagation(); app.setBrushType('pencil')" aria-label="Pencil" title="Pencil"><i class="fas fa-pencil-alt"></i></button>
                 <button type="button" class="tool-btn" id="tool-marker" onclick="event.stopPropagation(); app.setBrushType('marker')" aria-label="Marker" title="Marker"><i class="fas fa-pen"></i></button>
                 <button type="button" class="tool-btn" id="tool-highlighter" onclick="event.stopPropagation(); app.setBrushType('highlighter')" aria-label="Highlighter" title="Highlighter"><i class="fas fa-highlighter"></i></button>
+                <button type="button" class="tool-btn" id="tool-smudge" onclick="event.stopPropagation(); app.setBrushType('smudge')" aria-label="Smudge (S)" title="Smudge (S): blend colours"><i class="fas fa-hand-point-up"></i></button>
             </div>
         </div>
 
@@ -1555,6 +1562,7 @@
             <div class="prop-label" id="inspector-title">Brush</div>
             <div class="brush-preview" title="Brush size preview">
                 <svg class="brush-preview-curve" viewBox="0 0 300 80" role="img" aria-label="Brush stroke preview">
+                    <defs><linearGradient id="smudge-preview-gradient" x1="0" x2="1"><stop offset="0" stop-color="#FF9500"/><stop offset="1" stop-color="#5AC8FA"/></linearGradient></defs>
                     <path class="brush-preview-mark" id="brush-preview-mark" d="M 24 49 C 76 24 107 23 151 38 S 223 57 274 24"></path>
                 </svg>
             </div>
@@ -1568,8 +1576,21 @@
                 <input type="range" id="brush-opacity" aria-label="Brush opacity" min="1" max="100" value="100" oninput="app.setOpacity(this.value)">
                 <div class="slider-val" id="op-disp">100</div>
             </div>
+            <div class="smudge-settings">
+                <div class="slider-row" title="How far a smudge drags the colour it picks up. Higher makes a longer smear.">
+                    <i class="fas fa-arrows-left-right slider-icon" style="font-size:0.6rem; color:#aaa;" aria-hidden="true"></i><span class="slider-label">Carry</span>
+                    <input type="range" id="smudge-carry" aria-label="Smudge carry" min="0" max="100" value="60" oninput="app.setSmudgeCarry(this.value)">
+                    <div class="slider-val" id="smudge-carry-disp">60</div>
+                </div>
+                <div class="slider-row" title="How soft the edges of a smudge are">
+                    <i class="fas fa-droplet slider-icon" style="font-size:0.6rem; color:#aaa;" aria-hidden="true"></i><span class="slider-label">Softness</span>
+                    <input type="range" id="smudge-softness" aria-label="Smudge softness" min="0" max="100" value="50" oninput="app.setSmudgeSoftness(this.value)">
+                    <div class="slider-val" id="smudge-softness-disp">50</div>
+                </div>
+                <p class="smudge-hint">Smudge uses the colours already on the frame. Drag from one colour into another to blend them.</p>
+            </div>
         </div>
-        <div class="prop-group">
+        <div class="prop-group colour-group">
             <div class="prop-label">Colour</div>
             <div class="color-grid" id="palette-container"></div>
             <label class="color-input-wrap more-colours" title="Pick any colour">
