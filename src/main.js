@@ -452,7 +452,6 @@ function tidyStroke(raw) {
                 this.quickLineDelay = 550;
                 this.quickShape = null;
                 this.shapeLabelTimer = null;
-                this.pointerAt = null;
                 this.sizeWheel = 0;
                 this.smudgeCarry = 60;
                 this.smudgeSoftness = 50;
@@ -805,12 +804,11 @@ function tidyStroke(raw) {
                         return;
                     }
                     this.updateCursorPos(e);
-                    if (e.target === c) this.pointerAt = { clientX: e.clientX, clientY: e.clientY };
                     if (this.isDrawing || this.selectedObject || this.isSelectingBox || this.pathKeyDrag || (this.tool === 'truck' && this.truckSelectedTrackId)) move(e);
                 });
 
                 c.addEventListener('pointerenter', () => { if (this.isDrawingTool()) this.cursorEl.style.display = 'block'; });
-                c.addEventListener('pointerleave', () => { this.cursorEl.style.display = 'none'; this.pointerAt = null; });
+                c.addEventListener('pointerleave', () => { this.cursorEl.style.display = 'none'; });
 
                 c.addEventListener('pointerdown', (e) => {
                     this.clearFrameSelection();
@@ -5291,8 +5289,8 @@ function tidyStroke(raw) {
             // Shift + scroll and [ ] change the size about a tenth at a time, so
             // small brushes change gently and big ones quickly. Not while
             // drawing, or with something selected, where each step would be
-            // an undo of its own.
-            nudgeBrushSize(steps, at = this.pointerAt && this.getPos(this.pointerAt)) {
+            // an undo of its own. The circle at the pointer shows the new size.
+            nudgeBrushSize(steps) {
                 const tools = ['brush', 'pencil', 'marker', 'highlighter', 'eraser', 'rect', 'circle', 'line'];
                 if (this.isDrawing || this.selectedObject || !tools.includes(this.tool) || !steps) return;
                 let size = this.brushSize;
@@ -5304,8 +5302,6 @@ function tidyStroke(raw) {
                     document.getElementById('brush-size').value = size;
                     this.setSize(size);
                 }
-                const spot = at || { x: this.canvasWidth / 2, y: this.canvasHeight / 2 };
-                this.showCanvasLabel(`Size ${size}`, { x: spot.x, y: spot.y - size / 2 });
             }
 
             // A mouse wheel moves one notch at a time; a touchpad sends many small
@@ -5317,14 +5313,14 @@ function tidyStroke(raw) {
                 if (!delta) return;
                 if (Math.abs(delta) >= 50) {
                     this.sizeWheel = 0;
-                    this.nudgeBrushSize(delta < 0 ? 1 : -1, this.getPos(e));
+                    this.nudgeBrushSize(delta < 0 ? 1 : -1);
                     return;
                 }
                 this.sizeWheel += delta;
                 if (Math.abs(this.sizeWheel) < 100) return;
                 const steps = Math.trunc(this.sizeWheel / 100);
                 this.sizeWheel -= steps * 100;
-                this.nudgeBrushSize(-steps, this.getPos(e));
+                this.nudgeBrushSize(-steps);
             }
 
             setSmudgeCarry(value) {

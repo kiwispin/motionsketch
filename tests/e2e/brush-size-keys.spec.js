@@ -22,7 +22,8 @@ test('Shift + scroll over the canvas makes the brush bigger or smaller', async (
   await page.keyboard.down('Shift');
   await page.mouse.wheel(0, -100);
   await expect.poll(() => size(page)).toEqual({ brush: 11, slider: '11', shown: '11' });
-  await expect(page.locator('#shape-label')).toHaveText('Size 11');
+  // No label: the circle at the pointer shows the size.
+  await expect(page.locator('#shape-label')).toBeHidden();
 
   for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 100);
   await expect.poll(() => size(page)).toEqual({ brush: 7, slider: '7', shown: '7' });
