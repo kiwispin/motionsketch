@@ -1957,6 +1957,81 @@ function tidyStroke(raw) {
                 return true;
             }
 
+            // Where a selected part was when a drag began, so each movement is
+            // measured from there. A group inside the selection keeps its own
+            // parts too: students can group things that are already grouped.
+            captureDragOriginal(stroke) {
+                const holes = this.cloneData(stroke.holes || []);
+                if (stroke.type === 'group') return { items: (stroke.items || []).map((item) => this.captureDragOriginal(item)), holes };
+                if (stroke.type === 'text') return { x: stroke.x, y: stroke.y, w: stroke.width, h: stroke.height, angle: stroke.angle || 0, holes };
+                return { points: (stroke.points || []).map((point) => ({ ...point })), sx: stroke.sx, sy: stroke.sy, angle: stroke.angle || 0, holes };
+            }
+
+            eachDragPart(stroke, orig, apply) {
+                (stroke.items || []).forEach((item, i) => { if (orig.items?.[i]) apply(item, orig.items[i]); });
+            }
+
+            moveDragItem(stroke, orig, dx, dy) {
+                if (stroke.type === 'group') {
+                    this.eachDragPart(stroke, orig, (item, from) => this.moveDragItem(item, from, dx, dy));
+                } else if (stroke.type === 'text') {
+                    stroke.x = orig.x + dx;
+                    stroke.y = orig.y + dy;
+                } else {
+                    stroke.points.forEach((point, k) => {
+                        const from = orig.points[k];
+                        if (from) { point.x = from.x + dx; point.y = from.y + dy; }
+                    });
+                }
+                this.translateHoles(stroke, orig.holes, dx, dy);
+            }
+
+            rotateDragItem(stroke, orig, centre, angle) {
+                const cos = Math.cos(angle), sin = Math.sin(angle);
+                const turn = (from) => {
+                    const x = from.x - centre.x, y = from.y - centre.y;
+                    return { x: centre.x + x * cos - y * sin, y: centre.y + x * sin + y * cos };
+                };
+                if (stroke.type === 'group') {
+                    this.eachDragPart(stroke, orig, (item, from) => this.rotateDragItem(item, from, centre, angle));
+                } else if (stroke.type === 'text') {
+                    Object.assign(stroke, turn(orig));
+                    stroke.angle = (orig.angle || 0) + angle;
+                } else {
+                    stroke.points.forEach((point, k) => {
+                        if (orig.points[k]) Object.assign(point, turn(orig.points[k]));
+                    });
+                }
+                this.rotateHoles(stroke, orig.holes, centre, angle);
+            }
+
+            // A rotated group turns on the canvas as a whole, so only the eraser
+            // holes, which are kept in canvas positions, need turning.
+            rotateDragHoles(stroke, orig, centre, angle) {
+                if (stroke.type === 'group') this.eachDragPart(stroke, orig, (item, from) => this.rotateDragHoles(item, from, centre, angle));
+                this.rotateHoles(stroke, orig.holes, centre, angle);
+            }
+
+            resizeDragItem(stroke, orig, bounds, resized) {
+                const scaleX = resized.w / bounds.w, scaleY = resized.h / bounds.h;
+                const place = (from) => ({ x: resized.x + (from.x - bounds.x) * scaleX, y: resized.y + (from.y - bounds.y) * scaleY });
+                if (stroke.type === 'group') {
+                    this.eachDragPart(stroke, orig, (item, from) => this.resizeDragItem(item, from, bounds, resized));
+                } else if (stroke.type === 'text') {
+                    Object.assign(stroke, place(orig));
+                } else {
+                    stroke.points.forEach((point, k) => {
+                        if (orig.points[k]) Object.assign(point, place(orig.points[k]));
+                    });
+                    if (this.scalesLineWidth(stroke)) {
+                        const originalScale = this.getBrushScale(orig);
+                        stroke.sx = originalScale.x * scaleX;
+                        stroke.sy = originalScale.y * scaleY;
+                    }
+                }
+                this.scaleHoles(stroke, orig.holes, bounds, resized);
+            }
+
             translateStrokeObject(object, dx, dy) {
                 if (!object || (!dx && !dy)) return object;
                 if (object.type === 'group') {
@@ -2555,10 +2630,7 @@ function tidyStroke(raw) {
                                     x: this.selectedObject.bounds.x + this.selectedObject.bounds.w / 2,
                                     y: this.selectedObject.bounds.y + this.selectedObject.bounds.h / 2
                                 };
-                                this.dragOriginalItems = this.selectedObject.items.map(item => {
-                                    if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height, angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
-                                    return { points: item.stroke.points.map(p => ({ ...p })), sx: item.stroke.sx, sy: item.stroke.sy, angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
-                                });
+                                this.dragOriginalItems = this.selectedObject.items.map(item => this.captureDragOriginal(item.stroke));
                             } else if (this.selectedObject.stroke.type === 'text') {
                                 this.dragOriginalProps = {
                                     x: this.selectedObject.stroke.x,
@@ -2593,10 +2665,7 @@ function tidyStroke(raw) {
                             this.dragOriginalBounds = { ...this.selectedObject.bounds };
 
                             if (this.selectedObject.isGroup) {
-                                this.dragOriginalItems = this.selectedObject.items.map(item => {
-                                    if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, holes: this.cloneData(item.stroke.holes || []) };
-                                    return { points: item.stroke.points.map(p => ({ ...p })), sx: item.stroke.sx, sy: item.stroke.sy, holes: this.cloneData(item.stroke.holes || []) };
-                                });
+                                this.dragOriginalItems = this.selectedObject.items.map(item => this.captureDragOriginal(item.stroke));
                             } else if (this.selectedObject.stroke.type === 'text') {
                                 this.dragOriginalProps = { x: this.selectedObject.stroke.x, y: this.selectedObject.stroke.y };
                                 this.dragOriginalHoles = this.cloneData(this.selectedObject.stroke.holes || []);
@@ -2636,10 +2705,7 @@ function tidyStroke(raw) {
                             this.dragOriginalBounds = { ...bounds };
                             this.dragOriginalAngle = grp.angle || 0;
                             this.dragCenter = { x: cx, y: cy };
-                            this.dragOriginalItems = items.map(item => {
-                                if (item.stroke.type === 'text') return { x: item.stroke.x, y: item.stroke.y, w: item.stroke.width, h: item.stroke.height, angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
-                                return { points: item.stroke.points.map(p => ({ ...p })), sx: item.stroke.sx, sy: item.stroke.sy, angle: item.stroke.angle || 0, holes: this.cloneData(item.stroke.holes || []) };
-                            });
+                            this.dragOriginalItems = items.map(item => this.captureDragOriginal(item.stroke));
                         } else {
                             this.selectedObject = found;
                             this.calcBounds(found.stroke);
@@ -2797,20 +2863,7 @@ function tidyStroke(raw) {
                             if (this.dragMode === 'move') {
                                 this.selectedObject.items.forEach((item, i) => {
                                     const orig = this.dragOriginalItems[i];
-                                    if (!orig) return;
-                                    if (item.stroke.type === 'text') {
-                                        item.stroke.x = orig.x + dx;
-                                        item.stroke.y = orig.y + dy;
-                                    } else {
-                                        const pts = item.stroke.points;
-                                        for (let k = 0; k < pts.length; k++) {
-                                            if (orig.points[k]) {
-                                                pts[k].x = orig.points[k].x + dx;
-                                                pts[k].y = orig.points[k].y + dy;
-                                            }
-                                        }
-                                    }
-                                    this.translateHoles(item.stroke, orig.holes, dx, dy);
+                                    if (orig) this.moveDragItem(item.stroke, orig, dx, dy);
                                 });
                                 this.selectedObject.bounds.x = bounds.x + dx;
                                 this.selectedObject.bounds.y = bounds.y + dy;
@@ -2828,76 +2881,23 @@ function tidyStroke(raw) {
                                     this.selectedObject.persistentGroupStroke.angle = newAngle;
                                     this.selectedObject.items.forEach((item, i) => {
                                         const orig = this.dragOriginalItems[i];
-                                        if (orig) this.rotateHoles(item.stroke, orig.holes, this.dragCenter, angleDiff);
+                                        if (orig) this.rotateDragHoles(item.stroke, orig, this.dragCenter, angleDiff);
                                     });
                                 } else {
                                     // Temporary multi-select: physically rotate each item's points
                                     // (no canvas-level rotation available for these)
-                                    const cos = Math.cos(angleDiff);
-                                    const sin = Math.sin(angleDiff);
-                                    const cx = this.dragCenter.x;
-                                    const cy = this.dragCenter.y;
-
                                     this.selectedObject.items.forEach((item, i) => {
                                         const orig = this.dragOriginalItems[i];
-                                        if (!orig) return;
-                                        if (item.stroke.type === 'text') {
-                                            const nx = orig.x - cx;
-                                            const ny = orig.y - cy;
-                                            item.stroke.x = (nx * cos - ny * sin) + cx;
-                                            item.stroke.y = (nx * sin + ny * cos) + cy;
-                                            item.stroke.angle = (orig.angle || 0) + angleDiff;
-                                        } else {
-                                            const pts = item.stroke.points;
-                                            for (let k = 0; k < pts.length; k++) {
-                                                if (orig.points[k]) {
-                                                    const px = orig.points[k].x - cx;
-                                                    const py = orig.points[k].y - cy;
-                                                    pts[k].x = (px * cos - py * sin) + cx;
-                                                    pts[k].y = (px * sin + py * cos) + cy;
-                                                }
-                                            }
-                                        }
-                                        this.rotateHoles(item.stroke, orig.holes, { x: cx, y: cy }, angleDiff);
+                                        if (orig) this.rotateDragItem(item.stroke, orig, this.dragCenter, angleDiff);
                                     });
                                 }
                             } else if (this.dragMode.startsWith('resize')) {
                                 const resized = this.getResizeBounds(bounds, this.dragMode, pos);
-                                const newX = resized.x;
-                                const newY = resized.y;
-                                const newW = resized.w;
-                                const newH = resized.h;
-
-                                const scaleX = newW / bounds.w;
-                                const scaleY = newH / bounds.h;
-
                                 this.selectedObject.items.forEach((item, i) => {
                                     const orig = this.dragOriginalItems[i];
-                                    if (!orig) return;
-                                    if (item.stroke.type === 'text') {
-                                        const relX = orig.x - bounds.x;
-                                        const relY = orig.y - bounds.y;
-                                        item.stroke.x = newX + relX * scaleX;
-                                        item.stroke.y = newY + relY * scaleY;
-                                    } else {
-                                        const pts = item.stroke.points;
-                                        for (let k = 0; k < pts.length; k++) {
-                                            if (orig.points[k]) {
-                                                const relX = orig.points[k].x - bounds.x;
-                                                const relY = orig.points[k].y - bounds.y;
-                                                pts[k].x = newX + relX * scaleX;
-                                                pts[k].y = newY + relY * scaleY;
-                                            }
-                                        }
-                                        if (this.scalesLineWidth(item.stroke)) {
-                                            const originalScale = this.getBrushScale(orig);
-                                            item.stroke.sx = originalScale.x * scaleX;
-                                            item.stroke.sy = originalScale.y * scaleY;
-                                        }
-                                    }
-                                    this.scaleHoles(item.stroke, orig.holes, bounds, { x: newX, y: newY, w: newW, h: newH });
+                                    if (orig) this.resizeDragItem(item.stroke, orig, bounds, resized);
                                 });
-                                this.selectedObject.bounds = { x: newX, y: newY, w: newW, h: newH };
+                                this.selectedObject.bounds = { ...resized };
                             }
                             this.renderCanvas();
                             this.motionDirectEditDirty = true;
@@ -3039,7 +3039,19 @@ function tidyStroke(raw) {
                 this.getActiveStrokeList().forEach((stroke, index) => {
                     if (predicate(stroke)) items.push({ stroke, layer: this.activeLayer, index });
                 });
-                if (items.length === 1) {
+                if (items.length === 1 && items[0].stroke.type === 'group') {
+                    // A lone group is selected the way clicking it does, so it
+                    // moves as one group.
+                    const group = items[0].stroke;
+                    this.selectedObject = {
+                        isGroup: true,
+                        isPersistentGroup: true,
+                        persistentGroupStroke: group,
+                        items: group.items.map((stroke, index) => ({ stroke, layer: this.activeLayer, index })),
+                        bounds: this.getStrokeBounds(group),
+                        angle: group.angle || 0
+                    };
+                } else if (items.length === 1) {
                     this.selectedObject = items[0];
                     this.calcBounds(items[0].stroke);
                 } else if (items.length > 1) {
